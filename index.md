@@ -4,7 +4,8 @@ title: Kyle Beck - Musician & Developer
 ---
 
 
-<input type="text" id="search-input" onkeyup="filterProjects()" placeholder="Search projects..." style="width: 100%; padding: 12px; margin-bottom: 20px; border: 1px solid #ddd; border-radius: 4px; font-size: 16px;">
+
+<input type="text" id="search-input" placeholder="Search projects..." style="width: 100%; padding: 12px; margin-bottom: 20px; border: 1px solid #ddd; border-radius: 4px; font-size: 16px;">
 
 ## Projects
 
@@ -16,24 +17,25 @@ title: Kyle Beck - Musician & Developer
 </ul>
 
 <script>
-function filterProjects() {
-  var input, filter, ul, li, a, i, txtValue;
-  input = document.getElementById('search-input');
-  filter = input.value.toUpperCase();
-  ul = document.getElementById("project-list");
-  li = ul.getElementsByTagName('li');
+document.addEventListener("DOMContentLoaded", function() {
+  var input = document.getElementById('search-input');
+  input.addEventListener('keyup', function() {
+    var filter = input.value.toUpperCase();
+    var ul = document.getElementById("project-list");
+    var li = ul.getElementsByTagName('li');
 
-  for (i = 0; i < li.length; i++) {
-    a = li[i].getElementsByTagName("a")[0];
-    txtValue = a.textContent || a.innerText;
-    if (txtValue.toUpperCase().indexOf(filter) > -1) {
-      li[i].style.display = "";
-    } else {
-      li[i].style.display = "none";
+    for (var i = 0; i < li.length; i++) {
+      var txtValue = li[i].textContent || li[i].innerText;
+      if (txtValue.toUpperCase().indexOf(filter) > -1) {
+        li[i].style.display = "";
+      } else {
+        li[i].style.display = "none";
+      }
     }
-  }
-}
+  });
+});
 </script>
+
 
 <br>
 
