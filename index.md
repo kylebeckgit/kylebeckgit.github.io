@@ -3,22 +3,37 @@ layout: default
 title: Kyle Beck - Musician & Developer
 ---
 
-<div style="text-align: center; margin-bottom: 40px;">
-  <h1>Kyle Beck</h1>
-  <p style="font-size: 1.2em; color: #666;">Musician sharing knowledge worth sharing.</p>
-</div>
+
+<input type="text" id="search-input" onkeyup="filterProjects()" placeholder="Search projects..." style="width: 100%; padding: 12px; margin-bottom: 20px; border: 1px solid #ddd; border-radius: 4px; font-size: 16px;">
 
 ## Projects
 
-### 🎹 [Endorphin.es Plus 3 + DOREMIDI Guide](/plus3-doremidi-guide/)
-A complete configuration guide for connecting the **Endorphin.es Plus 3** expression pedal to software synthesizers using the **DOREMIDI MPC-10**.
+<ul id="project-list" style="list-style-type: none; padding: 0;">
+  <li>
+    <h3>🎹 <a href="/plus3-doremidi-guide/">Endorphin.es Plus 3 + DOREMIDI Guide</a></h3>
+    <p>A complete configuration guide for connecting the <strong>Endorphin.es Plus 3</strong> expression pedal to software synthesizers using the <strong>DOREMIDI MPC-10</strong>.</p>
+  </li>
+</ul>
 
----
+<script>
+function filterProjects() {
+  var input, filter, ul, li, a, i, txtValue;
+  input = document.getElementById('search-input');
+  filter = input.value.toUpperCase();
+  ul = document.getElementById("project-list");
+  li = ul.getElementsByTagName('li');
 
-## Connect
-
-- [GitHub](https://github.com/kylebeckgit)
-- [Blog](https://github.com/kylebeckgit) <!-- Placeholder if blog is different, assuming github for now based on prompt -->
+  for (i = 0; i < li.length; i++) {
+    a = li[i].getElementsByTagName("a")[0];
+    txtValue = a.textContent || a.innerText;
+    if (txtValue.toUpperCase().indexOf(filter) > -1) {
+      li[i].style.display = "";
+    } else {
+      li[i].style.display = "none";
+    }
+  }
+}
+</script>
 
 <br>
 
