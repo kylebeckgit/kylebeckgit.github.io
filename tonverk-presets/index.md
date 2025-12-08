@@ -9,7 +9,8 @@ Welcome to the Tonverk Multisample Presets section. Here you can find a collecti
 
 ## Downloads
 
-- [Tonverk Multisample Presets Pack 1](https://drive.google.com/file/d/1CDmGA2FzaP5JkNkapIE6tGsV97LZxURh/view?usp=share_link) - A collection of multisample presets.
+- [Tonverk Multisample Instrument: Vintage Upright Piano](https://1408294465511.gumroad.com/l/yiutin)
+- [Tonverk Multisample Instrument: Pulse Pluck Delay at 120 BPM](https://1408294465511.gumroad.com/l/udcnma)
 
 <!-- 
 Example structure for future uploads:
