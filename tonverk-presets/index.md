@@ -11,6 +11,7 @@ Tonverk Multisample Instruments I have created. Enjoy!
 
 - [Tonverk Multisample Instrument: Vintage Upright Piano](https://1408294465511.gumroad.com/l/yiutin)
 - [Tonverk Multisample Instrument: Pulse Pluck Delay at 120 BPM](https://1408294465511.gumroad.com/l/udcnma)
+- [Tonverk Multisample Instrument: Studio Grand Piano](https://1408294465511.gumroad.com/l/ecmyzxh)
 
 <!-- 
 Example structure for future uploads:
