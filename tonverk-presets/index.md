@@ -9,6 +9,10 @@ Various Tonverk presets I have assembled. Enjoy!
 
 ## Multisample Instruments
 
+### Bass
+
+- [Tonverk Multisample Instrument: Sine Bass Stab](https://1408294465511.gumroad.com/l/ucokem)
+
 ### Pianos & Keyboards
 
 - [Tonverk Multisample Instrument: Pulse Pluck Delay at 120 BPM](https://1408294465511.gumroad.com/l/udcnma)
