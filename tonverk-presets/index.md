@@ -5,7 +5,7 @@ title: Tonverk Multisample Presets
 
 # Tonverk Multisample Presets
 
-Welcome to the Tonverk Multisample Presets section. Here you can find a collection of presets I've created or curated.
+Tonverk Multisample Instruments I have created. Enjoy!
 
 ## Downloads
 
