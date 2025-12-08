@@ -5,7 +5,7 @@ title: Tonverk Presets
 
 # Tonverk Presets
 
-Tonverk Multisample Instruments I have created. Enjoy!
+Various Tonverk presets I have assembled. Enjoy!
 
 ## Multisample Instruments
 
