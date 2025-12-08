@@ -14,6 +14,10 @@ title: Kyle Beck - Musician & Developer
     <h3>🎹 <a href="/plus3-doremidi-guide/">Endorphin.es Plus 3 + DOREMIDI Guide</a></h3>
     <p>A complete configuration guide for connecting the <strong>Endorphin.es Plus 3</strong> expression pedal to software synthesizers using the <strong>DOREMIDI MPC-10</strong>.</p>
   </li>
+  <li>
+    <h3>🎛️ <a href="/tonverk-presets/">Tonverk Multisample Presets</a></h3>
+    <p>A collection of multisample presets for the <strong>Tonverk</strong>.</p>
+  </li>
 </ul>
 
 <script>
