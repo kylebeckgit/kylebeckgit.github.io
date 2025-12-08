@@ -1,17 +1,19 @@
 ---
 layout: default
-title: Tonverk Multisample Presets
+title: Tonverk Presets
 ---
 
-# Tonverk Multisample Presets
+# Tonverk Presets
 
 Tonverk Multisample Instruments I have created. Enjoy!
 
-## Downloads
+## Multisample Instruments
 
-- [Tonverk Multisample Instrument: Vintage Upright Piano](https://1408294465511.gumroad.com/l/yiutin)
+### Pianos & Keyboards
+
 - [Tonverk Multisample Instrument: Pulse Pluck Delay at 120 BPM](https://1408294465511.gumroad.com/l/udcnma)
 - [Tonverk Multisample Instrument: Studio Grand Piano](https://1408294465511.gumroad.com/l/ecmyzxh)
+- [Tonverk Multisample Instrument: Vintage Upright Piano](https://1408294465511.gumroad.com/l/yiutin)
 
 <!-- 
 Example structure for future uploads:
