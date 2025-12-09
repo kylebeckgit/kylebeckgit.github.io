@@ -1,0 +1,35 @@
+- category: Multisample Instruments
+  subcategories:
+    - name: Bass
+      items:
+        - name: 'Tonverk Multisample Instrument: Chip Pulse Bass'
+          url: https://kylebeck.gumroad.com/l/gtxnt
+          description: Standard chiptuney bass made with pulse waves
+        - name: 'Tonverk Multisample Instrument: Sine Bass Stab'
+          url: https://1408294465511.gumroad.com/l/ucokem
+          description: Short stab, great for bass stab duties.
+    - name: Pianos & Keyboards
+      items:
+        - name: 'Tonverk Multisample Instrument: Pulse Pluck Delay at 120 BPM'
+          url: https://1408294465511.gumroad.com/l/udcnma
+          description: Modulated pulse width pluck with a pseudo delay tail. No Delay FX were used, but the 'delay' effect achieved in the oscillator was set to 120 bpm.
+        - name: 'Tonverk Multisample Instrument: Studio Grand Piano'
+          url: https://1408294465511.gumroad.com/l/ecmyzxh
+          description: 3 microphone studio grand.Recorded with 3 note intervals & 3 velocity layers.
+        - name: 'Tonverk Multisample Instrument: Vintage Upright Piano'
+          url: https://1408294465511.gumroad.com/l/yiutin
+          description: 3 microphone vintage upright. Recorded with 3 note intervals & 3 velocity layers.
+    - name: Mallets
+      items:
+        - name: 'Tonverk Multisample Instrument: Glocken 1'
+          url: https://kylebeck.gumroad.com/l/mgzbm
+          description: Synthesized Glockenspiel with a closed filter for a muted, darker sound.
+        - name: 'Tonverk Multisample Instrument: Glocken 2'
+          url: https://kylebeck.gumroad.com/l/rlkyx
+          description: Synthesized Glockenspiel
+        - name: 'Tonverk Multisample Instrument: Glocken Inharmonic'
+          url: https://kylebeck.gumroad.com/l/phcmv
+          description: Synthesized Glockenspiel with inharmonic overtones.
+        - name: 'Tonverk Multisample Instrument: Glocken Metallic'
+          url: https://kylebeck.gumroad.com/l/ifmmnn
+          description: Synthesized metallic sounding Glockenspiel.

@@ -7,31 +7,18 @@ title: Tonverk Presets
 
 Various Tonverk presets I have assembled. Enjoy!
 
-## Multisample Instruments
+{% for category in site.data.tonverk_presets %}
+## {{ category.category }}
 
-### Bass
+{% for sub in category.subcategories %}
+### {{ sub.name }}
 
-- [Tonverk Multisample Instrument: Chip Pulse Bass](https://kylebeck.gumroad.com/l/gtxnt)
-- [Tonverk Multisample Instrument: Sine Bass Stab](https://1408294465511.gumroad.com/l/ucokem)
+{% for item in sub.items %}
+- [{{ item.name }}]({{ item.url }}){% if item.description %} - {{ item.description }}{% endif %}
+{% endfor %}
 
-### Pianos & Keyboards
-
-- [Tonverk Multisample Instrument: Pulse Pluck Delay at 120 BPM](https://1408294465511.gumroad.com/l/udcnma)
-- [Tonverk Multisample Instrument: Studio Grand Piano](https://1408294465511.gumroad.com/l/ecmyzxh)
-- [Tonverk Multisample Instrument: Vintage Upright Piano](https://1408294465511.gumroad.com/l/yiutin)
-
-### Mallets
-
-- [Tonverk Multisample Instrument: Glocken 1](https://kylebeck.gumroad.com/l/mgzbm)
-- [Tonverk Multisample Instrument: Glocken 2](https://kylebeck.gumroad.com/l/rlkyx)
-- [Tonverk Multisample Instrument: Glocken Inharmonic](https://kylebeck.gumroad.com/l/phcmv)
-- [Tonverk Multisample Instrument: Glocken Metallic](https://kylebeck.gumroad.com/l/ifmmnn)
-
-<!-- 
-Example structure for future uploads:
-- [Preset Name 1](/tonverk-presets/downloads/preset1.zip) - Description of preset 1.
-- [Preset Name 2](/tonverk-presets/downloads/preset2.zip) - Description of preset 2.
--->
+{% endfor %}
+{% endfor %}
 
 <br>
 <a href="/">← Back to Home</a>
