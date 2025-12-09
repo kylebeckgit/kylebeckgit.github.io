@@ -22,3 +22,100 @@ Various Tonverk presets I have assembled. Enjoy!
 
 <br>
 <a href="/">← Back to Home</a>
+
+
+<!-- Theme Injection -->
+<style>
+  /* Theme Variables */
+  :root {
+    --bg-color: #e4d5b7; /* Slightly Darker Tan Sepia */
+    --text-color: #333;
+    --link-color: #10b981;
+    --header-bg: linear-gradient(to right, #059669, #10b981);
+    --header-border: #047857;
+  }
+  
+  [data-theme="dark"] {
+    --bg-color: #1e1e1e;
+    --text-color: #f4ecd8;
+    --link-color: #10b981;
+    --header-bg: linear-gradient(to right, #064e3b, #065f46);
+    --header-border: #022c22;
+  }
+
+  body {
+    background-color: var(--bg-color) !important;
+    color: var(--text-color) !important;
+    transition: background-color 0.3s, color 0.3s;
+  }
+
+  /* Force headers and links to use variables if they are strictly defined by theme */
+  h1, h2, h3, h4, h5, h6 {
+    color: var(--text-color) !important;
+  }
+  a {
+    color: var(--link-color) !important;
+  }
+
+  /* Theme Toggle Button */
+  #theme-toggle {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: var(--header-bg);
+    color: white;
+    border: none;
+    padding: 10px;
+    border-radius: 50%;
+    width: 50px;
+    height: 50px;
+    cursor: pointer;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    z-index: 1000;
+    font-size: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  #theme-toggle:hover {
+    transform: scale(1.1);
+  }
+</style>
+
+<script>
+  // Wait for DOM
+  document.addEventListener('DOMContentLoaded', function() {
+    // Avoid duplicates
+    if (document.getElementById('theme-toggle')) return;
+
+    // Create Button
+    const btn = document.createElement('button');
+    btn.id = 'theme-toggle';
+    btn.innerHTML = '☀️';
+    btn.setAttribute('aria-label', 'Toggle Theme');
+    document.body.appendChild(btn);
+
+    const root = document.documentElement;
+    
+    // Check saved theme
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme) {
+      root.setAttribute('data-theme', savedTheme);
+      updateIcon(savedTheme);
+    }
+
+    btn.addEventListener('click', () => {
+      const currentTheme = root.getAttribute('data-theme');
+      const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+      
+      root.setAttribute('data-theme', newTheme);
+      localStorage.setItem('theme', newTheme);
+      updateIcon(newTheme);
+    });
+
+    function updateIcon(theme) {
+      btn.innerHTML = theme === 'dark' ? '🌙' : '☀️';
+    }
+  });
+</script>
