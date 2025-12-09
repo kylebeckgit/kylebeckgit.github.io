@@ -11,6 +11,7 @@ Various Tonverk presets I have assembled. Enjoy!
 
 ### Bass
 
+- [Tonverk Multisample Instrument: Chip Pulse Bass](https://kylebeck.gumroad.com/l/gtxnt)
 - [Tonverk Multisample Instrument: Sine Bass Stab](https://1408294465511.gumroad.com/l/ucokem)
 
 ### Pianos & Keyboards
