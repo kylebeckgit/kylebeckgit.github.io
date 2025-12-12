@@ -33,3 +33,8 @@
         - name: 'Tonverk Multisample Instrument: Glocken Metallic'
           url: https://kylebeck.gumroad.com/l/ifmmnn
           description: Synthesized metallic sounding Glockenspiel.
+    - name: Percussion
+      items:
+        - name: 'Tonverk Multisample Instrument: Orchestral Percussion VSCO'
+          url: https://kylebeck.gumroad.com/l/hqtwa
+          description: Autosampled version of the 'GM Style Perc' VSCO sample pack. Trimmed so that the samples span the entire +3 and -3 of the Tonverk keyboard.
