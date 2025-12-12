@@ -1,13 +1,14 @@
 <style>
   /* Theme Variables */
   :root {
-    --bg-color: #e4d5b7; /* Slightly Darker Tan Sepia */
+    --bg-color: #f9f4e6;
+    /* Lighter Sepia (Pearl/Cream) */
     --text-color: #333;
     --link-color: #10b981;
     --header-bg: linear-gradient(to right, #059669, #10b981);
     --header-border: #047857;
   }
-  
+
   [data-theme="dark"] {
     --bg-color: #1e1e1e;
     --text-color: #f4ecd8;
@@ -22,73 +23,156 @@
     transition: background-color 0.3s, color 0.3s;
   }
 
-  /* Force headers and links to use variables if they are strictly defined by theme */
-  h1, h2, h3, h4, h5, h6 {
+  /* Force headers and links to use variables */
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
     color: var(--text-color) !important;
   }
+
   a {
     color: var(--link-color) !important;
   }
 
-  /* Theme Toggle Button */
-  #theme-toggle {
+  /* Minimal Theme Switch */
+  .theme-switch-wrapper {
     position: fixed;
     bottom: 20px;
-    right: 20px;
-    background: var(--header-bg);
-    color: white;
-    border: none;
-    padding: 10px;
-    border-radius: 50%;
-    width: 50px;
-    height: 50px;
-    cursor: pointer;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    right: 25px;
     z-index: 1000;
-    font-size: 24px;
     display: flex;
     align-items: center;
-    justify-content: center;
+    opacity: 0.8;
+    transition: opacity 0.3s;
   }
-  
-  #theme-toggle:hover {
-    transform: scale(1.1);
+
+  .theme-switch-wrapper:hover {
+    opacity: 1;
+  }
+
+  .theme-switch {
+    display: inline-block;
+    height: 24px;
+    position: relative;
+    width: 44px;
+  }
+
+  .theme-switch input {
+    display: none;
+  }
+
+  .slider {
+    background-color: #ccc;
+    bottom: 0;
+    cursor: pointer;
+    left: 0;
+    position: absolute;
+    right: 0;
+    top: 0;
+    transition: .4s;
+    border-radius: 24px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  }
+
+  .slider:before {
+    background-color: #fff;
+    bottom: 3px;
+    content: "";
+    height: 18px;
+    left: 3px;
+    position: absolute;
+    transition: .4s;
+    width: 18px;
+    border-radius: 50%;
+  }
+
+  input:checked+.slider {
+    background-color: #10b981;
+  }
+
+  input:checked+.slider:before {
+    transform: translateX(20px);
+  }
+
+  /* Contact Link - injected via JS but styled here */
+  #custom-contact-link {
+    text-align: center;
+    font-size: 0.85rem;
+    padding: 20px 0;
+    opacity: 0.7;
+    margin-top: 40px;
+  }
+
+  #custom-contact-link a {
+    text-decoration: none;
+    border-bottom: 1px dotted currentColor;
+  }
+
+  #custom-contact-link a:hover {
+    opacity: 1;
+    border-bottom: 1px solid currentColor;
   }
 </style>
 
 <script>
-  // Wait for DOM
-  document.addEventListener('DOMContentLoaded', function() {
-    // Avoid duplicates
-    if (document.getElementById('theme-toggle')) return;
+  document.addEventListener('DOMContentLoaded', function () {
+    // 1. Inject Contact Link
+    if (!document.getElementById('custom-contact-link')) {
+      const footer = document.querySelector('footer');
+      // Find a good place to insert. If footer exists, append to it.
+      // If not, append to .wrapper or body.
+      const target = footer || document.querySelector('.wrapper') || document.body;
 
-    // Create Button
-    const btn = document.createElement('button');
-    btn.id = 'theme-toggle';
-    btn.innerHTML = '☀️';
-    btn.setAttribute('aria-label', 'Toggle Theme');
-    document.body.appendChild(btn);
+      const contactDiv = document.createElement('div');
+      contactDiv.id = 'custom-contact-link';
+      contactDiv.innerHTML = '<a href="mailto:kyle@kyle-beck.com">Contact: kyle@kyle-beck.com</a>';
 
+      target.appendChild(contactDiv);
+    }
+
+    // 2. Setup Theme Toggle (Minimal Switch)
+    if (document.getElementById('theme-toggle-checkbox')) return;
+
+    // Create Switch HTML
+    const wrapper = document.createElement('div');
+    wrapper.className = 'theme-switch-wrapper';
+    wrapper.title = 'Toggle Dark Mode';
+    wrapper.innerHTML = `
+      <label class="theme-switch" for="theme-toggle-checkbox">
+        <input type="checkbox" id="theme-toggle-checkbox" />
+        <div class="slider"></div>
+      </label>
+    `;
+    document.body.appendChild(wrapper);
+
+    const toggleCheckbox = document.getElementById('theme-toggle-checkbox');
     const root = document.documentElement;
-    
+
     // Check saved theme
     const savedTheme = localStorage.getItem('theme');
-    if (savedTheme) {
-      root.setAttribute('data-theme', savedTheme);
-      updateIcon(savedTheme);
+
+    // Default logic: If saved is dark, OR no saved and prefers dark schema
+    if (savedTheme === 'dark') {
+      root.setAttribute('data-theme', 'dark');
+      toggleCheckbox.checked = true;
+    } else if (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      // Optional: respect system pref by default if no user override
+      // Uncomment below to enable auto-dark based on system
+      // root.setAttribute('data-theme', 'dark');
+      // toggleCheckbox.checked = true;
     }
 
-    btn.addEventListener('click', () => {
-      const currentTheme = root.getAttribute('data-theme');
-      const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-      
-      root.setAttribute('data-theme', newTheme);
-      localStorage.setItem('theme', newTheme);
-      updateIcon(newTheme);
+    toggleCheckbox.addEventListener('change', function (e) {
+      if (e.target.checked) {
+        root.setAttribute('data-theme', 'dark');
+        localStorage.setItem('theme', 'dark');
+      } else {
+        root.setAttribute('data-theme', 'light');
+        localStorage.setItem('theme', 'light');
+      }
     });
-
-    function updateIcon(theme) {
-      btn.innerHTML = theme === 'dark' ? '🌙' : '☀️';
-    }
   });
 </script>
