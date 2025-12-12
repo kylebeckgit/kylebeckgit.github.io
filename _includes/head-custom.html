@@ -5,7 +5,8 @@
     /* Lighter Sepia (Pearl/Cream) */
     --text-color: #333;
     --link-color: #10b981;
-    --header-bg: linear-gradient(to right, #059669, #10b981);
+    /* Updated Banner to match link color flatly */
+    --header-bg: #10b981;
     --header-border: #047857;
   }
 
@@ -102,16 +103,17 @@
 
   /* Contact Link - injected via JS but styled here */
   #custom-contact-link {
-    text-align: center;
     font-size: 0.85rem;
-    padding: 20px 0;
-    opacity: 0.7;
-    margin-top: 40px;
+    padding-top: 10px;
+    opacity: 0.8;
+    margin-top: 15px;
+    display: block;
   }
 
   #custom-contact-link a {
     text-decoration: none;
     border-bottom: 1px dotted currentColor;
+    color: var(--link-color) !important;
   }
 
   #custom-contact-link a:hover {
@@ -122,16 +124,15 @@
 
 <script>
   document.addEventListener('DOMContentLoaded', function () {
-    // 1. Inject Contact Link
+    // 1. Inject Contact Link into Header
     if (!document.getElementById('custom-contact-link')) {
-      const footer = document.querySelector('footer');
-      // Find a good place to insert. If footer exists, append to it.
-      // If not, append to .wrapper or body.
-      const target = footer || document.querySelector('.wrapper') || document.body;
+      const header = document.querySelector('header');
+      const target = header || document.querySelector('.wrapper') || document.body;
 
       const contactDiv = document.createElement('div');
       contactDiv.id = 'custom-contact-link';
-      contactDiv.innerHTML = '<a href="mailto:kyle@kyle-beck.com">Contact: kyle@kyle-beck.com</a>';
+      // Removed prefix as requested
+      contactDiv.innerHTML = '<a href="mailto:kyle@kyle-beck.com">kyle@kyle-beck.com</a>';
 
       target.appendChild(contactDiv);
     }
@@ -157,15 +158,12 @@
     // Check saved theme
     const savedTheme = localStorage.getItem('theme');
 
-    // Default logic: If saved is dark, OR no saved and prefers dark schema
+    // Default logic
     if (savedTheme === 'dark') {
       root.setAttribute('data-theme', 'dark');
       toggleCheckbox.checked = true;
     } else if (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-      // Optional: respect system pref by default if no user override
-      // Uncomment below to enable auto-dark based on system
-      // root.setAttribute('data-theme', 'dark');
-      // toggleCheckbox.checked = true;
+      // System default logic if needed
     }
 
     toggleCheckbox.addEventListener('change', function (e) {
