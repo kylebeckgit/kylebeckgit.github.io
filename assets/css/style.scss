@@ -1,16 +1,1 @@
----
----
-@import "{{ site.theme }}";
-
-a {
-  color: #10b981 !important;
-}
-
-a:hover {
-  color: #059669 !important;
-}
-
-#forkme_banner {
-  background: linear-gradient(to right, #059669, #10b981) !important;
-  border-bottom: 1px solid #047857 !important;
-}
+--- --- @import "{{ site.theme }}";
