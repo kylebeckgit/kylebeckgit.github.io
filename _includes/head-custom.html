@@ -491,5 +491,17 @@
       }
     });
 
+    // Remove "Hosted on GitHub Pages — Theme by orderedlist" text
+    const links = document.querySelectorAll('a');
+    for (const link of links) {
+      if (link.textContent.includes('orderedlist')) {
+        const prev = link.previousSibling;
+        if (prev && prev.nodeType === 3 && prev.textContent.includes('Hosted on GitHub Pages')) {
+          prev.remove();
+          link.remove();
+        }
+      }
+    }
+
   });
 </script>
