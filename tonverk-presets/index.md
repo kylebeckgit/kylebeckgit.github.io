@@ -20,5 +20,4 @@ Various Tonverk presets I have assembled. Enjoy!
 {% endfor %}
 {% endfor %}
 
-<br>
-<a href="/">← Back to Home</a>
+

@@ -12,7 +12,9 @@
 
   /* Hide DEFAULT Theme Sidebar/Header (Bio, Name, Github Link) */
   header,
-  #header-wrapper {
+  #header-wrapper,
+  footer,
+  .site-footer {
     display: none !important;
   }
 
@@ -71,14 +73,20 @@
       margin: 0 auto !important;
       /* Center in the padded body */
       width: 100% !important;
-      max-width: 900px;
+      max-width: 1100px;
       padding: 2rem 4rem;
       box-sizing: border-box;
     }
 
     body.sidebar-collapsed .wrapper {
       margin: 0 auto !important;
-      max-width: 1000px;
+      max-width: 1300px;
+    }
+
+    /* Force section width */
+    section {
+      width: 100% !important;
+      max-width: 900px !important;
     }
 
     right: 25px;
@@ -137,25 +145,6 @@
     transform: translateX(20px);
   }
 
-  /* Contact Link - injected via JS but styled here */
-  #custom-contact-link {
-    font-size: 0.85rem;
-    padding-top: 10px;
-    opacity: 0.8;
-    margin-top: 15px;
-    display: block;
-  }
-
-  #custom-contact-link a {
-    text-decoration: none;
-    border-bottom: 1px dotted currentColor;
-    color: var(--link-color) !important;
-  }
-
-  #custom-contact-link a:hover {
-    opacity: 1;
-    border-bottom: 1px solid currentColor;
-  }
 
   /* Latest Activity Feed */
   .activity-feed {
@@ -417,7 +406,9 @@
         </div>
 
         <div class="bottom-section">
-           <!-- Email moved up -->
+           <a href="https://buymeacoffee.com/kylebeck" target="_blank" class="bmc-button" style="display: block; width: 100%; margin-top: 10px;">
+             <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="width: 100% !important; height: auto !important; max-width: 100%;" >
+           </a>
         </div>
       `;
       document.body.prepend(sidebar);
