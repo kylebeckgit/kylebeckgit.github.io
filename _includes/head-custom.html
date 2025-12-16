@@ -31,13 +31,17 @@
   }
 
   /* Force headers and links to use variables */
+  /* Force headers and links to use variables */
   h1,
   h2,
   h3,
   h4,
   h5,
-  h5,
-  h6,
+  h6 {
+    color: var(--link-color) !important;
+    /* Green Layout */
+  }
+
   strong,
   b {
     color: var(--text-color) !important;
@@ -51,6 +55,32 @@
   .theme-switch-wrapper {
     position: fixed;
     bottom: 20px;
+    /* ... skipping unchanged ... */
+
+    /* Push main content - Using Body Padding for true centering in remaining space */
+    body {
+      padding-left: 250px;
+      transition: padding-left 0.3s ease;
+    }
+
+    body.sidebar-collapsed {
+      padding-left: 60px;
+    }
+
+    .wrapper {
+      margin: 0 auto !important;
+      /* Center in the padded body */
+      width: 100% !important;
+      max-width: 900px;
+      padding: 2rem 4rem;
+      box-sizing: border-box;
+    }
+
+    body.sidebar-collapsed .wrapper {
+      margin: 0 auto !important;
+      max-width: 1000px;
+    }
+
     right: 25px;
     z-index: 1000;
     display: flex;
@@ -187,7 +217,7 @@
     text-decoration: none;
   }
 
-  /* Sidebar Navigation */
+  /* Sidebar Navigation V2 */
   #sidebar {
     position: fixed;
     top: 0;
@@ -200,26 +230,52 @@
     display: flex;
     flex-direction: column;
     z-index: 1000;
+    transition: width 0.3s ease;
+    overflow: hidden;
+    /* Hide content when collapsed */
   }
 
   [data-theme="dark"] #sidebar {
     border-right: 1px solid rgba(255, 255, 255, 0.1);
   }
 
-  /* Push main content */
-  .wrapper {
-    margin-left: 250px !important;
-    width: auto !important;
-    max-width: 800px;
-    /* Constrain reading width */
+  /* Collapsed State */
+  #sidebar.collapsed {
+    width: 60px;
+    padding: 2rem 0.5rem;
+    align-items: center;
+    /* Center icons */
   }
 
-  /* Mobile Responsive: Sidebar on top or hidden behind menu? 
-     For simplicity, on mobile we'll stack it at the top 
-  */
+  #sidebar.collapsed .sidebar-title,
+  #sidebar.collapsed .nav-section-title,
+  #sidebar.collapsed .nav-link-text,
+  #sidebar.collapsed .contact-email {
+    display: none;
+    opacity: 0;
+  }
+
+  #sidebar.collapsed .nav-section {
+    text-align: center;
+    width: 100%;
+  }
+
+  #sidebar.collapsed .toggle-btn-icon {
+    transform: rotate(180deg);
+  }
+
+  /* Push main content handled by Body Padding above */
+  /* .wrapper styling consolidated above */
+
+  /* Mobile Responsive */
   @media (max-width: 768px) {
+    body {
+      padding-left: 0;
+    }
+
     #sidebar {
       position: relative;
+
       width: 100%;
       height: auto;
       border-right: none;
@@ -230,23 +286,52 @@
       margin-left: 0 !important;
       padding: 1rem;
     }
+
+    #sidebar.collapsed {
+      width: 100%;
+    }
+
+    /* Disable collapse on mobile for now */
   }
 
-  .sidebar-title {
+  .sidebar-title-link {
     font-size: 1.2rem;
     font-weight: 700;
     margin-bottom: 2rem;
+    color: var(--link-color) !important;
+    /* Green */
+    text-decoration: none;
+    display: block;
+    white-space: nowrap;
+  }
+
+  .toggle-btn {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    background: none;
+    border: none;
     color: var(--text-color);
+    cursor: pointer;
+    opacity: 0.5;
+    padding: 5px;
+  }
+
+  .toggle-btn:hover {
+    opacity: 1;
   }
 
   .nav-link {
-    display: block;
+    display: flex;
+    align-items: center;
     padding: 0.5rem 0;
     color: var(--text-color) !important;
     text-decoration: none;
     font-size: 1rem;
     opacity: 0.8;
     transition: opacity 0.2s;
+    white-space: nowrap;
+    gap: 10px;
   }
 
   .nav-link:hover {
@@ -266,6 +351,23 @@
     opacity: 0.5;
     margin-bottom: 0.5rem;
     font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .bottom-section {
+    margin-top: auto;
+    border-top: 1px solid var(--border-color);
+    padding-top: 1rem;
+    width: 100%;
+  }
+
+  .contact-email {
+    font-size: 0.8rem;
+    color: var(--text-color);
+    opacity: 0.6;
+    text-decoration: none;
+    display: block;
+    margin-bottom: 1rem;
   }
 </style>
 
@@ -276,47 +378,83 @@
       const sidebar = document.createElement('nav');
       sidebar.id = 'sidebar';
       sidebar.innerHTML = `
-        <div class="sidebar-title">Kyle Beck</div>
+        <button class="toggle-btn" id="sidebar-toggle">
+            <span class="toggle-icon">❮</span>
+        </button>
+      
+        <a href="/" class="sidebar-title-link">Kyle Beck</a>
         
         <div class="nav-section">
           <div class="nav-section-title">Navigation</div>
-          <a href="/" class="nav-link">Home</a>
+          <a href="/" class="nav-link">
+            <span class="nav-icon">🏠</span>
+            <span class="nav-link-text">Home</span>
+          </a>
         </div>
 
         <div class="nav-section">
-          <div class="nav-section-title">Projects</div>
-          <a href="/plus3-doremidi-guide/" class="nav-link">Guides</a>
-          <a href="/tonverk-presets/" class="nav-link">Presets</a>
+          <div class="nav-section-title">Library</div>
+          <a href="/plus3-doremidi-guide/" class="nav-link">
+            <span class="nav-icon">📖</span>
+            <span class="nav-link-text">Guides</span>
+          </a>
+          <a href="/tonverk-presets/" class="nav-link">
+            <span class="nav-icon">🎛️</span>
+            <span class="nav-link-text">Presets</span>
+          </a>
         </div>
 
-        <div class="nav-section">
-           <div class="nav-section-title">Connect</div>
-           <a href="mailto:kyle@kyle-beck.com" class="nav-link">Contact</a>
+        <div class="bottom-section">
+           <a href="mailto:kyle@kyle-beck.com" class="contact-email">kyle@kyle-beck.com</a>
         </div>
       `;
       document.body.prepend(sidebar);
+
+      // Inject Collapse Logic
+      const toggleBtn = document.getElementById('sidebar-toggle');
+      const body = document.body;
+      const toggleIcon = toggleBtn.querySelector('.toggle-icon');
+
+      // State Check
+      if (localStorage.getItem('sidebar-collapsed') === 'true') {
+        sidebar.classList.add('collapsed');
+        body.classList.add('sidebar-collapsed');
+        toggleIcon.innerText = '❯';
+      }
+
+      toggleBtn.addEventListener('click', () => {
+        sidebar.classList.toggle('collapsed');
+        body.classList.toggle('sidebar-collapsed');
+
+        if (sidebar.classList.contains('collapsed')) {
+          localStorage.setItem('sidebar-collapsed', 'true');
+          toggleIcon.innerText = '❯';
+        } else {
+          localStorage.setItem('sidebar-collapsed', 'false');
+          toggleIcon.innerText = '❮';
+        }
+      });
     }
 
     // Theme Toggle Logic (Existing)
     if (document.getElementById('theme-toggle-checkbox')) return;
 
-    // ... (Attach toggle to sidebar or keep floating? Floating is fine for now, or move to sidebar)
-    // Let's move the toggle into the sidebar for a cleaner look
-
     const sidebar = document.getElementById('sidebar');
+    const bottomSection = sidebar.querySelector('.bottom-section');
+
+    // Create Switch HTML
     const toggleDiv = document.createElement('div');
-    toggleDiv.style.marginTop = "auto"; // Push to bottom
+    // toggleDiv.style.marginTop = "auto"; // Handled by bottom-section now
     toggleDiv.innerHTML = `
       <label class="theme-switch" for="theme-toggle-checkbox">
         <input type="checkbox" id="theme-toggle-checkbox" />
         <div class="slider"></div>
       </label>
     `;
-    if (sidebar) {
-      sidebar.appendChild(toggleDiv);
+
+    if (bottomSection) {
+      bottomSection.appendChild(toggleDiv);
     } else {
-      // Fallback if sidebar failed
-      toggleDiv.className = 'theme-switch-wrapper';
       document.body.appendChild(toggleDiv);
     }
 
