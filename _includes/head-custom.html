@@ -181,55 +181,148 @@
     text-decoration: none;
   }
 
-  .activity-desc {
-    margin: 0.25rem 0 0;
-    font-size: 0.95rem;
-    opacity: 0.9;
+  /* Sidebar Navigation */
+  #sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    width: 250px;
+    background-color: var(--bg-color);
+    border-right: 1px solid rgba(0, 0, 0, 0.1);
+    padding: 2rem 1.5rem;
+    display: flex;
+    flex-direction: column;
+    z-index: 1000;
+  }
+
+  [data-theme="dark"] #sidebar {
+    border-right: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  /* Push main content */
+  .wrapper {
+    margin-left: 250px !important;
+    width: auto !important;
+    max-width: 800px;
+    /* Constrain reading width */
+  }
+
+  /* Mobile Responsive: Sidebar on top or hidden behind menu? 
+     For simplicity, on mobile we'll stack it at the top 
+  */
+  @media (max-width: 768px) {
+    #sidebar {
+      position: relative;
+      width: 100%;
+      height: auto;
+      border-right: none;
+      border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+    }
+
+    .wrapper {
+      margin-left: 0 !important;
+      padding: 1rem;
+    }
+  }
+
+  .sidebar-title {
+    font-size: 1.2rem;
+    font-weight: 700;
+    margin-bottom: 2rem;
+    color: var(--text-color);
+  }
+
+  .nav-link {
+    display: block;
+    padding: 0.5rem 0;
+    color: var(--text-color) !important;
+    text-decoration: none;
+    font-size: 1rem;
+    opacity: 0.8;
+    transition: opacity 0.2s;
+  }
+
+  .nav-link:hover {
+    opacity: 1;
+    color: var(--link-color) !important;
+  }
+
+  .nav-section {
+    margin-bottom: 2rem;
+  }
+
+  .nav-section-title {
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.05em;
+    color: var(--text-color);
+    opacity: 0.5;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
   }
 </style>
 
 <script>
   document.addEventListener('DOMContentLoaded', function () {
-    // 1. Inject Contact Link into Header
-    if (!document.getElementById('custom-contact-link')) {
-      const header = document.querySelector('header');
-      const target = header || document.querySelector('.wrapper') || document.body;
+    // Inject Sidebar
+    if (!document.getElementById('sidebar')) {
+      const sidebar = document.createElement('nav');
+      sidebar.id = 'sidebar';
+      sidebar.innerHTML = `
+        <div class="sidebar-title">Kyle Beck</div>
+        
+        <div class="nav-section">
+          <div class="nav-section-title">Navigation</div>
+          <a href="/" class="nav-link">Home</a>
+        </div>
 
-      const contactDiv = document.createElement('div');
-      contactDiv.id = 'custom-contact-link';
-      // Removed prefix as requested
-      contactDiv.innerHTML = '<a href="mailto:kyle@kyle-beck.com">kyle@kyle-beck.com</a>';
+        <div class="nav-section">
+          <div class="nav-section-title">Projects</div>
+          <a href="/plus3-doremidi-guide/" class="nav-link">Guides</a>
+          <a href="/tonverk-presets/" class="nav-link">Presets</a>
+        </div>
 
-      target.appendChild(contactDiv);
+        <div class="nav-section">
+           <div class="nav-section-title">Connect</div>
+           <a href="mailto:kyle@kyle-beck.com" class="nav-link">Contact</a>
+        </div>
+      `;
+      document.body.prepend(sidebar);
     }
 
-    // 2. Setup Theme Toggle (Minimal Switch)
+    // Theme Toggle Logic (Existing)
     if (document.getElementById('theme-toggle-checkbox')) return;
 
-    // Create Switch HTML
-    const wrapper = document.createElement('div');
-    wrapper.className = 'theme-switch-wrapper';
-    wrapper.title = 'Toggle Dark Mode';
-    wrapper.innerHTML = `
+    // ... (Attach toggle to sidebar or keep floating? Floating is fine for now, or move to sidebar)
+    // Let's move the toggle into the sidebar for a cleaner look
+
+    const sidebar = document.getElementById('sidebar');
+    const toggleDiv = document.createElement('div');
+    toggleDiv.style.marginTop = "auto"; // Push to bottom
+    toggleDiv.innerHTML = `
       <label class="theme-switch" for="theme-toggle-checkbox">
         <input type="checkbox" id="theme-toggle-checkbox" />
         <div class="slider"></div>
       </label>
     `;
-    document.body.appendChild(wrapper);
+    if (sidebar) {
+      sidebar.appendChild(toggleDiv);
+    } else {
+      // Fallback if sidebar failed
+      toggleDiv.className = 'theme-switch-wrapper';
+      document.body.appendChild(toggleDiv);
+    }
 
     const toggleCheckbox = document.getElementById('theme-toggle-checkbox');
     const root = document.documentElement;
-
-    // Check saved theme
     const savedTheme = localStorage.getItem('theme');
 
-    // Default logic
     if (savedTheme === 'dark') {
       root.setAttribute('data-theme', 'dark');
       toggleCheckbox.checked = true;
     } else if (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-      // System default logic if needed
+      // system default
     }
 
     toggleCheckbox.addEventListener('change', function (e) {
@@ -241,5 +334,6 @@
         localStorage.setItem('theme', 'light');
       }
     });
+
   });
 </script>
