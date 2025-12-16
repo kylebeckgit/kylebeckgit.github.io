@@ -247,11 +247,13 @@
     /* Center icons */
   }
 
-  #sidebar.collapsed .sidebar-title,
+  #sidebar.collapsed .sidebar-title-link,
+  /* Fixed Selector */
   #sidebar.collapsed .nav-section-title,
   #sidebar.collapsed .nav-link-text,
   #sidebar.collapsed .contact-email {
-    display: none;
+    display: none !important;
+    /* Force hide */
     opacity: 0;
   }
 
