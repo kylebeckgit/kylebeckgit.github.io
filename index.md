@@ -44,7 +44,7 @@ document.addEventListener("DOMContentLoaded", function() {
 
 <hr style="margin: 3rem 0; border: 0; border-top: 1px solid #eee;">
 
-## Latest Activity
+## Recent Updates
 
 <div class="activity-feed">
   {% for activity in site.data.activity limit:5 %}
