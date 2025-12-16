@@ -223,7 +223,8 @@
     top: 0;
     left: 0;
     height: 100vh;
-    width: 250px;
+    width: 210px;
+    /* Reduced from 250px */
     background-color: var(--bg-color);
     border-right: 1px solid rgba(0, 0, 0, 0.1);
     padding: 2rem 1.5rem;
@@ -369,7 +370,10 @@
     opacity: 0.6;
     text-decoration: none;
     display: block;
-    margin-bottom: 1rem;
+    margin-top: 1.5rem;
+    /* Add specific spacing as it's now inline-ish */
+    padding-top: 0.5rem;
+    border-top: 1px dotted var(--border-color);
   }
 </style>
 
@@ -404,10 +408,12 @@
             <span class="nav-icon">🎛️</span>
             <span class="nav-link-text">Presets</span>
           </a>
+          
+          <a href="mailto:kyle@kyle-beck.com" class="contact-email">kyle@kyle-beck.com</a>
         </div>
 
         <div class="bottom-section">
-           <a href="mailto:kyle@kyle-beck.com" class="contact-email">kyle@kyle-beck.com</a>
+           <!-- Email moved up -->
         </div>
       `;
       document.body.prepend(sidebar);
@@ -446,7 +452,7 @@
 
     // Create Switch HTML
     const toggleDiv = document.createElement('div');
-    // toggleDiv.style.marginTop = "auto"; // Handled by bottom-section now
+    // Force toggle to bottom even if bottom section is empty (it is now)
     toggleDiv.innerHTML = `
       <label class="theme-switch" for="theme-toggle-checkbox">
         <input type="checkbox" id="theme-toggle-checkbox" />
