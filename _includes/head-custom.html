@@ -495,10 +495,17 @@
     const links = document.querySelectorAll('a');
     for (const link of links) {
       if (link.textContent.includes('orderedlist')) {
-        const prev = link.previousSibling;
-        if (prev && prev.nodeType === 3 && prev.textContent.includes('Hosted on GitHub Pages')) {
-          prev.remove();
-          link.remove();
+        link.style.display = 'none'; // Hide link just in case remove fails or for safer handling
+        let node = link.previousSibling;
+        // Walk back looking for the text
+        while (node) {
+          if (node.nodeType === 3 && node.textContent.includes('Hosted on GitHub Pages')) {
+            node.textContent = ''; // Clear text
+            break;
+          }
+          // If we hit an element that isn't the text, stop (safeguard)
+          if (node.nodeType === 1) break;
+          node = node.previousSibling;
         }
       }
     }
