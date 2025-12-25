@@ -207,36 +207,67 @@ layout: null
     </div>
 
     <script>
+        // --- SEEDING UTILITIES ---
+        // Simple hash function (cyrb53) to turn string into seed
+        function cyrb53(str, seed = 0) {
+            let h1 = 0xdeadbeef ^ seed, h2 = 0x41c6ce57 ^ seed;
+            for (let i = 0, ch; i < str.length; i++) {
+                ch = str.charCodeAt(i);
+                h1 = Math.imul(h1 ^ ch, 2654435761);
+                h2 = Math.imul(h2 ^ ch, 1597334677);
+            }
+            h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+            h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+            return 4294967296 * (2097151 & h2) + (h1 >>> 0);
+        }
+
+        // Mulberry32 PRNG
+        function mulberry32(a) {
+            return function () {
+                var t = a += 0x6D2B79F5;
+                t = Math.imul(t ^ t >>> 15, t | 1);
+                t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+                return ((t ^ t >>> 14) >>> 0) / 4294967296;
+            }
+        }
+
         function generate() {
-            const prompt = document.getElementById('prompt').value.toLowerCase();
+            const promptInput = document.getElementById('prompt').value;
+            // Use raw case-sensitive input for seeding, but lowercase for keyword matching
+            const prompt = promptInput.toLowerCase();
             const outputEl = document.getElementById('output');
             const outputSection = document.getElementById('outputSection');
 
+            // --- 0. INITIALIZE RNG ---
+            // If prompt is empty, use a random seed. If text exists, hash it.
+            const seed = promptInput.trim() === "" ? Date.now() : cyrb53(promptInput);
+            const rng = mulberry32(seed); // rng() returns 0.0 to 1.0
+
             // --- CONFIGURATION ---
-            const targetPartials = 64; // Significant increase for "HD" quality
+            const targetPartials = 64;
             let ratios = [];
 
             // --- 1. MATERIAL & TOPOLOGY (Ratios) ---
-            // keywords determine the base structure
 
-            let topology = 'harmonic'; // default
+            let topology = null;
             let stiffness = 0.0;
             let detuneAmount = 0.0;
-            let clusterProb = 0.0; // Chance to spawn a "cluster" of partials around a ratio
+            let clusterProb = 0.0;
 
+            // Keyword Matching
             if (prompt.match(/bell|gong|chime|plate/)) {
                 topology = 'inharmonic';
                 detuneAmount = 0.15;
             } else if (prompt.match(/glass|crystal|ice|shatter/)) {
                 topology = 'inharmonic';
                 detuneAmount = 0.05;
-                clusterProb = 0.4; // High chance of clusters
+                clusterProb = 0.4;
             } else if (prompt.match(/wood|log|marimba|xylophone/)) {
                 topology = 'stiff_string';
-                stiffness = 0.1; // Mild stiffness
+                stiffness = 0.1;
             } else if (prompt.match(/bar|tines|kalimba/)) {
                 topology = 'stiff_string';
-                stiffness = 0.8; // High stiffness
+                stiffness = 0.8;
             } else if (prompt.match(/string|piano|guitar/)) {
                 topology = 'harmonic';
                 stiffness = prompt.includes('stiff') ? 0.2 : 0.005;
@@ -244,102 +275,109 @@ layout: null
                 topology = 'bessel';
             } else if (prompt.match(/vocal|voice|choir|formant/)) {
                 topology = 'harmonic';
-                clusterProb = 0.2; // Formants are often dense
+                clusterProb = 0.2;
             } else if (prompt.match(/wind|tube|flute|clarinet/)) {
                 topology = 'odd';
             }
 
+            // FALLBACK / PROCEDURAL MODE
+            // If no keywords matched, pick a random physics model based on the seed
+            if (!topology) {
+                const types = ['harmonic', 'inharmonic', 'stiff_string', 'bessel', 'odd'];
+                topology = types[Math.floor(rng() * types.length)];
+
+                // Randomize parameters since user didn't specify
+                stiffness = rng() * 0.5;
+                detuneAmount = rng() * 0.2;
+                clusterProb = rng() * 0.3;
+            }
+
+
             // --- RATIO GENERATION ---
             let currentRatio = 1.0;
-
-            // Seed first ratio
             ratios.push(1.0);
 
             for (let i = 1; i < targetPartials; i++) {
                 let nextR = 0;
 
                 if (topology === 'harmonic') {
-                    // n * sqrt(1 + B*n^2)
                     let n = i + 1;
                     nextR = n * Math.sqrt(1 + stiffness * (n * n));
                 }
                 else if (topology === 'odd') {
-                    nextR = 1 + i * 2; // 1, 3, 5...
+                    nextR = 1 + i * 2;
                 }
                 else if (topology === 'stiff_string') {
-                    // Classic stiff bar approx
-                    // f_n = f_1 * (n + approx_offset)^2 ? or the stiff string formula above.
-                    // Let's use the stiffness formula with higher coeff
                     let n = i + 1;
                     nextR = n * Math.sqrt(1 + stiffness * (n * n));
                 }
                 else if (topology === 'bessel') {
-                    // Drum modes approx: 1.59, 2.14, 2.30... irregular gaps
-                    // Lets walk up with irregular steps
-                    let step = 1.3 + (Math.random() * 0.6 - 0.3);
+                    let step = 1.3 + (rng() * 0.6 - 0.3);
                     currentRatio += step;
                     nextR = currentRatio;
                 }
                 else if (topology === 'inharmonic') {
                     // Chaotic step
-                    let step = 1.0 + (Math.random() * 0.8);
-                    // Add detune jitter based on prompt
-                    if (prompt.includes('broken') || prompt.includes('chaos')) step += Math.random();
+                    let step = 1.0 + (rng() * 0.8);
+                    if (prompt.includes('broken') || prompt.includes('chaos')) step += rng();
                     currentRatio += step;
                     nextR = currentRatio;
                 }
 
-                // --- CLUSTERING LOGIC ---
-                // If this material supports clusters, maybe add a tiny side-band
-                if (Math.random() < clusterProb) {
-                    // Add the "main" partial
+                // Apply detune lookup from RNG (Deterministic Jitter)
+                if (detuneAmount > 0) {
+                    nextR += (rng() - 0.5) * detuneAmount;
+                }
+
+                // Clustering
+                if (rng() < clusterProb) {
                     ratios.push(nextR);
-                    // Add a neighbor (beating frequency)
-                    let spread = 0.05 + Math.random() * 0.1;
+                    let spread = 0.05 + rng() * 0.1;
                     ratios.push(nextR + spread);
-                    i++; // skip one index since we pushed 2
+                    i++;
                 } else {
                     ratios.push(nextR);
                 }
             }
 
-            // Limit to targetPartials
             ratios = ratios.slice(0, targetPartials);
             ratios.sort((a, b) => a - b);
 
 
             // --- 2. SPECTRAL SHAPING (Gain) ---
-            // "Texture" / Jitter
 
-            let brightness = 1.0; // Multiplier for decay of gain
-            if (prompt.match(/bright|sharp|piercing/)) brightness = 0.5; // Slower drop
-            if (prompt.match(/dark|muffled|dull/)) brightness = 2.5; // Faster drop
+            let brightness = 1.0;
+            if (prompt.match(/bright|sharp|piercing/)) brightness = 0.5;
+            else if (prompt.match(/dark|muffled|dull/)) brightness = 2.5;
+            else {
+                // Procedural brightness
+                brightness = 0.5 + rng() * 2.0;
+            }
 
             let texture = 'smooth';
             if (prompt.match(/scraped|rough|noisy|dirt/)) texture = 'noisy';
-            if (prompt.match(/hollow|box/)) texture = 'comb';
+            else if (prompt.match(/hollow|box|comb/)) texture = 'comb';
+            else {
+                // Procedural texture chance
+                const textures = ['smooth', 'smooth', 'noisy', 'comb'];
+                texture = textures[Math.floor(rng() * textures.length)];
+            }
 
             let gains = ratios.map(r => {
-                // Base Log Dropoff
                 let g = -10 * Math.log10(r) * brightness;
 
-                // Texture Mods
                 if (texture === 'noisy') {
-                    // Random +/- 5dB noise
-                    g += (Math.random() * 10 - 5);
+                    g += (rng() * 10 - 5);
                 } else if (texture === 'comb') {
                     // Notch filter effect (sinusoidal)
                     g += 10 * Math.sin(r * 2);
                 }
 
-                // Formant bumps?
                 if (prompt.match(/vocal|voice/)) {
-                    // Boost around 3.0 and 8.0?
                     g += 15 * Math.exp(-Math.pow(r - 3, 2) / 2);
                     g += 10 * Math.exp(-Math.pow(r - 8, 2) / 4);
                 }
 
-                // Hard floor
                 if (g < -90) g = -90;
                 return g;
             });
@@ -347,41 +385,40 @@ layout: null
 
             // --- 3. DAMPING PHYSICS (Decay) ---
 
-            let dampingModel = 'standard';
-            // Analyzing uploaded files: 
-            // "Hammer Tapping Log": 1/r^2 (very fast high freq decay)
-            // "Materials Glass" : Decay is relatively flat but low (0.05 - 0.2)
-            // "Icicle" : Plateau?
-
+            let dampingModel = null;
             if (prompt.match(/wood|plastic|dry/)) dampingModel = 'exponential';
-            if (prompt.match(/metal|ring|sus/)) dampingModel = 'linear';
-            if (prompt.match(/glass|ice/)) dampingModel = 'glass';
+            else if (prompt.match(/metal|ring|sus/)) dampingModel = 'linear';
+            else if (prompt.match(/glass|ice/)) dampingModel = 'glass';
+            else {
+                // Procedural damping
+                const models = ['standard', 'exponential', 'linear', 'glass'];
+                dampingModel = models[Math.floor(rng() * models.length)];
+            }
 
             let decays = ratios.map((r, idx) => {
                 let d = 1.0;
 
                 if (dampingModel === 'exponential') {
-                    // Wood: High freqs die INSTANTLY.
                     d = 10.0 / (r * r);
                 } else if (dampingModel === 'linear') {
-                    // Metal: 1/sqrt(r) or similar
                     d = 5.0 / Math.sqrt(r);
                 } else if (dampingModel === 'glass') {
-                    // Randomish plateau, keeps shimmering
-                    d = 0.5 + (Math.random() * 0.4);
+                    d = 0.5 + (rng() * 0.4);
                 } else {
-                    // Standard
                     d = 5.0 / r;
                 }
 
-                // Global Decay Scaler based on "Long" / "Short"
-                if (prompt.match(/short|tight|dead/)) d *= 0.2;
-                if (prompt.match(/long|huge|eternal/)) d *= 4.0;
+                // Global Decay Scaler matches keywords OR random
+                let scaler = 1.0;
+                if (prompt.match(/short|tight|dead/)) scaler = 0.2;
+                else if (prompt.match(/long|huge|eternal/)) scaler = 4.0;
+                else scaler = 0.5 + rng() * 1.5;
 
-                // Add organic jitter to decay too (imperfections in material)
-                d *= (0.8 + Math.random() * 0.4);
+                d *= scaler;
 
-                // Clamp
+                // Organic jitter
+                d *= (0.8 + rng() * 0.4);
+
                 if (d > 100) d = 100;
                 if (d < 0.01) d = 0.01;
 
@@ -390,7 +427,11 @@ layout: null
 
 
             // --- FORMAT OUTPUT ---
-            let csvRows = ["Ratio;GainDB;Decay"];
+            // Include seed info in header for fun
+            let csvRows = [`Ratio;GainDB;Decay`];
+            // Disable debug log for production or user request? Keeping clean CSV for now based on original prompt instructions.
+            // console.log(`Zebra Gen V3: Seed=${seed}, Topology=${topology}, Damping=${dampingModel}`);
+
             for (let i = 0; i < ratios.length; i++) {
                 csvRows.push(`${ratios[i].toFixed(4)};${gains[i].toFixed(2)};${decays[i].toFixed(3)}`);
             }
