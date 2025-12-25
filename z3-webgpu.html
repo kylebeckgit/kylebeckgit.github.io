@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zebra 3 Modal Generator (WebGPU)</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --bg-color: #1a1a1a;
+            --card-bg: #252525;
+            --text-color: #e0e0e0;
+            --text-muted: #a0a0a0;
+            --accent-color: #8cc63f;
+            /* Zebra-ish green */
+            --accent-hover: #7ab332;
+            --input-bg: #2a2a2a;
+            --border-color: #333333;
+            --code-bg: #111111;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 2rem;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 800px;
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+            text-align: center;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            background: linear-gradient(90deg, #fff, var(--accent-color));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 0.5rem;
+        }
+
+        .badge {
+            background: rgba(140, 198, 63, 0.2);
+            color: var(--accent-color);
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            vertical-align: middle;
+            margin-left: 0.5rem;
+        }
+
+        p.subtitle {
+            color: var(--text-muted);
+            font-size: 1.1rem;
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 2rem;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+            text-align: left;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        label {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--text-muted);
+        }
+
+        textarea {
+            width: 100%;
+            height: 120px;
+            background-color: var(--input-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: white;
+            padding: 1rem;
+            font-family: 'Inter', sans-serif;
+            font-size: 1rem;
+            resize: vertical;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 2px rgba(140, 198, 63, 0.2);
+        }
+
+        button.primary-btn {
+            background-color: var(--accent-color);
+            color: #1a1a1a;
+            border: none;
+            padding: 12px 24px;
+            font-size: 1rem;
+            font-weight: 700;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: transform 0.1s, background-color 0.2s;
+            align-self: center;
+        }
+
+        button.primary-btn:hover {
+            background-color: var(--accent-hover);
+        }
+
+        button.primary-btn:disabled {
+            background-color: #444;
+            color: #888;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .status-box {
+            background-color: var(--code-bg);
+            padding: 1rem;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            font-family: 'Menlo', monospace;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            max-height: 150px;
+            overflow-y: auto;
+        }
+
+        .output-section {
+            margin-top: 1rem;
+            display: none;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        pre {
+            background-color: var(--code-bg);
+            padding: 1.5rem;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+            font-size: 0.9rem;
+            color: #dcdcdc;
+            border: 1px solid var(--border-color);
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+        <div>
+            <h1>Zebra 3 Gen <span class="badge">AI PRO (WebGPU)</span></h1>
+            <p class="subtitle">Client-side AI generation. No server. No API keys. Powered by your GPU.</p>
+        </div>
+
+        <div class="card">
+            <div id="init-section">
+                <p style="margin-bottom: 1rem;">This mode downloads a 2.3GB AI model (Phi-3) directly to your browser
+                    cache. It runs locally on your GPU.</p>
+                <button id="init-btn" class="primary-btn" onclick="initEngine()">Initialize AI Engine
+                    (Download)</button>
+            </div>
+
+            <div id="status-container" class="status-box" style="display:none;">
+                <div id="params-status">Status: Ready to initialize...</div>
+                <div id="download-progress"></div>
+            </div>
+
+            <div id="generate-section" style="display:none; flex-direction:column; gap:1.5rem;">
+                <div class="input-group">
+                    <label for="prompt">Sound Description</label>
+                    <textarea id="prompt"
+                        placeholder="Describe a complex sound structure (e.g. 'A rusted metal plate vibrating in a vacuum with unstable harmonics')..."></textarea>
+                </div>
+                <button id="generate-btn" class="primary-btn" onclick="generate()">Generate with AI</button>
+            </div>
+
+            <div class="output-section" id="outputSection">
+                <label>AI Generated Profile</label>
+                <pre id="output">...</pre>
+            </div>
+        </div>
+    </div>
+
+    <!-- WebLLM Script -->
+    <script type="module">
+        import { CreateMLCEngine } from "https://esm.run/@mlc-ai/web-llm";
+
+        // Configuration
+        const SELECTED_MODEL = "Phi-3-mini-4k-instruct-q4f16_1-MLC";
+        let engine = null;
+
+        // UI Elements
+        const initBtn = document.getElementById('init-btn');
+        const generateBtn = document.getElementById('generate-btn');
+        const statusContainer = document.getElementById('status-container');
+        const statusText = document.getElementById('params-status');
+        const progressText = document.getElementById('download-progress');
+        const generateSection = document.getElementById('generate-section');
+        const outputSection = document.getElementById('outputSection');
+        const outputEl = document.getElementById('output');
+
+        // Initializer
+        window.initEngine = async () => {
+            initBtn.disabled = true;
+            initBtn.innerText = "Initializing...";
+            statusContainer.style.display = 'block';
+
+            // Callback to update loading progress
+            const initProgressCallback = (report) => {
+                statusText.innerText = report.text;
+                // Add % if available
+                if (report.progress) {
+                    progressText.innerText = `${(report.progress * 100).toFixed(1)}%`;
+                }
+            };
+
+            try {
+                statusText.innerText = "Connecting to GPU...";
+
+                engine = await CreateMLCEngine(
+                    SELECTED_MODEL,
+                    { initProgressCallback: initProgressCallback }
+                );
+
+                statusText.innerText = "Engine Ready!";
+                progressText.innerText = "";
+                document.getElementById('init-section').style.display = 'none';
+                generateSection.style.display = 'flex';
+
+            } catch (err) {
+                statusText.innerText = "Error: " + err.message;
+                initBtn.disabled = false;
+                initBtn.innerText = "Retry Initialize";
+                console.error(err);
+            }
+        };
+
+        // Generator
+        window.generate = async () => {
+            const prompt = document.getElementById('prompt').value;
+            if (!prompt) return;
+
+            generateBtn.disabled = true;
+            generateBtn.innerText = "Dreaming...";
+            outputSection.style.display = 'flex';
+            outputEl.innerText = "";
+
+            try {
+                // System Prompt: Teach the AI how to think like Zebra 3
+                const systemPrompt = `You are a Physics Engine for the Zebra 3 Synthesizer. 
+Your goal is to generate a Modal Resonator Profile (CSV) based on a user description.
+The CSV format is: Ratio;GainDB;Decay
+Ratio: Frequency multiplier (1.0 = fundamental).
+GainDB: Volume in dB (0 to -100).
+Decay: Decay time multiplier (0 to 100).
+
+Rules:
+1. Output ONLY the CSV content. No explanation.
+2. Generate exactly 64 lines (partials).
+3. Identify the material physics from the prompt (Glass = high partials, clusters; Wood = Low partials, fast high freq decay).
+`;
+
+                const messages = [
+                    { role: "system", content: systemPrompt },
+                    { role: "user", content: "Create a profile for: " + prompt }
+                ];
+
+                const chunks = await engine.chat.completions.create({
+                    messages,
+                    stream: true, // Stream for "alive" feeling
+                    temperature: 0.7, // Some creativity
+                });
+
+                let fullText = "";
+                for await (const chunk of chunks) {
+                    const content = chunk.choices[0]?.delta?.content || "";
+                    fullText += content;
+                    outputEl.innerText = fullText; // Streaming update
+                    // Auto-scroll
+                }
+
+                generateBtn.disabled = false;
+                generateBtn.innerText = "Generate with AI";
+
+            } catch (err) {
+                outputEl.innerText += "\n[Error Generation Failed]: " + err.message;
+                generateBtn.disabled = false;
+            }
+        }
+    </script>
+</body>
+
+</html>

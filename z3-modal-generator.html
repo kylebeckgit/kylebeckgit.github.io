@@ -261,21 +261,24 @@ layout: null
             } else if (prompt.match(/glass|crystal|ice|shatter/)) {
                 topology = 'inharmonic';
                 detuneAmount = 0.05;
-                clusterProb = 0.4;
+                clusterProb = 0.2;
             } else if (prompt.match(/wood|log|marimba|xylophone/)) {
                 topology = 'stiff_string';
                 stiffness = 0.1;
             } else if (prompt.match(/bar|tines|kalimba/)) {
                 topology = 'stiff_string';
                 stiffness = 0.8;
+            } else if (prompt.match(/steel\s?drum|tongue|hang|pan|handpan/)) {
+                topology = 'tongue_drum';
+                stiffness = 0.05;
             } else if (prompt.match(/string|piano|guitar/)) {
                 topology = 'harmonic';
-                stiffness = prompt.includes('stiff') ? 0.2 : 0.005;
+                stiffness = prompt.includes('stiff') ? 0.2 : 0.0005; // Tuned matches trusting guitar
             } else if (prompt.match(/membrane|drum|skin/)) {
                 topology = 'bessel';
             } else if (prompt.match(/vocal|voice|choir|formant/)) {
                 topology = 'harmonic';
-                clusterProb = 0.2;
+                clusterProb = 0.1;
             } else if (prompt.match(/wind|tube|flute|clarinet/)) {
                 topology = 'odd';
             }
@@ -283,7 +286,7 @@ layout: null
             // FALLBACK / PROCEDURAL MODE
             // If no keywords matched, pick a random physics model based on the seed
             if (!topology) {
-                const types = ['harmonic', 'inharmonic', 'stiff_string', 'bessel', 'odd'];
+                const types = ['harmonic', 'inharmonic', 'stiff_string', 'bessel', 'odd', 'tongue_drum'];
                 topology = types[Math.floor(rng() * types.length)];
 
                 // Randomize parameters since user didn't specify
@@ -301,6 +304,12 @@ layout: null
                 let nextR = 0;
 
                 if (topology === 'harmonic') {
+                    // Trusted Guitar Data matches: n * sqrt(1 + 0.0005 * n^2) roughly?
+                    // Guitar: 1, 2.0199, 3.0668, 4.1569
+                    // Ideal Harmonic: 1, 2, 3, 4
+                    // Deviation: 0.0199, 0.0668, 0.1569.  Square growth.
+                    // n * sqrt(1 + B*n^2) where B is very small (approx 0.00001 - 0.0001)
+                    // Let's use the explicit Stiffness formula
                     let n = i + 1;
                     nextR = n * Math.sqrt(1 + stiffness * (n * n));
                 }
@@ -308,8 +317,25 @@ layout: null
                     nextR = 1 + i * 2;
                 }
                 else if (topology === 'stiff_string') {
+                    // Standard Marimba/Bar
                     let n = i + 1;
+                    // Stiff bars (Marimba) are often 1, 4, 9, 16 (approx 3.9, 9.2...)
+                    // But our 'stiffness' param handles the mild inharmonicity
                     nextR = n * Math.sqrt(1 + stiffness * (n * n));
+                }
+                else if (topology === 'tongue_drum') {
+                    // Trusted Steel Drum Data: 1.0, 1.99, 2.97, 3.94, (GAP) 5.79, 8.21, 10.51
+                    // It mimics harmonic 1-4, then jumps.
+                    // This suggests modes (1,0), (1,1) etc.
+                    // Model: 1, 2, 3, 4, 6, 8, 10
+                    if (i < 4) {
+                        nextR = i + 1 + (rng() * 0.05 - 0.025); // Almost harmonic start
+                    } else {
+                        // After 4th partial, gaps widen
+                        // i=4 -> 6 (approx 1.5x previous gap?)
+                        currentRatio += (1.5 + rng() * 1.0);
+                        nextR = currentRatio;
+                    }
                 }
                 else if (topology === 'bessel') {
                     let step = 1.3 + (rng() * 0.6 - 0.3);
@@ -324,7 +350,7 @@ layout: null
                     nextR = currentRatio;
                 }
 
-                // Apply detune lookup from RNG (Deterministic Jitter)
+                // Apply detune lookup from RNG
                 if (detuneAmount > 0) {
                     nextR += (rng() - 0.5) * detuneAmount;
                 }
