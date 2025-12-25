@@ -22,6 +22,14 @@ title: Kyle Beck - Musician & Developer
   </li>
 </ul>
 
+### Tools
+<ul style="list-style-type: none; padding: 0;">
+  <li>
+    <h3>🦓 <a href="/z3-modal-generator.html">Zebra 3 Modal Generator</a></h3>
+    <p>A physics-based tool to generate specific <strong>Modal Resonator</strong> profiles for U-He Zebra 3 from natural language descriptions.</p>
+  </li>
+</ul>
+
 <script>
 document.addEventListener("DOMContentLoaded", function() {
   var input = document.getElementById('search-input');

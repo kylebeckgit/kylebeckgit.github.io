@@ -1,0 +1,373 @@
+---
+layout: null
+---
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zebra 3 Modal Generator</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --bg-color: #1a1a1a;
+            --card-bg: #252525;
+            --text-color: #e0e0e0;
+            --text-muted: #a0a0a0;
+            --accent-color: #8cc63f; /* Zebra-ish green */
+            --accent-hover: #7ab332;
+            --input-bg: #2a2a2a;
+            --border-color: #333333;
+            --code-bg: #111111;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 2rem;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 800px;
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+            text-align: center;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            background: linear-gradient(90deg, #fff, var(--accent-color));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 0.5rem;
+        }
+
+        p.subtitle {
+            color: var(--text-muted);
+            font-size: 1.1rem;
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 2rem;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+            text-align: left;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        label {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--text-muted);
+        }
+
+        textarea {
+            width: 100%;
+            height: 120px;
+            background-color: var(--input-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: white;
+            padding: 1rem;
+            font-family: 'Inter', sans-serif;
+            font-size: 1rem;
+            resize: vertical;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 2px rgba(140, 198, 63, 0.2);
+        }
+
+        button.primary-btn {
+            background-color: var(--accent-color);
+            color: #1a1a1a;
+            border: none;
+            padding: 12px 24px;
+            font-size: 1rem;
+            font-weight: 700;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: transform 0.1s, background-color 0.2s;
+            align-self: center;
+        }
+
+        button.primary-btn:hover {
+            background-color: var(--accent-hover);
+        }
+
+        button.primary-btn:active {
+            transform: scale(0.98);
+        }
+
+        .output-section {
+            margin-top: 1rem;
+            display: none; /* Hidden by default */
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .output-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .copy-btn {
+            background-color: transparent;
+            color: var(--text-muted);
+            border: 1px solid var(--border-color);
+            padding: 4px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: all 0.2s;
+        }
+
+        .copy-btn:hover {
+            color: white;
+            border-color: white;
+        }
+
+        pre {
+            background-color: var(--code-bg);
+            padding: 1.5rem;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+            font-size: 0.9rem;
+            color: #dcdcdc;
+            border: 1px solid var(--border-color);
+        }
+
+        /* Keyword highlighting for coolness */
+        span.highlight {
+            color: var(--accent-color);
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <div>
+            <h1>Zebra 3 Modal Generator</h1>
+            <p class="subtitle">Describe the sound, and the physics engine will design its resonator profile.</p>
+        </div>
+
+        <div class="card">
+            <div class="input-group">
+                <label for="prompt">Sound Description</label>
+                <textarea id="prompt" placeholder="e.g. Stiff Metal Bell with a long decay..."></textarea>
+            </div>
+
+            <button class="primary-btn" onclick="generate()">Generate Profile</button>
+
+            <div class="output-section" id="outputSection">
+                <div class="output-header">
+                    <label>Generated CSV</label>
+                    <button class="copy-btn" onclick="copyToClipboard()">Copy to Clipboard</button>
+                </div>
+                <pre id="output">Ratio;GainDB;Decay</pre>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function generate() {
+            const prompt = document.getElementById('prompt').value.toLowerCase();
+            const outputEl = document.getElementById('output');
+            const outputSection = document.getElementById('outputSection');
+
+            // --- 1. DETECT MATERIAL (Partials Logic) ---
+            let type = 'harmonic'; // Default
+            let stiffness = 0;
+            
+            if (prompt.includes('tube') || prompt.includes('clarinet') || prompt.includes('hollow') || prompt.includes('square')) {
+                type = 'odd';
+            } else if (prompt.includes('bell') || prompt.includes('gong') || prompt.includes('metal plate') || prompt.includes('plate')) {
+                type = 'inharmonic';
+            } else if (prompt.includes('glass') || prompt.includes('crystal') || prompt.includes('ice')) {
+                type = 'clustered';
+            } else if (prompt.includes('membrane') || prompt.includes('drum')) {
+                type = 'bessel';
+            } else if (prompt.includes('chord')) {
+                type = 'chord';
+            }
+
+            // Stiffness check
+            if (prompt.includes('stiff') || prompt.includes('bar')) {
+                stiffness = 0.5; // coefficient B
+            }
+
+            // --- 2. GENERATE RATIOS ---
+            const ratios = [];
+            const numPartials = 16; // Generate 16 partials
+
+            if (type === 'harmonic') {
+                for (let n = 1; n <= numPartials; n++) {
+                    let r = n;
+                    if (stiffness > 0) {
+                        r = n * Math.sqrt(1 + stiffness * (n * n));
+                    }
+                    ratios.push(r);
+                }
+            } else if (type === 'odd') {
+                for (let i = 0; i < numPartials; i++) {
+                    ratios.push(1 + i * 2);
+                }
+            } else if (type === 'inharmonic') {
+                // "Start with 1.0, then generate non-integers (e.g., 2.4, 3.8, 5.2) with random detuning."
+                ratios.push(1.0);
+                let current = 1.0;
+                for (let i = 1; i < numPartials; i++) {
+                    // Approx step 1.4 + random
+                    let step = 1.4 + (Math.random() * 0.4 - 0.2); 
+                    current += step;
+                    ratios.push(current);
+                }
+            } else if (type === 'clustered') {
+                // "Dense and non-integer"
+                // High frequencies. Let's start high and cluster.
+                // Or just start at 1.0 and have small irregular steps.
+                let current = 1.0;
+                for (let i = 0; i < numPartials; i++) {
+                    ratios.push(current);
+                    current += 0.2 + Math.random() * 0.5; // Very dense
+                }
+            } else if (type === 'bessel') {
+                // "1.0, 2.3, 3.6, 4.9..." -> approx step 1.3
+                for (let i = 0; i < numPartials; i++) {
+                    ratios.push(1 + i * 1.3);
+                }
+            } else if (type === 'chord') {
+                // Major/Minor logic could be complex, let's do simple stacking
+                // Basic harmonics 1, 1.25 (Major 3rd), 1.5 (5th)
+                // Then harmonics of those?
+                // Let's just stack the first few harmonics of a major triad relation
+                const baseRatios = prompt.includes('minor') ? [1, 1.2, 1.5] : [1, 1.25, 1.5];
+                for (let i = 0; i < numPartials; i++) {
+                   // Cycle through the chord tones and go up octaves? 
+                   // Or just linear expansion. Let's do partials of the chord tones.
+                   // P1: 1, 2, 3... P2: 1.25, 2.5, 3.75...
+                   // Let's keep it simple: Interleave them.
+                   let base = baseRatios[i % 3];
+                   let mul = Math.floor(i / 3) + 1;
+                   ratios.push(base * mul);
+                }
+                ratios.sort((a,b) => a-b);
+            }
+
+            // --- 3. CALCULATE GAIN & DECAY FOR EACH RATIO ---
+            
+            // Gain Logic Config
+            let gainType = 'normal';
+            if (prompt.includes('bright') || prompt.includes('buzz') || prompt.includes('saw')) gainType = 'bright';
+            if (prompt.includes('dark') || prompt.includes('muffled') || prompt.includes('wood')) gainType = 'dark';
+            if (prompt.includes('formant') || prompt.includes('vocal')) gainType = 'formant';
+
+            // Decay Logic Config
+            let decayType = 'normal';
+            if (prompt.includes('metal') || prompt.includes('bell') || prompt.includes('ring')) decayType = 'metal';
+            if (prompt.includes('wood') || prompt.includes('plastic') || prompt.includes('dry')) decayType = 'wood';
+            if (prompt.includes('glass')) decayType = 'glass';
+            const isDamped = prompt.includes('damped');
+
+
+            let csvRows = ["Ratio;GainDB;Decay"];
+
+            ratios.forEach(r => {
+                // -- GAIN CALC --
+                let g = 0;
+                // Base dropoff
+                if (gainType === 'bright') {
+                    // Slow drop: -3 * log10(r)
+                    g = -3 * Math.log10(r);
+                } else if (gainType === 'dark') {
+                    // Steep drop: -20 * log10(r)
+                    g = -20 * Math.log10(r);
+                } else if (gainType === 'formant') {
+                    // Bumps at 5.0 and 12.0
+                    // Base drop
+                    let base = -10 * Math.log10(r);
+                    // Add bumps
+                    let bump1 = 10 * Math.exp( -Math.pow(r - 5, 2) / 2 ); 
+                    let bump2 = 8 * Math.exp( -Math.pow(r - 12, 2) / 4 );
+                    g = base + bump1 + bump2;
+                } else {
+                    // Normal: -10 * log10(r)
+                    g = -10 * Math.log10(r);
+                }
+
+                // -- DECAY CALC --
+                let d = 1.0;
+                if (decayType === 'metal') {
+                    d = 1.0 / Math.sqrt(r);
+                } else if (decayType === 'wood') {
+                    d = 1.0 / (r * r);
+                } else if (decayType === 'glass') {
+                    d = 0.9;
+                } else {
+                    d = 1.0 / r;
+                }
+
+                if (isDamped) d *= 0.2;
+
+                // Clamp/Format
+                // Zebra expects specific ranges? Usually Gain is dB. Decay 0-1 or time? 
+                // Prompt: "Decay = 1.0 / Ratio... 0.85... 0.15" -> seems to be 0.0 to 1.0 normalized factor.
+                // Formatting: 2 decimals usually fine.
+                
+                // Randomize slightly for "natural" feel? Prompt implies deterministic logic mostly, 
+                // but "Inharmonic" had random.
+                
+                csvRows.push(`${r.toFixed(3)};${g.toFixed(1)};${d.toFixed(3)}`);
+            });
+
+            // Update UI
+            outputEl.innerText = csvRows.join('\n');
+            outputSection.style.display = 'flex';
+        }
+
+        function copyToClipboard() {
+            const text = document.getElementById('output').innerText;
+            navigator.clipboard.writeText(text).then(() => {
+                const btn = document.querySelector('.copy-btn');
+                const original = btn.innerText;
+                btn.innerText = 'Copied!';
+                setTimeout(() => btn.innerText = original, 2000);
+            });
+        }
+    </script>
+</body>
+</html>
