@@ -3,6 +3,7 @@ layout: null
 ---
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -11,14 +12,15 @@ layout: null
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    
+
     <style>
         :root {
             --bg-color: #1a1a1a;
             --card-bg: #252525;
             --text-color: #e0e0e0;
             --text-muted: #a0a0a0;
-            --accent-color: #8cc63f; /* Zebra-ish green */
+            --accent-color: #8cc63f;
+            /* Zebra-ish green */
             --accent-hover: #7ab332;
             --input-bg: #2a2a2a;
             --border-color: #333333;
@@ -70,7 +72,7 @@ layout: null
             border: 1px solid var(--border-color);
             border-radius: 12px;
             padding: 2rem;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
             text-align: left;
             display: flex;
             flex-direction: column;
@@ -132,7 +134,8 @@ layout: null
 
         .output-section {
             margin-top: 1rem;
-            display: none; /* Hidden by default */
+            display: none;
+            /* Hidden by default */
             flex-direction: column;
             gap: 0.5rem;
         }
@@ -174,9 +177,9 @@ layout: null
         span.highlight {
             color: var(--accent-color);
         }
-
     </style>
 </head>
+
 <body>
 
     <div class="container">
@@ -209,152 +212,189 @@ layout: null
             const outputEl = document.getElementById('output');
             const outputSection = document.getElementById('outputSection');
 
-            // --- 1. DETECT MATERIAL (Partials Logic) ---
-            let type = 'harmonic'; // Default
-            let stiffness = 0;
-            
-            if (prompt.includes('tube') || prompt.includes('clarinet') || prompt.includes('hollow') || prompt.includes('square')) {
-                type = 'odd';
-            } else if (prompt.includes('bell') || prompt.includes('gong') || prompt.includes('metal plate') || prompt.includes('plate')) {
-                type = 'inharmonic';
-            } else if (prompt.includes('glass') || prompt.includes('crystal') || prompt.includes('ice')) {
-                type = 'clustered';
-            } else if (prompt.includes('membrane') || prompt.includes('drum')) {
-                type = 'bessel';
-            } else if (prompt.includes('chord')) {
-                type = 'chord';
+            // --- CONFIGURATION ---
+            const targetPartials = 64; // Significant increase for "HD" quality
+            let ratios = [];
+
+            // --- 1. MATERIAL & TOPOLOGY (Ratios) ---
+            // keywords determine the base structure
+
+            let topology = 'harmonic'; // default
+            let stiffness = 0.0;
+            let detuneAmount = 0.0;
+            let clusterProb = 0.0; // Chance to spawn a "cluster" of partials around a ratio
+
+            if (prompt.match(/bell|gong|chime|plate/)) {
+                topology = 'inharmonic';
+                detuneAmount = 0.15;
+            } else if (prompt.match(/glass|crystal|ice|shatter/)) {
+                topology = 'inharmonic';
+                detuneAmount = 0.05;
+                clusterProb = 0.4; // High chance of clusters
+            } else if (prompt.match(/wood|log|marimba|xylophone/)) {
+                topology = 'stiff_string';
+                stiffness = 0.1; // Mild stiffness
+            } else if (prompt.match(/bar|tines|kalimba/)) {
+                topology = 'stiff_string';
+                stiffness = 0.8; // High stiffness
+            } else if (prompt.match(/string|piano|guitar/)) {
+                topology = 'harmonic';
+                stiffness = prompt.includes('stiff') ? 0.2 : 0.005;
+            } else if (prompt.match(/membrane|drum|skin/)) {
+                topology = 'bessel';
+            } else if (prompt.match(/vocal|voice|choir|formant/)) {
+                topology = 'harmonic';
+                clusterProb = 0.2; // Formants are often dense
+            } else if (prompt.match(/wind|tube|flute|clarinet/)) {
+                topology = 'odd';
             }
 
-            // Stiffness check
-            if (prompt.includes('stiff') || prompt.includes('bar')) {
-                stiffness = 0.5; // coefficient B
-            }
+            // --- RATIO GENERATION ---
+            let currentRatio = 1.0;
 
-            // --- 2. GENERATE RATIOS ---
-            const ratios = [];
-            const numPartials = 16; // Generate 16 partials
+            // Seed first ratio
+            ratios.push(1.0);
 
-            if (type === 'harmonic') {
-                for (let n = 1; n <= numPartials; n++) {
-                    let r = n;
-                    if (stiffness > 0) {
-                        r = n * Math.sqrt(1 + stiffness * (n * n));
-                    }
-                    ratios.push(r);
+            for (let i = 1; i < targetPartials; i++) {
+                let nextR = 0;
+
+                if (topology === 'harmonic') {
+                    // n * sqrt(1 + B*n^2)
+                    let n = i + 1;
+                    nextR = n * Math.sqrt(1 + stiffness * (n * n));
                 }
-            } else if (type === 'odd') {
-                for (let i = 0; i < numPartials; i++) {
-                    ratios.push(1 + i * 2);
+                else if (topology === 'odd') {
+                    nextR = 1 + i * 2; // 1, 3, 5...
                 }
-            } else if (type === 'inharmonic') {
-                // "Start with 1.0, then generate non-integers (e.g., 2.4, 3.8, 5.2) with random detuning."
-                ratios.push(1.0);
-                let current = 1.0;
-                for (let i = 1; i < numPartials; i++) {
-                    // Approx step 1.4 + random
-                    let step = 1.4 + (Math.random() * 0.4 - 0.2); 
-                    current += step;
-                    ratios.push(current);
+                else if (topology === 'stiff_string') {
+                    // Classic stiff bar approx
+                    // f_n = f_1 * (n + approx_offset)^2 ? or the stiff string formula above.
+                    // Let's use the stiffness formula with higher coeff
+                    let n = i + 1;
+                    nextR = n * Math.sqrt(1 + stiffness * (n * n));
                 }
-            } else if (type === 'clustered') {
-                // "Dense and non-integer"
-                // High frequencies. Let's start high and cluster.
-                // Or just start at 1.0 and have small irregular steps.
-                let current = 1.0;
-                for (let i = 0; i < numPartials; i++) {
-                    ratios.push(current);
-                    current += 0.2 + Math.random() * 0.5; // Very dense
+                else if (topology === 'bessel') {
+                    // Drum modes approx: 1.59, 2.14, 2.30... irregular gaps
+                    // Lets walk up with irregular steps
+                    let step = 1.3 + (Math.random() * 0.6 - 0.3);
+                    currentRatio += step;
+                    nextR = currentRatio;
                 }
-            } else if (type === 'bessel') {
-                // "1.0, 2.3, 3.6, 4.9..." -> approx step 1.3
-                for (let i = 0; i < numPartials; i++) {
-                    ratios.push(1 + i * 1.3);
+                else if (topology === 'inharmonic') {
+                    // Chaotic step
+                    let step = 1.0 + (Math.random() * 0.8);
+                    // Add detune jitter based on prompt
+                    if (prompt.includes('broken') || prompt.includes('chaos')) step += Math.random();
+                    currentRatio += step;
+                    nextR = currentRatio;
                 }
-            } else if (type === 'chord') {
-                // Major/Minor logic could be complex, let's do simple stacking
-                // Basic harmonics 1, 1.25 (Major 3rd), 1.5 (5th)
-                // Then harmonics of those?
-                // Let's just stack the first few harmonics of a major triad relation
-                const baseRatios = prompt.includes('minor') ? [1, 1.2, 1.5] : [1, 1.25, 1.5];
-                for (let i = 0; i < numPartials; i++) {
-                   // Cycle through the chord tones and go up octaves? 
-                   // Or just linear expansion. Let's do partials of the chord tones.
-                   // P1: 1, 2, 3... P2: 1.25, 2.5, 3.75...
-                   // Let's keep it simple: Interleave them.
-                   let base = baseRatios[i % 3];
-                   let mul = Math.floor(i / 3) + 1;
-                   ratios.push(base * mul);
-                }
-                ratios.sort((a,b) => a-b);
-            }
 
-            // --- 3. CALCULATE GAIN & DECAY FOR EACH RATIO ---
-            
-            // Gain Logic Config
-            let gainType = 'normal';
-            if (prompt.includes('bright') || prompt.includes('buzz') || prompt.includes('saw')) gainType = 'bright';
-            if (prompt.includes('dark') || prompt.includes('muffled') || prompt.includes('wood')) gainType = 'dark';
-            if (prompt.includes('formant') || prompt.includes('vocal')) gainType = 'formant';
-
-            // Decay Logic Config
-            let decayType = 'normal';
-            if (prompt.includes('metal') || prompt.includes('bell') || prompt.includes('ring')) decayType = 'metal';
-            if (prompt.includes('wood') || prompt.includes('plastic') || prompt.includes('dry')) decayType = 'wood';
-            if (prompt.includes('glass')) decayType = 'glass';
-            const isDamped = prompt.includes('damped');
-
-
-            let csvRows = ["Ratio;GainDB;Decay"];
-
-            ratios.forEach(r => {
-                // -- GAIN CALC --
-                let g = 0;
-                // Base dropoff
-                if (gainType === 'bright') {
-                    // Slow drop: -3 * log10(r)
-                    g = -3 * Math.log10(r);
-                } else if (gainType === 'dark') {
-                    // Steep drop: -20 * log10(r)
-                    g = -20 * Math.log10(r);
-                } else if (gainType === 'formant') {
-                    // Bumps at 5.0 and 12.0
-                    // Base drop
-                    let base = -10 * Math.log10(r);
-                    // Add bumps
-                    let bump1 = 10 * Math.exp( -Math.pow(r - 5, 2) / 2 ); 
-                    let bump2 = 8 * Math.exp( -Math.pow(r - 12, 2) / 4 );
-                    g = base + bump1 + bump2;
+                // --- CLUSTERING LOGIC ---
+                // If this material supports clusters, maybe add a tiny side-band
+                if (Math.random() < clusterProb) {
+                    // Add the "main" partial
+                    ratios.push(nextR);
+                    // Add a neighbor (beating frequency)
+                    let spread = 0.05 + Math.random() * 0.1;
+                    ratios.push(nextR + spread);
+                    i++; // skip one index since we pushed 2
                 } else {
-                    // Normal: -10 * log10(r)
-                    g = -10 * Math.log10(r);
+                    ratios.push(nextR);
+                }
+            }
+
+            // Limit to targetPartials
+            ratios = ratios.slice(0, targetPartials);
+            ratios.sort((a, b) => a - b);
+
+
+            // --- 2. SPECTRAL SHAPING (Gain) ---
+            // "Texture" / Jitter
+
+            let brightness = 1.0; // Multiplier for decay of gain
+            if (prompt.match(/bright|sharp|piercing/)) brightness = 0.5; // Slower drop
+            if (prompt.match(/dark|muffled|dull/)) brightness = 2.5; // Faster drop
+
+            let texture = 'smooth';
+            if (prompt.match(/scraped|rough|noisy|dirt/)) texture = 'noisy';
+            if (prompt.match(/hollow|box/)) texture = 'comb';
+
+            let gains = ratios.map(r => {
+                // Base Log Dropoff
+                let g = -10 * Math.log10(r) * brightness;
+
+                // Texture Mods
+                if (texture === 'noisy') {
+                    // Random +/- 5dB noise
+                    g += (Math.random() * 10 - 5);
+                } else if (texture === 'comb') {
+                    // Notch filter effect (sinusoidal)
+                    g += 10 * Math.sin(r * 2);
                 }
 
-                // -- DECAY CALC --
-                let d = 1.0;
-                if (decayType === 'metal') {
-                    d = 1.0 / Math.sqrt(r);
-                } else if (decayType === 'wood') {
-                    d = 1.0 / (r * r);
-                } else if (decayType === 'glass') {
-                    d = 0.9;
-                } else {
-                    d = 1.0 / r;
+                // Formant bumps?
+                if (prompt.match(/vocal|voice/)) {
+                    // Boost around 3.0 and 8.0?
+                    g += 15 * Math.exp(-Math.pow(r - 3, 2) / 2);
+                    g += 10 * Math.exp(-Math.pow(r - 8, 2) / 4);
                 }
 
-                if (isDamped) d *= 0.2;
-
-                // Clamp/Format
-                // Zebra expects specific ranges? Usually Gain is dB. Decay 0-1 or time? 
-                // Prompt: "Decay = 1.0 / Ratio... 0.85... 0.15" -> seems to be 0.0 to 1.0 normalized factor.
-                // Formatting: 2 decimals usually fine.
-                
-                // Randomize slightly for "natural" feel? Prompt implies deterministic logic mostly, 
-                // but "Inharmonic" had random.
-                
-                csvRows.push(`${r.toFixed(3)};${g.toFixed(1)};${d.toFixed(3)}`);
+                // Hard floor
+                if (g < -90) g = -90;
+                return g;
             });
 
-            // Update UI
+
+            // --- 3. DAMPING PHYSICS (Decay) ---
+
+            let dampingModel = 'standard';
+            // Analyzing uploaded files: 
+            // "Hammer Tapping Log": 1/r^2 (very fast high freq decay)
+            // "Materials Glass" : Decay is relatively flat but low (0.05 - 0.2)
+            // "Icicle" : Plateau?
+
+            if (prompt.match(/wood|plastic|dry/)) dampingModel = 'exponential';
+            if (prompt.match(/metal|ring|sus/)) dampingModel = 'linear';
+            if (prompt.match(/glass|ice/)) dampingModel = 'glass';
+
+            let decays = ratios.map((r, idx) => {
+                let d = 1.0;
+
+                if (dampingModel === 'exponential') {
+                    // Wood: High freqs die INSTANTLY.
+                    d = 10.0 / (r * r);
+                } else if (dampingModel === 'linear') {
+                    // Metal: 1/sqrt(r) or similar
+                    d = 5.0 / Math.sqrt(r);
+                } else if (dampingModel === 'glass') {
+                    // Randomish plateau, keeps shimmering
+                    d = 0.5 + (Math.random() * 0.4);
+                } else {
+                    // Standard
+                    d = 5.0 / r;
+                }
+
+                // Global Decay Scaler based on "Long" / "Short"
+                if (prompt.match(/short|tight|dead/)) d *= 0.2;
+                if (prompt.match(/long|huge|eternal/)) d *= 4.0;
+
+                // Add organic jitter to decay too (imperfections in material)
+                d *= (0.8 + Math.random() * 0.4);
+
+                // Clamp
+                if (d > 100) d = 100;
+                if (d < 0.01) d = 0.01;
+
+                return d;
+            });
+
+
+            // --- FORMAT OUTPUT ---
+            let csvRows = ["Ratio;GainDB;Decay"];
+            for (let i = 0; i < ratios.length; i++) {
+                csvRows.push(`${ratios[i].toFixed(4)};${gains[i].toFixed(2)};${decays[i].toFixed(3)}`);
+            }
+
             outputEl.innerText = csvRows.join('\n');
             outputSection.style.display = 'flex';
         }
@@ -370,4 +410,5 @@ layout: null
         }
     </script>
 </body>
+
 </html>
