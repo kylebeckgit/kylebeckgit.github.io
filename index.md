@@ -22,7 +22,9 @@ title: Kyle Beck - Musician & Developer
   </li>
 </ul>
 
-### Tools
+<hr style="margin: 3rem 0; border: 0; border-top: 1px solid #eee;">
+
+## Tools
 <ul style="list-style-type: none; padding: 0;">
   <li>
     <h3>🦓 <a href="/z3-modal-generator.html">Zebra 3 Modal Generator</a></h3>
