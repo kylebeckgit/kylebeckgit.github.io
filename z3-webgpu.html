@@ -179,7 +179,7 @@
 
     <div class="container">
         <div>
-            <h1>Zebra 3 Gen <span class="badge">AI PRO (WebGPU)</span></h1>
+            <h1>Zebra 3 Modal Generator</h1>
             <p class="subtitle">Client-side AI generation. No server. No API keys. Powered by your GPU.</p>
         </div>
 
@@ -206,7 +206,11 @@
             </div>
 
             <div class="output-section" id="outputSection">
-                <label>AI Generated Profile</label>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                    <label style="margin:0;">AI Generated Profile</label>
+                    <button class="primary-btn" style="padding: 4px 12px; font-size: 0.8rem;"
+                        onclick="downloadCSV()">Download CSV</button>
+                </div>
                 <pre id="output">...</pre>
             </div>
         </div>
@@ -264,6 +268,21 @@
                 initBtn.innerText = "Retry Initialize";
                 console.error(err);
             }
+        };
+
+        window.downloadCSV = () => {
+            const content = document.getElementById('output').innerText;
+            if (!content) return;
+
+            const blob = new Blob([content], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = "zebra3_ai_profile.csv";
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
         };
 
         // Shared Physics Engine (Ported from V3)
