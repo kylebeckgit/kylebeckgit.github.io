@@ -266,6 +266,132 @@
             }
         };
 
+        // Shared Physics Engine (Ported from V3)
+        function generateFromParams(params) {
+            const outputEl = document.getElementById('output');
+
+            // Default params if AI misses something
+            const config = {
+                topology: params.topology || 'harmonic',
+                stiffness: params.stiffness || 0.0,
+                detune: params.detune || 0.0,
+                clusterProb: params.clusterProb || 0.0,
+                material: params.material || 'standard',
+                decayTime: params.decayTime || 'medium', // short, medium, long
+                brightness: params.brightness || 'neutral'
+            };
+
+            const targetPartials = 64;
+            let ratios = [];
+            let seed = 12345; // Fixed seed for stability in this step
+            const rng = () => {
+                var t = seed += 0x6D2B79F5;
+                t = Math.imul(t ^ t >>> 15, t | 1);
+                t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+                return ((t ^ t >>> 14) >>> 0) / 4294967296;
+            };
+
+            // --- 1. RATIO GENERATION ---
+            let currentRatio = 1.0;
+            ratios.push(1.0);
+
+            for (let i = 1; i < targetPartials; i++) {
+                let nextR = 0;
+                let top = config.topology.toLowerCase();
+
+                if (top.includes('harmonic') || top.includes('string')) {
+                    let n = i + 1;
+                    nextR = n * Math.sqrt(1 + config.stiffness * (n * n));
+                }
+                else if (top.includes('odd') || top.includes('square')) {
+                    nextR = 1 + i * 2;
+                }
+                else if (top.includes('stiff') || top.includes('bar')) {
+                    let n = i + 1;
+                    nextR = n * Math.sqrt(1 + (0.1 + config.stiffness) * (n * n));
+                }
+                else if (top.includes('vocal') || top.includes('formant')) {
+                    let n = i + 1;
+                    nextR = n; // Base harmonic
+                }
+                else if (top.includes('drum') || top.includes('membrane')) {
+                    // Bessel-ish
+                    let step = 1.3 + (rng() * 0.6 - 0.3);
+                    currentRatio += step;
+                    nextR = currentRatio;
+                }
+                else if (top.includes('tongue') || top.includes('handpan')) {
+                    if (i < 4) nextR = i + 1 + (rng() * 0.02);
+                    else {
+                        currentRatio += (1.5 + rng() * 1.5);
+                        nextR = currentRatio;
+                    }
+                }
+                else {
+                    // Inharmonic / Chaotic default
+                    let step = 1.0 + (rng() * 0.8) + config.detune;
+                    currentRatio += step;
+                    nextR = currentRatio;
+                }
+
+                if (config.detune > 0) nextR += (rng() - 0.5) * config.detune;
+
+                // Clustering
+                if (rng() < config.clusterProb) {
+                    ratios.push(nextR);
+                    ratios.push(nextR + 0.05 + rng() * 0.1);
+                    i++;
+                } else {
+                    ratios.push(nextR);
+                }
+            }
+
+            ratios = ratios.slice(0, targetPartials).sort((a, b) => a - b);
+
+            // --- 2. GAIN & DECAY ---
+            let gains = [];
+            let decays = [];
+
+            ratios.forEach(r => {
+                // Brightness
+                let b_mult = 1.0;
+                if (config.brightness === 'bright') b_mult = 0.5;
+                if (config.brightness === 'dark') b_mult = 2.0;
+
+                let g = -10 * Math.log10(r) * b_mult;
+
+                // Material Decay
+                let d = 1.0;
+                if (config.material === 'wood' || config.material === 'dry') d = 10.0 / (r * r);
+                else if (config.material === 'glass' || config.material === 'ice') d = 0.5 + rng() * 0.5;
+                else if (config.material === 'metal') d = 5.0 / Math.sqrt(r);
+                else d = 5.0 / r;
+
+                // Decay Time Global
+                if (config.decayTime === 'short') d *= 0.2;
+                if (config.decayTime === 'long') d *= 4.0;
+
+                // Clamp
+                if (g < -90) g = -90;
+                if (d < 0.01) d = 0.01; if (d > 100) d = 100;
+
+                gains.push(g);
+                decays.push(d);
+            });
+
+            // --- CSV OUTPUT ---
+            let csv = [`Ratio;GainDB;Decay`];
+            // Debug Header
+            csv.push(`// AI Params: ${JSON.stringify(config)}`);
+
+            for (let i = 0; i < ratios.length; i++) {
+                csv.push(`${ratios[i].toFixed(4)};${gains[i].toFixed(2)};${decays[i].toFixed(3)}`);
+            }
+            outputEl.innerText = csv.join('\n');
+            outputSection.style.display = 'flex';
+        }
+
+
         // Generator
         window.generate = async () => {
             const prompt = document.getElementById('prompt').value;
@@ -273,49 +399,61 @@
 
             generateBtn.disabled = true;
             generateBtn.innerText = "Dreaming...";
+            outputEl.innerText = "Analyzing semantic concepts...";
             outputSection.style.display = 'flex';
-            outputEl.innerText = "";
 
             try {
-                // System Prompt: Teach the AI how to think like Zebra 3
-                const systemPrompt = `You are a Physics Engine for the Zebra 3 Synthesizer. 
-Your goal is to generate a Modal Resonator Profile (CSV) based on a user description.
-The CSV format is: Ratio;GainDB;Decay
-Ratio: Frequency multiplier (1.0 = fundamental).
-GainDB: Volume in dB (0 to -100).
-Decay: Decay time multiplier (0 to 100).
+                // System Prompt: JSON ONLY
+                const systemPrompt = `You are an expert Audio Physicist. 
+Analyze the user's sound description and return a JSON object defining the physical parameters for a resonator.
+Do NOT output code or explanations. Output ONLY valid JSON.
 
-Rules:
-1. Output ONLY the CSV content. No explanation.
-2. Generate exactly 64 lines (partials).
-3. Identify the material physics from the prompt (Glass = high partials, clusters; Wood = Low partials, fast high freq decay).
+Schema:
+{
+  "topology": "harmonic" | "inharmonic" | "stiff_string" | "membrane" | "tongue_drum",
+  "stiffness": float (0.0 to 1.0),
+  "detune": float (0.0 to 0.5),
+  "clusterProb": float (0.0 to 0.5),
+  "material": "metal" | "wood" | "glass" | "standard",
+  "decayTime": "short" | "medium" | "long",
+  "brightness": "dark" | "neutral" | "bright"
+}
+
+Example:
+User: "A sad, dark, rusty bell"
+Assistant: { "topology": "inharmonic", "stiffness": 0.1, "detune": 0.2, "clusterProb": 0.1, "material": "metal", "decayTime": "long", "brightness": "dark" }
 `;
 
                 const messages = [
                     { role: "system", content: systemPrompt },
-                    { role: "user", content: "Create a profile for: " + prompt }
+                    { role: "user", content: "Description: " + prompt }
                 ];
 
                 const chunks = await engine.chat.completions.create({
                     messages,
-                    stream: true, // Stream for "alive" feeling
-                    temperature: 0.7, // Some creativity
+                    stream: false, // Wait for full JSON
+                    temperature: 0.5, // Reduced temp for valid JSON
+                    response_format: { type: "json_object" } // Force JSON mode
                 });
 
-                let fullText = "";
-                for await (const chunk of chunks) {
-                    const content = chunk.choices[0]?.delta?.content || "";
-                    fullText += content;
-                    outputEl.innerText = fullText; // Streaming update
-                    // Auto-scroll
-                }
+                const content = chunks.choices[0].message.content;
+                outputEl.innerText = "Generating Physics...\n" + content;
 
-                generateBtn.disabled = false;
-                generateBtn.innerText = "Generate with AI";
+                try {
+                    const params = JSON.parse(content);
+                    generateFromParams(params);
+                    generateBtn.innerText = "Generate with AI";
+                    generateBtn.disabled = false;
+                } catch (e) {
+                    outputEl.innerText = "Error parsing AI JSON: " + content;
+                    generateBtn.disabled = false;
+                    generateBtn.innerText = "Try Again";
+                }
 
             } catch (err) {
                 outputEl.innerText += "\n[Error Generation Failed]: " + err.message;
                 generateBtn.disabled = false;
+                generateBtn.innerText = "Generate with AI";
             }
         }
     </script>
