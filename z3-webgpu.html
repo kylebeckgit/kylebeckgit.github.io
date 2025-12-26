@@ -202,7 +202,7 @@
                     <textarea id="prompt"
                         placeholder="Describe a complex sound structure (e.g. 'A rusted metal plate vibrating in a vacuum with unstable harmonics')..."></textarea>
                 </div>
-                <button id="generate-btn" class="primary-btn" onclick="generate()">Generate with AI</button>
+                <button id="generate-btn" class="primary-btn" onclick="generate()">Generate Profile</button>
             </div>
 
             <div class="output-section" id="outputSection">
@@ -486,7 +486,7 @@ Assistant: { "topology": "major_chord", "stiffness": 0.0, "detune": 0.01, "clust
                 try {
                     const params = JSON.parse(content);
                     generateFromParams(params);
-                    generateBtn.innerText = "Generate with AI";
+                    generateBtn.innerText = "Generate Profile";
                     generateBtn.disabled = false;
                 } catch (e) {
                     outputEl.innerText = "Error parsing AI JSON: " + content;
@@ -497,7 +497,7 @@ Assistant: { "topology": "major_chord", "stiffness": 0.0, "detune": 0.01, "clust
             } catch (err) {
                 outputEl.innerText += "\n[Error Generation Failed]: " + err.message;
                 generateBtn.disabled = false;
-                generateBtn.innerText = "Generate with AI";
+                generateBtn.innerText = "Generate Profile";
             }
         }
     </script>
