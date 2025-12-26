@@ -327,6 +327,29 @@
                         nextR = currentRatio;
                     }
                 }
+                else if (top.includes('major')) {
+                    // Major Chord Stack: 1, 1.25 (Maj3), 1.5 (P5), 2 (Oct), 2.5 (Maj10), 3 (P12), 4 (2Oct)
+                    // Pattern: Root, Maj3, 5th, Octave... repeating
+                    const majorIntervals = [1.0, 1.25, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0, 6.0, 8.0];
+                    if (i < majorIntervals.length - 1) {
+                        nextR = majorIntervals[i % majorIntervals.length];
+                        // slight detune for richness
+                        nextR += (rng() * 0.005 - 0.0025);
+                    } else {
+                        // Continue harmonically after defined intervals
+                        nextR = (i + 1) * 0.5; // Dense harmonics
+                    }
+                }
+                else if (top.includes('minor')) {
+                    // Minor Chord Stack: 1, 1.2 (Min3), 1.5 (P5), 2 (Oct)...
+                    const minorIntervals = [1.0, 1.2, 1.5, 2.0, 2.4, 3.0, 4.0, 4.8, 6.0, 8.0];
+                    if (i < minorIntervals.length - 1) {
+                        nextR = minorIntervals[i % minorIntervals.length];
+                        nextR += (rng() * 0.005 - 0.0025);
+                    } else {
+                        nextR = (i + 1) * 0.5;
+                    }
+                }
                 else {
                     // Inharmonic / Chaotic default
                     let step = 1.0 + (rng() * 0.8) + config.detune;
@@ -410,7 +433,7 @@ Do NOT output code or explanations. Output ONLY valid JSON.
 
 Schema:
 {
-  "topology": "harmonic" | "inharmonic" | "stiff_string" | "membrane" | "tongue_drum",
+  "topology": "harmonic" | "inharmonic" | "stiff_string" | "membrane" | "tongue_drum" | "major_chord" | "minor_chord",
   "stiffness": float (0.0 to 1.0),
   "detune": float (0.0 to 0.5),
   "clusterProb": float (0.0 to 0.5),
@@ -422,6 +445,8 @@ Schema:
 Example:
 User: "A sad, dark, rusty bell"
 Assistant: { "topology": "inharmonic", "stiffness": 0.1, "detune": 0.2, "clusterProb": 0.1, "material": "metal", "decayTime": "long", "brightness": "dark" }
+User: "A bright major chord"
+Assistant: { "topology": "major_chord", "stiffness": 0.0, "detune": 0.01, "clusterProb": 0.0, "material": "standard", "decayTime": "medium", "brightness": "bright" }
 `;
 
                 const messages = [

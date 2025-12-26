@@ -271,6 +271,12 @@ layout: null
             } else if (prompt.match(/steel\s?drum|tongue|hang|pan|handpan/)) {
                 topology = 'tongue_drum';
                 stiffness = 0.05;
+            } else if (prompt.match(/major\s?chord|happy/)) {
+                topology = 'major_chord';
+                detuneAmount = 0.01;
+            } else if (prompt.match(/minor\s?chord|sad/)) {
+                topology = 'minor_chord';
+                detuneAmount = 0.01;
             } else if (prompt.match(/string|piano|guitar/)) {
                 topology = 'harmonic';
                 stiffness = prompt.includes('stiff') ? 0.2 : 0.0005; // Tuned matches trusting guitar
@@ -335,6 +341,26 @@ layout: null
                         // i=4 -> 6 (approx 1.5x previous gap?)
                         currentRatio += (1.5 + rng() * 1.0);
                         nextR = currentRatio;
+                    }
+                }
+                else if (topology === 'major_chord') {
+                    // Major Chord Stack: 1, 1.25 (Maj3), 1.5 (P5), 2 (Oct), 2.5 (Maj10), 3 (P12), 4 (2Oct)
+                    const majorIntervals = [1.0, 1.25, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0, 6.0, 8.0];
+                    if (i < majorIntervals.length - 1) {
+                        nextR = majorIntervals[i % majorIntervals.length];
+                        nextR += (rng() * 0.005 - 0.0025);
+                    } else {
+                        nextR = (i + 1) * 0.5; // Dense harmonics
+                    }
+                }
+                else if (topology === 'minor_chord') {
+                    // Minor Chord Stack: 1, 1.2 (Min3), 1.5 (P5), 2 (Oct)...
+                    const minorIntervals = [1.0, 1.2, 1.5, 2.0, 2.4, 3.0, 4.0, 4.8, 6.0, 8.0];
+                    if (i < minorIntervals.length - 1) {
+                        nextR = minorIntervals[i % minorIntervals.length];
+                        nextR += (rng() * 0.005 - 0.0025);
+                    } else {
+                        nextR = (i + 1) * 0.5;
                     }
                 }
                 else if (topology === 'bessel') {
