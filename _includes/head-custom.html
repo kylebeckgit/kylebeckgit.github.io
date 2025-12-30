@@ -378,9 +378,7 @@
       const sidebar = document.createElement('nav');
       sidebar.id = 'sidebar';
       sidebar.innerHTML = `
-        <button class="toggle-btn" id="sidebar-toggle">
-            <span class="toggle-icon">❮</span>
-        </button>
+
       
         <a href="/" class="sidebar-title-link">Kyle Beck</a>
         
@@ -403,7 +401,7 @@
             <span class="nav-link-text">Presets</span>
           </a>
           
-          <a href="mailto:kyle@kyle-beck.com" class="contact-email">kyle@kyle-beck.com</a>
+
         </div>
 
         <div class="nav-section">
@@ -416,6 +414,8 @@
             <span class="nav-icon">🧠</span>
             <span class="nav-link-text">AI Gen</span>
           </a>
+          
+          <a href="mailto:kyle@kyle-beck.com" class="contact-email">kyle@kyle-beck.com</a>
         </div>
 
         <div class="bottom-section">
@@ -426,41 +426,15 @@
       `;
       document.body.prepend(sidebar);
 
-      // Inject Collapse Logic
-      const toggleBtn = document.getElementById('sidebar-toggle');
-      const body = document.body;
-      const toggleIcon = toggleBtn.querySelector('.toggle-icon');
 
-      // State Check
-      if (localStorage.getItem('sidebar-collapsed') === 'true') {
-        sidebar.classList.add('collapsed');
-        body.classList.add('sidebar-collapsed');
-        toggleIcon.innerText = '❯';
-      }
-
-      toggleBtn.addEventListener('click', () => {
-        sidebar.classList.toggle('collapsed');
-        body.classList.toggle('sidebar-collapsed');
-
-        if (sidebar.classList.contains('collapsed')) {
-          localStorage.setItem('sidebar-collapsed', 'true');
-          toggleIcon.innerText = '❯';
-        } else {
-          localStorage.setItem('sidebar-collapsed', 'false');
-          toggleIcon.innerText = '❮';
-        }
-      });
     }
 
     // Theme Toggle Logic (Existing)
     if (document.getElementById('theme-toggle-checkbox')) return;
 
-    const sidebar = document.getElementById('sidebar');
-    const bottomSection = sidebar.querySelector('.bottom-section');
-
     // Create Switch HTML
     const toggleDiv = document.createElement('div');
-    // Force toggle to bottom even if bottom section is empty (it is now)
+    toggleDiv.className = 'theme-switch-wrapper';
     toggleDiv.innerHTML = `
       <label class="theme-switch" for="theme-toggle-checkbox">
         <input type="checkbox" id="theme-toggle-checkbox" />
@@ -468,11 +442,7 @@
       </label>
     `;
 
-    if (bottomSection) {
-      bottomSection.prepend(toggleDiv);
-    } else {
-      document.body.appendChild(toggleDiv);
-    }
+    document.body.appendChild(toggleDiv);
 
     const toggleCheckbox = document.getElementById('theme-toggle-checkbox');
     const root = document.documentElement;
