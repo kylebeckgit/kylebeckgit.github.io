@@ -13,6 +13,9 @@ layout: null
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
+    <!-- Custom Head (Sidebar/Theme) -->
+    {% include head-custom.html %}
+
     <style>
         :root {
             --bg-color: #1a1a1a;
@@ -42,6 +45,8 @@ layout: null
             align-items: center;
             min-height: 100vh;
             padding: 2rem;
+            padding-left: calc(210px + 2rem);
+            /* Offset for pinned sidebar (210px) */
         }
 
         .container {
