@@ -503,7 +503,8 @@ ${UHM_REFERENCE_LIBRARY}
 
             // Reset UI
             errorBox.style.display = 'none';
-            resultSection.style.display = 'none';
+            resultSection.style.display = 'flex'; // Show immediately for streaming
+            codeOutput.innerText = "Thinking...";
             btn.disabled = true;
             btnText.innerHTML = '<span class="loading-spinner"></span>Generating...';
 
@@ -513,24 +514,28 @@ ${UHM_REFERENCE_LIBRARY}
                     { role: "user", content: "Description: " + prompt }
                 ];
 
-                const response = await engine.chat.completions.create({
+                const chunks = await engine.chat.completions.create({
                     messages,
-                    stream: false,
+                    stream: true, // ENABLE STREAMING
                     temperature: 0.7
                 });
 
-                let text = response.choices[0].message.content || "";
+                let fullText = "";
+                codeOutput.innerText = ""; // Clear "Thinking..."
 
-                if (!text) throw new Error("No output generated.");
+                for await (const chunk of chunks) {
+                    const content = chunk.choices[0]?.delta?.content || "";
+                    fullText += content;
 
-                // Cleanup Markdown Code Blocks
-                if (text.includes("```")) {
-                    const match = text.match(/```(?:javascript|js|uhm)?\s*([\s\S]*?)```/i);
-                    text = match ? match[1] : text.replace(/```/g, '');
+                    // Simple live cleanup (hide markdown ticks if they appear)
+                    const displayHash = fullText.replace(/```(?:javascript|js|uhm)?/g, '').replace(/```/g, '');
+                    codeOutput.innerText = displayHash;
+
+                    // Auto-scroll to bottom
+                    // resultSection.scrollTop = resultSection.scrollHeight; 
                 }
 
-                codeOutput.innerText = text.trim();
-                resultSection.style.display = 'flex';
+                if (!fullText) throw new Error("No output generated.");
 
             } catch (err) {
                 showError(err.message);
