@@ -1,14 +1,163 @@
 <style>
-  /* Theme Variables */
+  /* Theme Variables - Monochrome Pixel Aesthetic */
   :root {
-    --bg-color: #f9f4e6;
-    /* Lighter Sepia (Pearl/Cream) */
-    --text-color: #333;
-    --link-color: #10b981;
-    /* Updated Banner to match link color flatly */
-    --header-bg: #10b981;
-    --header-bg: #10b981;
-    --header-border: #047857;
+    --bg-color: #111111;
+    --text-color: #eeeeee;
+    --link-color: #ffffff;
+    --header-bg: #222222;
+    --header-border: #444444;
+    --code-bg: #222222;
+    --border-color: #333333;
+    --font-heading: "Courier New", Courier, monospace;
+    --font-body: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+
+  /* Hide DEFAULT Theme Sidebar/Header (Bio, Name, Github Link) */
+  header,
+  #header-wrapper,
+  footer,
+  .site-footer {
+    display: none !important;
+  }
+
+  /* Dark Mode is Default/Only Mode now */
+  [data-theme="dark"] {
+    --bg-color: #111111;
+    --text-color: #eeeeee;
+    --link-color: #ffffff;
+    --header-bg: #222222;
+    --header-border: #444444;
+  }
+
+  body {
+    background-color: var(--bg-color) !important;
+    color: var(--text-color) !important;
+    font-family: var(--font-body) !important;
+    line-height: 1.75;
+    font-size: 1.05rem;
+  }
+
+  /* Typography Enhancements - Retro/Pixel Style */
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    color: var(--text-color) !important;
+    font-family: var(--font-heading) !important;
+    font-weight: 700;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    line-height: 1.3;
+    text-transform: uppercase;
+    letter-spacing: -0.025em;
+  }
+
+  h1 {
+    font-size: 2.25rem;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 0.5rem;
+  }
+
+  h2 {
+    font-size: 1.75rem;
+    border-bottom: none !important;
+  }
+
+  h3 {
+    font-size: 1.5rem;
+  }
+
+  strong,
+  b {
+    color: var(--link-color) !important;
+  }
+
+  a {
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+  }
+
+  /* Logo Image Style */
+  .sidebar-logo {
+    display: block;
+    width: 64px;
+    height: 64px;
+    margin: 0 auto 2rem auto;
+    image-rendering: pixelated;
+    /* Critical for pixel art */
+    border-radius: 0;
+  }
+
+  /* ... Sidebar styles ... */
+
+  /* Update sidebar title to be logo */
+  .sidebar-title-link {
+    display: none;
+  }
+
+  .theme-switch-wrapper {
+    position: fixed;
+    bottom: 20px;
+    right: 25px;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    opacity: 0.5;
+    transition: opacity 0.3s;
+  }
+
+  .theme-switch-wrapper:hover {
+    opacity: 1;
+  }
+
+  .theme-switch {
+    display: inline-block;
+    height: 24px;
+    position: relative;
+    width: 44px;
+  }
+
+  .theme-switch input {
+    display: none;
+  }
+
+  .slider {
+    background-color: #333;
+    /* Darker slider track */
+    bottom: 0;
+    cursor: pointer;
+    left: 0;
+    position: absolute;
+    right: 0;
+    top: 0;
+    transition: .4s;
+    border-radius: 24px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+  }
+
+  .slider:before {
+    background-color: #fff;
+    bottom: 3px;
+    content: "";
+    height: 18px;
+    left: 3px;
+    position: absolute;
+    transition: .4s;
+    width: 18px;
+    border-radius: 50%;
+  }
+
+  input:checked+.slider {
+    background-color: #ffffff;
+    /* White active */
+  }
+
+  input:checked+.slider:before {
+    transform: translateX(20px);
+    background-color: #000;
+    /* Black knob */
   }
 
   /* Favicon */
@@ -385,7 +534,9 @@
       sidebar.innerHTML = `
 
       
-        <a href="/" class="sidebar-title-link">Kyle Beck</a>
+        <a href="/" class="sidebar-logo-link">
+            <img src="/assets/images/favicon.png" alt="Home" class="sidebar-logo">
+        </a>
         
         <div class="nav-section">
           <div class="nav-section-title">Navigation</div>
