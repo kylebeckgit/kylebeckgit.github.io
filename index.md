@@ -26,7 +26,7 @@ title: Kyle Beck - Musician & Developer
 <ul style="list-style-type: none; padding: 0;">
   <li>
     <h3><a href="/z3-webgpu.html">Modal Generator (Zebra 3)</a></h3>
-    <p>Experimental <strong>AI-Powered</strong> generator running locally on your GPU. Semantic understanding for complex requests.</p>
+    <p>Experimental AI generator for building Modal profiles for Zebra 3 using natural language input. Describe any modal profile you can imagine and the tool will attempt to build a profile that resembles your request.</p>
   </li>
 </ul>
 
