@@ -199,48 +199,34 @@
     color: var(--link-color) !important;
   }
 
-  /* Minimal Theme Switch */
-  .theme-switch-wrapper {
-    position: fixed;
-    bottom: 20px;
-    /* ... skipping unchanged ... */
+  /* Push main content - Using Body Padding for true centering in remaining space */
+  body {
+    padding-left: 250px;
+    transition: padding-left 0.3s ease;
+  }
 
-    /* Push main content - Using Body Padding for true centering in remaining space */
-    body {
-      padding-left: 250px;
-      transition: padding-left 0.3s ease;
-    }
+  body.sidebar-collapsed {
+    padding-left: 60px;
+  }
 
-    body.sidebar-collapsed {
-      padding-left: 60px;
-    }
+  .wrapper {
+    margin: 0 auto !important;
+    /* Center in the padded body */
+    width: 100% !important;
+    max-width: 1100px;
+    padding: 2rem 4rem;
+    box-sizing: border-box;
+  }
 
-    .wrapper {
-      margin: 0 auto !important;
-      /* Center in the padded body */
-      width: 100% !important;
-      max-width: 1100px;
-      padding: 2rem 4rem;
-      box-sizing: border-box;
-    }
+  body.sidebar-collapsed .wrapper {
+    margin: 0 auto !important;
+    max-width: 1300px;
+  }
 
-    body.sidebar-collapsed .wrapper {
-      margin: 0 auto !important;
-      max-width: 1300px;
-    }
-
-    /* Force section width */
-    section {
-      width: 100% !important;
-      max-width: 900px !important;
-    }
-
-    right: 25px;
-    z-index: 1000;
-    display: flex;
-    align-items: center;
-    opacity: 0.8;
-    transition: opacity 0.3s;
+  /* Force section width */
+  section {
+    width: 100% !important;
+    max-width: 900px !important;
   }
 
   .theme-switch-wrapper:hover {
