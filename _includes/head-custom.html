@@ -1,166 +1,132 @@
-<style>
-  /* Theme Variables - Monochrome Pixel Aesthetic */
-  :root {
-    --bg-color: #111111;
-    --text-color: #eeeeee;
-    --link-color: #ffffff;
-    --header-bg: #222222;
-    --header-border: #444444;
-    --code-bg: #222222;
-    --border-color: #333333;
-    --font-heading: "Courier New", Courier, monospace;
-    --font-body: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  }
+/* Theme Variables - Permanent Dark Mode */
+:root {
+--bg-color: #1e1e1e;
+--text-color: #f4ecd8; /* Cream */
+--link-color: #10b981; /* Green */
+--header-bg: linear-gradient(to right, #064e3b, #065f46);
+--header-border: #022c22;
+--code-bg: #111111;
+--border-color: #333333;
+--font-heading: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+--font-body: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
 
-  /* Hide DEFAULT Theme Sidebar/Header (Bio, Name, Github Link) */
-  header,
-  #header-wrapper,
-  footer,
-  .site-footer {
-    display: none !important;
-  }
+/* Hide DEFAULT Theme Sidebar/Header (Bio, Name, Github Link) */
+header,
+#header-wrapper,
+footer,
+.site-footer {
+display: none !important;
+}
 
-  /* Dark Mode is Default/Only Mode now */
-  [data-theme="dark"] {
-    --bg-color: #111111;
-    --text-color: #eeeeee;
-    --link-color: #ffffff;
-    --header-bg: #222222;
-    --header-border: #444444;
-  }
+body {
+background-color: var(--bg-color) !important;
+color: var(--text-color) !important;
+font-family: var(--font-body) !important;
+line-height: 1.75;
+font-size: 1.05rem;
+}
 
-  body {
-    background-color: var(--bg-color) !important;
-    color: var(--text-color) !important;
-    font-family: var(--font-body) !important;
-    line-height: 1.75;
-    font-size: 1.05rem;
-  }
+/* Typography Enhancements - Clean/Modern (Reverted from Pixel) */
+h1, h2, h3, h4, h5, h6 {
+color: var(--link-color) !important;
+font-family: var(--font-heading) !important;
+font-weight: 700;
+margin-top: 2rem;
+margin-bottom: 1rem;
+line-height: 1.3;
+}
 
-  /* Typography Enhancements - Retro/Pixel Style */
-  h1,
-  h2,
-  h3,
-  h4,
-  h5,
-  h6 {
-    color: var(--text-color) !important;
-    font-family: var(--font-heading) !important;
-    font-weight: 700;
-    margin-top: 2rem;
-    margin-bottom: 1rem;
-    line-height: 1.3;
-    text-transform: uppercase;
-    letter-spacing: -0.025em;
-  }
+h1 { font-size: 2.25rem; }
+h2 { font-size: 1.75rem; border-bottom: none !important; }
+h3 { font-size: 1.5rem; }
 
-  h1 {
-    font-size: 2.25rem;
-    border-bottom: 1px solid var(--border-color);
-    padding-bottom: 0.5rem;
-  }
+strong, b { color: var(--text-color) !important; }
+a { text-decoration: none; }
+a:hover { text-decoration: underline; }
 
-  h2 {
-    font-size: 1.75rem;
-    border-bottom: none !important;
-  }
+/* Logo Image Style */
+.sidebar-logo {
+display: block;
+width: 64px;
+height: 64px;
+margin: 0 auto 2rem auto;
+image-rendering: pixelated;
+/* Critical for pixel art */
+border-radius: 0;
+}
 
-  h3 {
-    font-size: 1.5rem;
-  }
+/* ... Sidebar styles ... */
 
-  strong,
-  b {
-    color: var(--link-color) !important;
-  }
+/* Update sidebar title to be logo */
+.sidebar-title-link {
+display: none;
+}
 
-  a {
-    text-decoration: underline;
-    text-decoration-thickness: 1px;
-  }
+.theme-switch-wrapper {
+position: fixed;
+bottom: 20px;
+right: 25px;
+z-index: 1000;
+display: flex;
+align-items: center;
+opacity: 0.5;
+transition: opacity 0.3s;
+}
 
-  /* Logo Image Style */
-  .sidebar-logo {
-    display: block;
-    width: 64px;
-    height: 64px;
-    margin: 0 auto 2rem auto;
-    image-rendering: pixelated;
-    /* Critical for pixel art */
-    border-radius: 0;
-  }
+.theme-switch-wrapper:hover {
+opacity: 1;
+}
 
-  /* ... Sidebar styles ... */
+.theme-switch {
+display: inline-block;
+height: 24px;
+position: relative;
+width: 44px;
+}
 
-  /* Update sidebar title to be logo */
-  .sidebar-title-link {
-    display: none;
-  }
+.theme-switch input {
+display: none;
+}
 
-  .theme-switch-wrapper {
-    position: fixed;
-    bottom: 20px;
-    right: 25px;
-    z-index: 1000;
-    display: flex;
-    align-items: center;
-    opacity: 0.5;
-    transition: opacity 0.3s;
-  }
+.slider {
+background-color: #333;
+/* Darker slider track */
+bottom: 0;
+cursor: pointer;
+left: 0;
+position: absolute;
+right: 0;
+top: 0;
+transition: .4s;
+border-radius: 24px;
+box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+}
 
-  .theme-switch-wrapper:hover {
-    opacity: 1;
-  }
+.slider:before {
+background-color: #fff;
+bottom: 3px;
+content: "";
+height: 18px;
+left: 3px;
+position: absolute;
+transition: .4s;
+width: 18px;
+border-radius: 50%;
+}
 
-  .theme-switch {
-    display: inline-block;
-    height: 24px;
-    position: relative;
-    width: 44px;
-  }
+input:checked+.slider {
+background-color: #ffffff;
+/* White active */
+}
 
-  .theme-switch input {
-    display: none;
-  }
+input:checked+.slider:before {
+transform: translateX(20px);
+background-color: #000;
+/* Black knob */
+}
 
-  .slider {
-    background-color: #333;
-    /* Darker slider track */
-    bottom: 0;
-    cursor: pointer;
-    left: 0;
-    position: absolute;
-    right: 0;
-    top: 0;
-    transition: .4s;
-    border-radius: 24px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
-  }
-
-  .slider:before {
-    background-color: #fff;
-    bottom: 3px;
-    content: "";
-    height: 18px;
-    left: 3px;
-    position: absolute;
-    transition: .4s;
-    width: 18px;
-    border-radius: 50%;
-  }
-
-  input:checked+.slider {
-    background-color: #ffffff;
-    /* White active */
-  }
-
-  input:checked+.slider:before {
-    transform: translateX(20px);
-    background-color: #000;
-    /* Black knob */
-  }
-
-  /* Favicon */
+/* Favicon */
 </style>
 <link rel="icon" href="/assets/images/favicon.png" type="image/png">
 <style>
@@ -584,42 +550,7 @@
 
     }
 
-    // Theme Toggle Logic (Existing)
-    if (document.getElementById('theme-toggle-checkbox')) return;
-
-    // Create Switch HTML
-    const toggleDiv = document.createElement('div');
-    toggleDiv.className = 'theme-switch-wrapper';
-    toggleDiv.innerHTML = `
-      <label class="theme-switch" for="theme-toggle-checkbox">
-        <input type="checkbox" id="theme-toggle-checkbox" />
-        <div class="slider"></div>
-      </label>
-    `;
-
-    document.body.appendChild(toggleDiv);
-
-    const toggleCheckbox = document.getElementById('theme-toggle-checkbox');
-    const root = document.documentElement;
-    const savedTheme = localStorage.getItem('theme');
-
-    if (savedTheme === 'dark') {
-      root.setAttribute('data-theme', 'dark');
-      toggleCheckbox.checked = true;
-    } else if (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-      // system default
-    }
-
-    toggleCheckbox.addEventListener('change', function (e) {
-      if (e.target.checked) {
-        root.setAttribute('data-theme', 'dark');
-        localStorage.setItem('theme', 'dark');
-      } else {
-        root.setAttribute('data-theme', 'light');
-        localStorage.setItem('theme', 'light');
-      }
-    });
-
+    // Theme Toggle Logic Removed
     // Remove "Hosted on GitHub Pages — Theme by orderedlist" text
     const links = document.querySelectorAll('a');
     for (const link of links) {
@@ -638,6 +569,5 @@
         }
       }
     }
-
   });
 </script>
