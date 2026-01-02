@@ -233,33 +233,28 @@ function parseEXS(buffer, filename, fileMap) {
     const zones = [];
     const samples = [];
 
-    // Header Check
-    // Big endian check (SOBT at 16) - simplistic
-    // We assume standard Little Endian EXS
+    // Check Endianness
+    // Magic at 16 is 'SOBT' (0x534F4254) for Little Endian (Standard)
+    // 'TBOS' (0x54424F53) for Big Endian (Legacy/PPC)
+    const magicTest = view.getUint32(16, true);
+    let isLittleEndian = true;
+
+    if (magicTest === 0x54424F53) {
+        // Bytes are 53 4F 42 54 ('S' 'O' 'B' 'T')
+        // This is a Little Endian file
+        isLittleEndian = true;
+    } else if (magicTest === 0x534F4254) {
+        // Bytes are 54 42 4F 53 ('T' 'B' 'O' 'S')
+        // This is a Big Endian file
+        isLittleEndian = false;
+        console.log("Detected Big Endian EXS file");
+    } else {
+        console.warn(`Unrecognized EXS Magic: 0x${magicTest.toString(16)}. Defaulting to Little Endian.`);
+    }
 
     // Helper to read chunks
     let offset = 84; // Skip header
     const fileSize = buffer.byteLength;
-
-    // We need to traverse the linked list logic of EXS or just scan chunks
-    // EXS structure is chunks with size and ID.
-    // Chunk header: 
-    // 0-4: ?
-    // 4-8: Size
-    // 8-12: ID
-    // ...
-
-    // Actually, standard EXS parsing is a bit complex.
-    // We will iterate through chunks linearly if possible, or follow the specific structure.
-    // The Python parser iterates `offset < end`.
-
-    // IDs:
-    // 0x01000101: Zone
-    // 0x02000101: Group
-    // 0x03000101: Sample
-    // 0x01000101 (Big Endian?) -> no we only support LE
-
-    // Since we don't have a linked object structure easily, we'll multi-pass or single-pass store.
 
     const ZONES = [];
     const SAMPLES = [];
@@ -278,9 +273,9 @@ function parseEXS(buffer, filename, fileMap) {
         // Yes, the chunk header is likely 84 bytes or the offset calculation implies it.
         // Let's assume the Python logic is correct.
 
-        const chunkSizeData = view.getUint32(offset + 4, true);
+        const chunkSizeData = view.getUint32(offset + 4, isLittleEndian);
         const chunkSize = 84 + chunkSizeData;
-        const chunkId = view.getUint32(offset + 8, true);
+        const chunkId = view.getUint32(offset + 8, isLittleEndian);
 
         // Parse based on ID
         if (chunkId === 0x01000101 || chunkId === 0x41000101) { // Zone
@@ -307,7 +302,7 @@ function parseEXS(buffer, filename, fileMap) {
         const fileName = getString(view, chk.offset + 420, 256) || name;
 
         // Sample Rate: offset + 92 (Int32)
-        const rate = view.getInt32(chk.offset + 92, true);
+        const rate = view.getInt32(chk.offset + 92, isLittleEndian);
 
         sampleMap[index] = { name, fileName, path, rate };
     });
@@ -326,11 +321,11 @@ function parseEXS(buffer, filename, fileMap) {
         const maxVel = view.getUint8(off + 94);
 
         // Sample Index: offset + 176 (UInt32)
-        const sampleIndex = view.getUint32(off + 176, true);
+        const sampleIndex = view.getUint32(off + 176, isLittleEndian);
 
         // Loop Info
-        const loopStart = view.getInt32(off + 104, true);
-        const loopEnd = view.getInt32(off + 108, true); // Inclusive in EXS? Python says yes.
+        const loopStart = view.getInt32(off + 104, isLittleEndian);
+        const loopEnd = view.getInt32(off + 108, isLittleEndian); // Inclusive in EXS? Python says yes.
         const loopOpts = view.getUint8(off + 117);
         const loopOn = (loopOpts & 1) !== 0;
 

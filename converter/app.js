@@ -188,7 +188,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const url = URL.createObjectURL(content);
             const a = document.createElement('a');
             a.href = url;
-            a.download = "tonverk_converted.zip";
+            a.download = "elmulti_converted.zip";
             a.click();
             URL.revokeObjectURL(url);
 
