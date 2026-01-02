@@ -234,27 +234,45 @@ function parseEXS(buffer, filename, fileMap) {
     const samples = [];
 
     // Check Endianness
-    // Magic at 16 is 'SOBT' (0x534F4254) for Little Endian (Standard)
-    // 'TBOS' (0x54424F53) for Big Endian (Legacy/PPC)
-    const magicTest = view.getUint32(16, true);
-    let isLittleEndian = true;
+    // Magic at 16 is 'SOBT' (0x534F4254) or 'TBOS'.
+    // We used to rely solely on magic, but Logic sometimes writes LE magic with BE data or vice versa?
+    // Let's use a heuristic on the first chunk size.
 
-    if (magicTest === 0x54424F53) {
-        // Bytes are 53 4F 42 54 ('S' 'O' 'B' 'T')
-        // This is a Little Endian file
-        isLittleEndian = true;
-    } else if (magicTest === 0x534F4254) {
-        // Bytes are 54 42 4F 53 ('T' 'B' 'O' 'S')
-        // This is a Big Endian file
+    let isLittleEndian = true;
+    const fileSize = buffer.byteLength;
+
+    // Tentative check based on Magic
+    const magicTest = view.getUint32(16, true);
+    if (magicTest === 0x534F4254) { // 'TBOS' (BE bytes read as LE) -> BE file
         isLittleEndian = false;
-        console.log("Detected Big Endian EXS file");
-    } else {
-        console.warn(`Unrecognized EXS Magic: 0x${magicTest.toString(16)}. Defaulting to Little Endian.`);
     }
+
+    // Heuristic verification
+    // First chunk starts at offset 84. Size is at 84+4 = 88.
+    if (fileSize > 92) {
+        const sizeLE = view.getUint32(88, true);
+        const sizeBE = view.getUint32(88, false);
+
+        // A single chunk shouldn't be larger than the file itself (minus header)
+        // or arbitrarily huge (e.g. > 100MB for a header chunk is rare).
+        // If sizeLE is crazy large but sizeBE is reasonable, switch to BE.
+
+        const reasonableLE = (84 + sizeLE <= fileSize + 1000); // Allow some slop
+        const reasonableBE = (84 + sizeBE <= fileSize + 1000);
+
+        if (!reasonableLE && reasonableBE) {
+            console.log("Heuristic override: Detected Big Endian based on chunk size.");
+            isLittleEndian = false;
+        } else if (reasonableLE && !reasonableBE) {
+            isLittleEndian = true;
+        }
+        // If both are reasonable or unreasonable, stick to Magic detection.
+    }
+
+    console.log(`Parsing EXS as ${isLittleEndian ? 'Little' : 'Big'} Endian. Magic: 0x${magicTest.toString(16)}`);
 
     // Helper to read chunks
     let offset = 84; // Skip header
-    const fileSize = buffer.byteLength;
 
     const ZONES = [];
     const SAMPLES = [];
