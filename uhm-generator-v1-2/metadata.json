@@ -1,0 +1,5 @@
+{
+  "name": ".uhm Generator v1",
+  "description": "A specialized tool for generating valid .uhm wavetable scripts for u-he Hive using the UHM-GPT logic.",
+  "requestFramePermissions": []
+}

@@ -1,18 +1,25 @@
+---
+layout: null
+---
 <!DOCTYPE html>
 <html lang="en">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Zebra 3 Modal Generator (WebGPU)</title>
+    <title>Modal Generator (Zebra 3)</title>
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
+    <!-- Custom Head (Sidebar/Theme) -->
+    {% include head-custom.html %}
+
     <style>
         :root {
-            --bg-color: #1a1a1a;
+            --bg-color: #1e1e1e;
+            /* Updated to match global theme */
             --card-bg: #252525;
             --text-color: #e0e0e0;
             --text-muted: #a0a0a0;
@@ -39,6 +46,14 @@
             align-items: center;
             min-height: 100vh;
             padding: 2rem;
+            padding-left: calc(250px + 2rem);
+            /* Offset for pinned sidebar (250px) */
+        }
+
+        @media (max-width: 1024px) {
+            body {
+                padding-left: 2rem;
+            }
         }
 
         .container {
@@ -54,6 +69,7 @@
             font-size: 2.5rem;
             font-weight: 700;
             background: linear-gradient(90deg, #fff, var(--accent-color));
+            background-clip: text;
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             margin-bottom: 0.5rem;
@@ -180,7 +196,10 @@
     <div class="container">
         <div>
             <h1>Zebra 3 Modal Generator</h1>
-            <p class="subtitle">Client-side AI generation. No server. No API keys. Powered by your GPU.</p>
+            <p class="subtitle">Describe any modal profile you can imagine and the tool will attempt to build a profile
+                that resembles your request. This is very much in beta!</p>
+            <p class="subtitle" style="margin-top: 0.5rem; font-size: 0.9em; opacity: 0.8;">Client-side AI generation.
+                No server. No API keys. Powered by your GPU.</p>
         </div>
 
         <div class="card">
