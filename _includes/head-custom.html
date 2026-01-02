@@ -369,6 +369,36 @@
     padding-top: 0.5rem;
     border-top: 1px dotted var(--border-color);
   }
+
+  /* Modest BMC Button */
+  .bmc-button-modest {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    background-color: rgba(0, 0, 0, 0.05);
+    color: var(--text-color) !important;
+    text-decoration: none;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    transition: all 0.2s;
+    margin-top: 1rem;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+  }
+
+  .bmc-button-modest:hover {
+    background-color: var(--link-color);
+    color: white !important;
+    border-color: var(--link-color);
+    text-decoration: none;
+  }
+
+  [data-theme="dark"] .bmc-button-modest {
+    background-color: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.1);
+  }
 </style>
 
 <script>
@@ -402,15 +432,17 @@
             <span class="nav-icon">🎛️</span>
             <span class="nav-link-text">Presets</span>
           </a>
-          
-          <a href="mailto:kyle@kyle-beck.com" class="contact-email">kyle@kyle-beck.com</a>
         </div>
 
         <div class="nav-section">
           <div class="nav-section-title">Tools</div>
+          <a href="/converter/" class="nav-link">
+            <span class="nav-icon">🎹</span>
+            <span class="nav-link-text">Tonverk Conv</span>
+          </a>
           <a href="/z3-modal-generator.html" class="nav-link">
             <span class="nav-icon">🦓</span>
-            <span class="nav-link-text">Zebra Gen</span>
+            <span class="nav-link-text">UHM Gen</span>
           </a>
            <a href="/z3-webgpu.html" class="nav-link">
             <span class="nav-icon">🧠</span>
@@ -418,9 +450,10 @@
           </a>
         </div>
 
-        <div class="bottom-section">
-           <a href="https://buymeacoffee.com/kylebeck" target="_blank" class="bmc-button" style="display: block; width: 100%; margin-top: 10px;">
-             <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="width: 100% !important; height: auto !important; max-width: 100%;" >
+        <div class="bottom-section" style="padding-top: 5px;">
+           <a href="mailto:kyle@kyle-beck.com" class="contact-email" style="text-align:center; padding-top:0; border-top:0; margin-top:0; margin-bottom:15px; display:block; width:100%;">kyle@kyle-beck.com</a>
+           <a href="https://buymeacoffee.com/kylebeck" target="_blank" class="bmc-button-modest">
+             <span class="bmc-icon">☕</span> Buy me a coffee
            </a>
         </div>
       `;

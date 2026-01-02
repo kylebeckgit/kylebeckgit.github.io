@@ -25,12 +25,16 @@ title: Kyle Beck - Musician & Developer
 ## Tools
 <ul style="list-style-type: none; padding: 0;">
   <li>
-    <h3>🦓 <a href="/z3-modal-generator.html">Zebra 3 Modal Generator</a></h3>
+    <h3>🦓 <a href="/z3-modal-generator.html">Zebra 3 Modal (UHM) Generator</a></h3>
     <p>A physics-based tool to generate specific <strong>Modal Resonator</strong> profiles for U-He Zebra 3 from natural language descriptions.</p>
   </li>
   <li>
     <h3>🧠 <a href="/z3-webgpu.html">Zebra 3 Gen (WebGPU Prototype)</a></h3>
     <p>Experimental <strong>AI-Powered</strong> generator running locally on your GPU. Semantic understanding for complex requests.</p>
+  </li>
+  <li>
+    <h3>🎹 <a href="/converter/">Tonverk Elmulti Converter</a></h3>
+    <p>Convert <strong>EXS24</strong> and <strong>SFZ</strong> instruments to Tonverk format directly in your browser. No installation required.</p>
   </li>
 </ul>
 

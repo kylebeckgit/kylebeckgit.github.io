@@ -1,0 +1,56 @@
+---
+layout: default
+title: Tonverk Elmulti Converter
+permalink: /converter/
+---
+
+<div class="converter-container">
+    <h1>Tonverk Elmulti Converter</h1>
+    <p>Convert EXS24 (.exs) and SFZ (.sfz) instruments to Elektron Tonverk format directly in your browser.</p>
+
+    <div class="drop-zone" id="drop-zone">
+        <p>Drag & Drop .exs/.sfz files AND their samples folders here</p>
+        <p class="sub-text">or click to select files</p>
+        <input type="file" id="file-input" multiple hidden>
+    </div>
+
+    <div class="controls">
+        <div class="control-group">
+            <label for="resample-rate">Resample Rate:</label>
+            <select id="resample-rate">
+                <option value="48000" selected>48000 Hz (Default)</option>
+                <option value="44100">44100 Hz</option>
+                <option value="0">Original (No Resample)</option>
+            </select>
+        </div>
+
+        <div class="control-group">
+            <label>
+                <input type="checkbox" id="optimize-loops" checked> Optimize Loops (Click Reduction)
+            </label>
+        </div>
+
+        <div class="control-group">
+            <label>
+                <input type="checkbox" id="embed-loop" checked> Embed Loop Info in WAV
+            </label>
+        </div>
+
+        <div class="control-group">
+            <button id="convert-btn" disabled>Convert</button>
+        </div>
+    </div>
+
+    <div class="status-area">
+        <div class="progress-bar-container">
+            <div class="progress-bar" id="progress-bar"></div>
+        </div>
+        <div class="log-output" id="log-output"></div>
+    </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="parsers.js"></script>
+<script src="audio.js"></script>
+<script src="writer.js"></script>
+<script src="app.js"></script>
