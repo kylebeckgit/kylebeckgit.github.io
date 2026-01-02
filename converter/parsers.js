@@ -233,46 +233,50 @@ function parseEXS(buffer, filename, fileMap) {
     const zones = [];
     const samples = [];
 
-    // Check Endianness
-    // Magic at 16 is 'SOBT' (0x534F4254) or 'TBOS'.
-    // We used to rely solely on magic, but Logic sometimes writes LE magic with BE data or vice versa?
-    // Let's use a heuristic on the first chunk size.
+    // debug hex helper
+    const toHex = (n) => '0x' + n.toString(16).toUpperCase().padStart(8, '0');
+    const getHexBytes = (start, len) => {
+        let s = '';
+        for (let i = 0; i < len && start + i < buffer.byteLength; i++) {
+            s += view.getUint8(start + i).toString(16).padStart(2, '0').toUpperCase() + ' ';
+        }
+        return s;
+    };
+
+    console.log("Parsing EXS...", filename);
+    console.log(`File Size: ${buffer.byteLength}`);
+    const magicTest = view.getUint32(16, true);
+    console.log(`Magic (LE read at 16): ${toHex(magicTest)}`);
+    console.log(`Header (0-32): ${getHexBytes(0, 32)}`);
+    console.log(`Data at 84: ${getHexBytes(84, 32)}`);
+
+    // Log this to UI too
+    const logEl = document.getElementById('log-output');
+    if (logEl) {
+        const d = document.createElement('div');
+        d.style.fontFamily = 'monospace';
+        d.style.fontSize = '0.8em';
+        d.innerHTML = `DEBUG: Magic=${toHex(magicTest)}<br>Header=${getHexBytes(0, 16)}...<br>At 84=${getHexBytes(84, 16)}`;
+        logEl.appendChild(d);
+        logEl.scrollTop = logEl.scrollHeight;
+    }
 
     let isLittleEndian = true;
     const fileSize = buffer.byteLength;
 
-    // Tentative check based on Magic
-    const magicTest = view.getUint32(16, true);
-    if (magicTest === 0x534F4254) { // 'TBOS' (BE bytes read as LE) -> BE file
+    // Heuristic: Logic Pro X often uses Big Endian (PPC style) for some reason
+    // Magic 'TBOS' (0x54424F53) means BE
+    if (magicTest === 0x534F4254) { // LE 'SOBT' -> Correct
+        isLittleEndian = true;
+    } else if (magicTest === 0x54424F53) { // BE 'TBOS' read as LE -> LE is swapped -> BE file
         isLittleEndian = false;
+    } else {
+        // Unknown magic. 
+        console.warn("Unknown Magic. Defaulting to LE but Scanner will clarify.");
     }
-
-    // Heuristic verification
-    // First chunk starts at offset 84. Size is at 84+4 = 88.
-    if (fileSize > 92) {
-        const sizeLE = view.getUint32(88, true);
-        const sizeBE = view.getUint32(88, false);
-
-        // A single chunk shouldn't be larger than the file itself (minus header)
-        // or arbitrarily huge (e.g. > 100MB for a header chunk is rare).
-        // If sizeLE is crazy large but sizeBE is reasonable, switch to BE.
-
-        const reasonableLE = (84 + sizeLE <= fileSize + 1000); // Allow some slop
-        const reasonableBE = (84 + sizeBE <= fileSize + 1000);
-
-        if (!reasonableLE && reasonableBE) {
-            console.log("Heuristic override: Detected Big Endian based on chunk size.");
-            isLittleEndian = false;
-        } else if (reasonableLE && !reasonableBE) {
-            isLittleEndian = true;
-        }
-        // If both are reasonable or unreasonable, stick to Magic detection.
-    }
-
-    console.log(`Parsing EXS as ${isLittleEndian ? 'Little' : 'Big'} Endian. Magic: 0x${magicTest.toString(16)}`);
 
     // Helper to read chunks
-    let offset = 84; // Skip header
+    let offset = 84;
 
     const ZONES = [];
     const SAMPLES = [];
