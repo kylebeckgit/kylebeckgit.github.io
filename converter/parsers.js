@@ -264,15 +264,38 @@ function parseEXS(buffer, filename, fileMap) {
     let isLittleEndian = true;
     const fileSize = buffer.byteLength;
 
-    // Heuristic: Logic Pro X often uses Big Endian (PPC style) for some reason
-    // Magic 'TBOS' (0x54424F53) means BE
-    if (magicTest === 0x534F4254) { // LE 'SOBT' -> Correct
-        isLittleEndian = true;
-    } else if (magicTest === 0x54424F53) { // BE 'TBOS' read as LE -> LE is swapped -> BE file
-        isLittleEndian = false;
-    } else {
-        // Unknown magic. 
-        console.warn("Unknown Magic. Defaulting to LE but Scanner will clarify.");
+    // Override: The debug output 0x0B size confirms Little Endian data despite TBOS magic.
+    // Logic Auto Sampler seems to mess up the header endianness flag.
+    console.log("Forcing Little Endian based on visual analysis of Size=11 (0x0B).");
+    isLittleEndian = true;
+
+    // DEBUG: Walk the first few chunks to understand the ID map
+    let debugOffset = 84;
+    let chunksLog = "CHUNKS: ";
+    for (let i = 0; i < 20 && debugOffset < fileSize - 12; i++) {
+        const sz = view.getUint32(debugOffset + 4, isLittleEndian);
+        const id = view.getUint32(debugOffset + 8, isLittleEndian);
+        chunksLog += `[#${i} off=${debugOffset} sz=${sz} id=0x${id.toString(16).toUpperCase()}] `;
+
+        // Chunk size in EXS includes the header? Or is it 84+sz?
+        // If sz is 11, and we move 11 bytes, we might land in middle.
+        // Standard EXS interpretation: 
+        // nextOffset = currentOffset + 84 + size? Or just size?
+        // Let's assume size is data size, and header is 84? No.
+        // Python code says: size = 84 + size_read
+
+        // If size is 11... 84+11=95.
+        // Let's try that.
+        debugOffset += (84 + sz);
+    }
+    console.log(chunksLog);
+    // UI Log
+    if (logEl) {
+        const d = document.createElement('div');
+        d.style.fontFamily = 'monospace';
+        d.style.fontSize = '0.7em';
+        d.innerText = chunksLog;
+        logEl.appendChild(d);
     }
 
     // Helper to read chunks
