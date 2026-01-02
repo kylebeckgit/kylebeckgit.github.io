@@ -37,7 +37,7 @@ title: Kyle Beck - Musician & Developer
     <p>Generate wavetable scripts for <strong>u-he Hive 2</strong> using mathematical formulas and interpolation.</p>
   </li>
   <li>
-    <h3><a href="/converter/">Tonverk Elmulti Converter</a></h3>
+    <h3><a href="/converter/">Elmulti Converter</a></h3>
     <p>Convert <strong>EXS24</strong> and <strong>SFZ</strong> instruments to Tonverk format directly in your browser. No installation required.</p>
   </li>
 </ul>
