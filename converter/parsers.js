@@ -305,6 +305,52 @@ function parseEXS(buffer, filename, fileMap) {
         offset += chunkSize;
     }
 
+    // FALLBACK: If we found no zones, try a brute-force scan.
+    // This handles files with corrupted headers, non-standard offsets, or mixed endianness issues.
+    if (ZONES.length === 0) {
+        console.log("Strict parsing failed to find zones. Attempting brute-force scan...");
+
+        const scanStep = 4; // Align to 4 bytes
+        // Scan for Zone (0x01000101) and Sample (0x03000101) signatures
+        // We need to check both Little and Big Endian signatures
+        // LE Zone: 01 01 00 01 (0x01000101)
+        // BE Zone: 01 00 01 01 (0x01000101 read as BE) -> NO. 
+        // 0x01000101 in BE bytes is 01 00 01 01. In LE read it is 16843009 (0x01010001).
+        // Let's just look for the byte sequence.
+
+        let scanOffset = 84;
+
+        // Reset collected arrays
+        // We might have partial garbage, usually best to clear or keep if we want to be additive. 
+        // Let's clear to avoid dupes if strict parsing partly worked (unlikely if length is 0).
+        // Actually, scan might find samples even if zones were missing.
+
+        while (scanOffset < fileSize - 12) {
+            const idCheck = view.getUint32(scanOffset + 8, isLittleEndian);
+
+            // Check against known IDs
+            if (idCheck === 0x01000101 || idCheck === 0x41000101) { // Zone
+                // Validate size to be sure it's not a False Positive
+                const sizeCheck = 84 + view.getUint32(scanOffset + 4, isLittleEndian);
+                if (sizeCheck > 84 && sizeCheck < 100000) { // arbitrary sane size
+                    ZONES.push({ offset: scanOffset, size: sizeCheck });
+                    scanOffset += sizeCheck;
+                    continue;
+                }
+            } else if (idCheck === 0x03000101 || idCheck === 0x43000101) { // Sample
+                const sizeCheck = 84 + view.getUint32(scanOffset + 4, isLittleEndian);
+                if (sizeCheck > 84 && sizeCheck < 100000) {
+                    SAMPLES.push({ offset: scanOffset, size: sizeCheck });
+                    scanOffset += sizeCheck;
+                    continue;
+                }
+            }
+
+            scanOffset += scanStep;
+        }
+        console.log(`Scan found ${ZONES.length} zones and ${SAMPLES.length} samples.`);
+    }
+
     // Process Samples first to map them
     const sampleMap = {}; // ID/Index -> SampleInfo
     // In Python: `exs.samples` list is populated in order.

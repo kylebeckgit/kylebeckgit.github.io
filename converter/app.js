@@ -182,17 +182,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 progressBar.style.width = `${(processedCount / totalInstruments) * 100}%`;
             }
 
-            // 4. Download Zip
-            log('Generating ZIp file...', 'info');
-            const content = await zip.generateAsync({ type: "blob" });
-            const url = URL.createObjectURL(content);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = "elmulti_converted.zip";
-            a.click();
-            URL.revokeObjectURL(url);
+            if (processedCount === 0) {
+                log('Error: No instruments were successfully converted. The zip file was not generated.', 'error');
+                log('Please ensure your .exs files are valid and not corrupted.', 'error');
+            } else {
+                // 4. Download Zip
+                log('Generating Zip file...', 'info');
+                const content = await zip.generateAsync({ type: "blob" });
+                const url = URL.createObjectURL(content);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = "elmulti_converted.zip";
+                a.click();
+                URL.revokeObjectURL(url);
 
-            log('Conversion complete! Download started.', 'success');
+                log('Conversion complete! Download started.', 'success');
+            }
 
         } catch (error) {
             console.error(error);
