@@ -18,7 +18,8 @@
   transition: all 0.3s ease;
 }
 
-.drop-zone:hover, .drop-zone.drag-over {
+.drop-zone:hover,
+.drop-zone.drag-over {
   border-color: #2ea44f;
   background-color: rgba(46, 164, 79, 0.1);
 }
@@ -27,12 +28,27 @@
   margin: 0;
   font-size: 1.2em;
   color: #ccc;
+  margin-bottom: 15px;
+  /* Space for button */
 }
 
-.drop-zone .sub-text {
+/* New Select Button Style */
+.select-files-btn {
+  background-color: transparent;
+  border: 1px solid #10b981;
+  color: #10b981;
+  padding: 8px 16px;
+  border-radius: 4px;
   font-size: 0.9em;
-  color: #888;
-  margin-top: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  pointer-events: none;
+  /* Let the parent div handle the click to avoid double-events */
+}
+
+.drop-zone:hover .select-files-btn {
+  background-color: #10b981;
+  color: white;
 }
 
 .controls {
