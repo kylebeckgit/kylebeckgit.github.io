@@ -311,37 +311,59 @@ function parseEXS(buffer, filename, fileMap) {
         console.log("Strict parsing failed to find zones. Attempting brute-force scan...");
 
         const scanStep = 4; // Align to 4 bytes
-        // Scan for Zone (0x01000101) and Sample (0x03000101) signatures
-        // We need to check both Little and Big Endian signatures
-        // LE Zone: 01 01 00 01 (0x01000101)
-        // BE Zone: 01 00 01 01 (0x01000101 read as BE) -> NO. 
-        // 0x01000101 in BE bytes is 01 00 01 01. In LE read it is 16843009 (0x01010001).
-        // Let's just look for the byte sequence.
-
         let scanOffset = 84;
 
-        // Reset collected arrays
-        // We might have partial garbage, usually best to clear or keep if we want to be additive. 
-        // Let's clear to avoid dupes if strict parsing partly worked (unlikely if length is 0).
-        // Actually, scan might find samples even if zones were missing.
-
         while (scanOffset < fileSize - 12) {
-            const idCheck = view.getUint32(scanOffset + 8, isLittleEndian);
+            // Read raw bytes to be agnostic
+            const b0 = view.getUint8(scanOffset + 8);
+            const b1 = view.getUint8(scanOffset + 9);
+            const b2 = view.getUint8(scanOffset + 10);
+            const b3 = view.getUint8(scanOffset + 11);
 
-            // Check against known IDs
-            if (idCheck === 0x01000101 || idCheck === 0x41000101) { // Zone
-                // Validate size to be sure it's not a False Positive
-                const sizeCheck = 84 + view.getUint32(scanOffset + 4, isLittleEndian);
-                if (sizeCheck > 84 && sizeCheck < 100000) { // arbitrary sane size
-                    ZONES.push({ offset: scanOffset, size: sizeCheck });
-                    scanOffset += sizeCheck;
-                    continue;
+            // Zone ID: 0x01000101
+            // LE Bytes: 01 01 00 01
+            // BE Bytes: 01 00 01 01
+
+            let foundZone = false;
+            let foundSample = false;
+            let chunkIsLE = true;
+
+            // Check Zone
+            if (b0 === 1 && b1 === 1 && b2 === 0 && b3 === 1) { // LE Zone
+                foundZone = true; chunkIsLE = true;
+            } else if (b0 === 1 && b1 === 0 && b2 === 1 && b3 === 1) { // BE Zone
+                foundZone = true; chunkIsLE = false;
+            }
+
+            // Check Sample (0x03000101) -> LE: 01 01 00 03 | BE: 03 00 01 01
+            if (!foundZone) {
+                if (b0 === 1 && b1 === 1 && b2 === 0 && b3 === 3) { // LE Sample
+                    foundSample = true; chunkIsLE = true;
+                } else if (b0 === 3 && b1 === 0 && b2 === 1 && b3 === 1) { // BE Sample
+                    foundSample = true; chunkIsLE = false;
                 }
-            } else if (idCheck === 0x03000101 || idCheck === 0x43000101) { // Sample
-                const sizeCheck = 84 + view.getUint32(scanOffset + 4, isLittleEndian);
+            }
+
+            if (foundZone || foundSample) {
+                // Validate size
+                const sizeCheck = 84 + view.getUint32(scanOffset + 4, chunkIsLE);
                 if (sizeCheck > 84 && sizeCheck < 100000) {
-                    SAMPLES.push({ offset: scanOffset, size: sizeCheck });
+                    // Valid chunk found
+                    console.log(`Scanner found ${foundZone ? 'Zone' : 'Sample'} at ${scanOffset} (Size: ${sizeCheck}, LE: ${chunkIsLE})`);
+
+                    if (foundZone) ZONES.push({ offset: scanOffset, size: sizeCheck, isLE: chunkIsLE });
+                    if (foundSample) SAMPLES.push({ offset: scanOffset, size: sizeCheck, isLE: chunkIsLE });
+
                     scanOffset += sizeCheck;
+
+                    // If we found something, maybe update our global assumption?
+                    // But mixed files are possible (rare). Let's stick effectively to what we found.
+                    // The actual parsing loop below relies on `isLittleEndian`. 
+                    // We need to update that logic to use the per-chunk endianness if we want to be safe, 
+                    // OR just update the global flag if it's currently 0.
+
+                    // For now, let's assume consistent endianness once found.
+                    isLittleEndian = chunkIsLE;
                     continue;
                 }
             }
@@ -357,6 +379,9 @@ function parseEXS(buffer, filename, fileMap) {
     // We can just preserve the array order.
 
     SAMPLES.forEach((chk, index) => {
+        // Use chunk specific endianness if we tracked it, otherwise global
+        const useLE = (chk.isLE !== undefined) ? chk.isLE : isLittleEndian;
+
         // Name: offset + 20, 64 chars
         // Path: offset + 164, 256 chars
         // FileName: offset + 420, 256 chars
@@ -366,7 +391,7 @@ function parseEXS(buffer, filename, fileMap) {
         const fileName = getString(view, chk.offset + 420, 256) || name;
 
         // Sample Rate: offset + 92 (Int32)
-        const rate = view.getInt32(chk.offset + 92, isLittleEndian);
+        const rate = view.getInt32(chk.offset + 92, useLE);
 
         sampleMap[index] = { name, fileName, path, rate };
     });
@@ -376,6 +401,7 @@ function parseEXS(buffer, filename, fileMap) {
 
     ZONES.forEach(chk => {
         const off = chk.offset;
+        const useLE = (chk.isLE !== undefined) ? chk.isLE : isLittleEndian;
 
         // Root Note: offset + 85 (Byte)
         const rootNote = view.getUint8(off + 85);
@@ -385,11 +411,11 @@ function parseEXS(buffer, filename, fileMap) {
         const maxVel = view.getUint8(off + 94);
 
         // Sample Index: offset + 176 (UInt32)
-        const sampleIndex = view.getUint32(off + 176, isLittleEndian);
+        const sampleIndex = view.getUint32(off + 176, useLE);
 
         // Loop Info
-        const loopStart = view.getInt32(off + 104, isLittleEndian);
-        const loopEnd = view.getInt32(off + 108, isLittleEndian); // Inclusive in EXS? Python says yes.
+        const loopStart = view.getInt32(off + 104, useLE);
+        const loopEnd = view.getInt32(off + 108, useLE); // Inclusive in EXS? Python says yes.
         const loopOpts = view.getUint8(off + 117);
         const loopOn = (loopOpts & 1) !== 0;
 
