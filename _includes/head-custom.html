@@ -201,7 +201,7 @@
 
   /* Push main content - Using Body Padding for true centering in remaining space */
   body {
-    padding-left: 250px;
+    padding-left: 270px;
     transition: padding-left 0.3s ease;
   }
 
@@ -344,11 +344,12 @@
     top: 0;
     left: 0;
     height: 100vh;
-    width: 250px;
-    /* Restored to 250px to fit text */
+    width: 270px;
+    /* Restored to 270px to fit text */
     background-color: var(--bg-color);
     border-right: 1px solid rgba(0, 0, 0, 0.1);
     padding: 2rem 1.5rem;
+    box-sizing: border-box;
     display: flex;
     flex-direction: column;
     z-index: 1000;
@@ -566,10 +567,7 @@
         <div class="nav-section">
           <div class="nav-section-title">Tools</div>
           <a href="/converter/" class="nav-link">
-            <span class="nav-link-text">Elmulti Conv</span>
-          </a>
-          <a href="/z3-modal-generator.html" class="nav-link">
-            <span class="nav-link-text">Zebra Modal</span>
+            <span class="nav-link-text">Elmulti Converter</span>
           </a>
            <a href="/z3-webgpu.html" class="nav-link">
             <span class="nav-link-text">Zebra AI</span>
