@@ -208,11 +208,28 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     function findFile(name) {
+        if (!name) return null;
         if (loadedFiles.has(name)) return loadedFiles.get(name);
-        // Case insensitive search
+
+        // Fuzzy Match: Compare basenames (ignoring paths) and extensions
+        // EXS might say "MacHD:Users:Music:Samples:Kick.wav"
+        // User uploaded "Kick.wav"
+
+        // 1. Extract basename from search target
+        // Handle both / and \ separators
+        const searchBase = name.replace(/\\/g, '/').split('/').pop().toLowerCase();
+
+        // 2. Search loaded files
         for (let [key, val] of loadedFiles) {
-            if (key.toLowerCase() === name.toLowerCase()) return val;
+            const loadedBase = key.toLowerCase(); // key is the filename (e.g. "Kick.wav")
+
+            if (loadedBase === searchBase) {
+                return val;
+            }
+
+            // Try matching without extension? (Rarely needed but possible)
         }
+
         return null;
     }
 });
