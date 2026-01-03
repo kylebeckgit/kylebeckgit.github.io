@@ -62,6 +62,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (newInstruments > 0 || newSamples > 0) {
             log(`Loaded ${newInstruments} instrument(s) and ${newSamples} sample(s).`, 'success');
             log(`Total files ready: ${loadedFiles.size}`);
+            // DEBUG: List all loaded files to console
+            console.log("DEBUG: Loaded File List:", Array.from(loadedFiles.keys()));
         }
 
         updateUI();
@@ -211,25 +213,27 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!name) return null;
         if (loadedFiles.has(name)) return loadedFiles.get(name);
 
-        // Fuzzy Match: Compare basenames (ignoring paths) and extensions
-        // EXS might say "MacHD:Users:Music:Samples:Kick.wav"
-        // User uploaded "Kick.wav"
-
-        // 1. Extract basename from search target
-        // Handle both / and \ separators
+        // Normalize search name: remove path, lower case
         const searchBase = name.replace(/\\/g, '/').split('/').pop().toLowerCase();
+        // Remove extension from search name for fallback comparison
+        const searchRoots = [searchBase, searchBase.replace(/\.[^/.]+$/, "")];
 
-        // 2. Search loaded files
+        // Search loaded files
         for (let [key, val] of loadedFiles) {
-            const loadedBase = key.toLowerCase(); // key is the filename (e.g. "Kick.wav")
+            const loadedBase = key.toLowerCase(); // e.g. "kick.wav"
+            const loadedRoot = loadedBase.replace(/\.[^/.]+$/, ""); // e.g. "kick"
 
-            if (loadedBase === searchBase) {
-                return val;
-            }
+            // 1. Exact basename match (e.g. "kick.wav" === "kick.wav")
+            if (loadedBase === searchBase) return val;
 
-            // Try matching without extension? (Rarely needed but possible)
+            // 2. Root match (e.g. "kick" === "kick") - Handles "Kick" looking for "Kick.wav"
+            if (searchRoots.includes(loadedRoot)) return val;
         }
 
+        // Debug Log failure only if unique
+        console.warn(`FAIL: Could not find file matching: '${name}'`);
+        console.warn(`    SearchBase: '${searchBase}'`);
+        console.warn(`    SearchRoots:`, searchRoots);
         return null;
     }
 });
