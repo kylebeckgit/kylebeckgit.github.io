@@ -188,6 +188,59 @@ function parseEXS(buffer, filename, fileMap) {
     // We treat the file as Big Endian as confirmed by previous analysis
     isLittleEndian = false;
 
+    // Forensic String Hunt (v9)
+    // We need to find where the sample names are to deduce chunk structure.
+    console.log("Forensic String Hunt: Looking for .wav/.aif references...");
+    const stringCandidates = [];
+    const minAscii = 32; const maxAscii = 126;
+
+    // Scan typical filename extensions
+    const ext1 = [0x2E, 0x77, 0x61, 0x76]; // .wav
+    const ext2 = [0x2E, 0x61, 0x69, 0x66]; // .aif
+    const ext3 = [0x2E, 0x63, 0x61, 0x66]; // .caf (logic often uses this)
+
+    for (let i = 84; i < fileSize - 4; i++) {
+        // Check for extension
+        const b0 = view.getUint8(i); const b1 = view.getUint8(i + 1);
+        const b2 = view.getUint8(i + 2); const b3 = view.getUint8(i + 3);
+
+        let foundExt = false;
+        if (b0 === 0x2E && b1 === 0x77 && b2 === 0x61 && b3 === 0x76) foundExt = true;
+        if (b0 === 0x2E && b1 === 0x61 && b2 === 0x69 && b3 === 0x66) foundExt = true;
+
+        if (foundExt) {
+            // Found extension. Backtrack to find start of string (null char)
+            let start = i;
+            while (start > 84 && view.getUint8(start - 1) !== 0) {
+                start--;
+            }
+            const strLen = (i + 4) - start;
+            const foundStr = getString(view, start, strLen);
+            stringCandidates.push({ offset: start, name: foundStr });
+        }
+    }
+
+    console.log("Found String Candidates:", stringCandidates);
+    if (logEl) {
+        const d = document.createElement('div');
+        d.style.fontFamily = 'monospace'; d.style.fontSize = '0.7em';
+        d.innerHTML = `STRINGS FOUND:<br>${stringCandidates.slice(0, 5).map(e => `${e.name} @ ${e.offset}`).join('<br>')}`;
+        logEl.appendChild(d);
+    }
+
+    // Adjust logic: If we found strings, can we deduce the chunk?
+    // Sample Name is usually at offset + 20 in a chunk? Or offset + 420 (filename)?
+    // If we assume the string *starts* at `chunkOffset + 420` (standard EXS filename offset),
+    // Then `chunkOffset = stringOffset - 420`.
+    // Let's test this hypothesis.
+
+    if (stringCandidates.length > 0) {
+        const firstStr = stringCandidates[0];
+        const hypothesticalChunkStart = firstStr.offset - 20; // Try Name offset first?
+        // Or -420?
+        console.log(`Hypothesis: Chunk starts at ${hypothesticalChunkStart}?`);
+    }
+
     const ZONES = [];
     const SAMPLES = [];
 
