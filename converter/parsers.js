@@ -235,10 +235,31 @@ function parseEXS(buffer, filename, fileMap) {
     // Let's test this hypothesis.
 
     if (stringCandidates.length > 0) {
-        const firstStr = stringCandidates[0];
-        const hypothesticalChunkStart = firstStr.offset - 20; // Try Name offset first?
-        // Or -420?
-        console.log(`Hypothesis: Chunk starts at ${hypothesticalChunkStart}?`);
+        console.log(`Forensic Hunt found ${stringCandidates.length} potential sample files.`);
+
+        // If we found zones but no samples (or few samples), use these strings to build the SAMPLES list.
+        // Logic often writes filenames at offset 420 in the chunk.
+        // So Chunk Start = StringStart - 420.
+
+        const REPAIR_SAMPLES = [];
+
+        stringCandidates.forEach(cand => {
+            // Heuristic: Logic chunks usually align to 4 bytes. 
+            // Let's assume the string is the filename at 420.
+            const estimatedOffset = cand.offset - 420;
+            if (estimatedOffset > 84) {
+                REPAIR_SAMPLES.push({ offset: estimatedOffset, size: 0, isLE: false }); // Size 0 is ignorable here
+            }
+        });
+
+        // If standard parsing didn't find enough samples matches, swap to repair list
+        // We set a flag to force using this repair list later if SAMPLES is empty
+        if (REPAIR_SAMPLES.length > 0) {
+            console.log("Auto-Repair: Prepared repair list. Will use if standard parse fails.");
+            // We'll merge this after the scan loop if SAMPLES is failing.
+        }
+        // Store globally for valid scope access
+        this.REPAIR_SAMPLES = REPAIR_SAMPLES;
     }
 
     const ZONES = [];
@@ -263,6 +284,15 @@ function parseEXS(buffer, filename, fileMap) {
                 if (val2 === 0x03000101) SAMPLES.push({ offset: pos, size: val1 + 84, isLE: false });
             }
         }
+    }
+
+    // AUTO-REPAIR APPLY
+    // If standard IDs failed to populate SAMPLES, but we have repair candidates:
+    if (SAMPLES.length === 0 && this.REPAIR_SAMPLES && this.REPAIR_SAMPLES.length > 0) {
+        console.log("Applying Auto-Repair Samples...");
+        // Clear anything just in case
+        SAMPLES.length = 0;
+        this.REPAIR_SAMPLES.forEach(s => SAMPLES.push(s));
     }
 
     // -------------------------------------------------------------------------
