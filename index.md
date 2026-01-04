@@ -42,7 +42,8 @@ title: Kyle Beck - Musician & Developer
 ## New Stuff
 
 <div class="activity-feed">
-  {% for activity in site.data.activity limit:5 %}
+  {% assign sorted_activity = site.data.activity | sort: 'date' | reverse %}
+  {% for activity in sorted_activity limit:5 %}
   <div class="activity-item">
     <div class="activity-meta">
       <span class="activity-date">{{ activity.date | date: "%b %d, %Y" }}</span>
