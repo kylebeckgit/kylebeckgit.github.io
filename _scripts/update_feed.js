@@ -40,12 +40,18 @@ const ACTIVITY_FILE = path.join(__dirname, '../_data/activity.yml');
 
             if (!exists) {
                 // Create new entry
+                // Use contentSnippet (plain text) or title as fallback. Truncate if too long.
+                let desc = item.contentSnippet || `New upload: ${videoTitle}`;
+                if (desc.length > 200) {
+                    desc = desc.substring(0, 197) + '...';
+                }
+
                 const newEntry = {
                     date: videoDate,
                     type: 'Video',
                     title: videoTitle,
                     url: videoUrl,
-                    description: `New upload: ${videoTitle}` // RSS doesn't give great descriptions usually
+                    description: desc
                 };
 
                 // Add to TOP of list (YAML list)
