@@ -1,0 +1,44 @@
+---
+layout: default
+title: Feed Debugger
+permalink: /debug/
+---
+
+<h1>Feed Debugger</h1>
+
+<p><strong>Current Site Time:</strong> {{ site.time }} ({{ site.time | date: "%s" }})</p>
+
+{% assign current_date = site.time | date: "%s" %}
+{% assign thirty_days_sec = 30 | times: 24 | times: 60 | times: 60 %}
+{% assign cutoff_date = current_date | minus: thirty_days_sec %}
+
+<p><strong>Cutoff Timestamp (30 days ago):</strong> {{ cutoff_date }}</p>
+
+<table border="1" style="width: 100%; border-collapse: collapse;">
+    <thead>
+        <tr>
+            <th>Date</th>
+            <th>Title</th>
+            <th>Parsed Timestamp</th>
+            <th>Status</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% assign sorted_activity = site.data.activity | sort: 'date' | reverse %}
+        {% for activity in sorted_activity %}
+        {% assign item_date = activity.date | date: "%s" %}
+        <tr>
+            <td>{{ activity.date }}</td>
+            <td>{{ activity.title }}</td>
+            <td>{{ item_date }}</td>
+            <td>
+                {% if item_date > cutoff_date %}
+                <span style="color: green; font-weight: bold;">SHOW</span>
+                {% else %}
+                <span style="color: red;">HIDE</span>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
