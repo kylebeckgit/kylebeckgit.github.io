@@ -1,35 +1,100 @@
-- date: "2026-01-03"
-  type: "Video"
-  title: "Newest Ambient Jam"
-  url: "https://www.youtube.com/watch?v=pSxxQM4DV6s"
-  description: "Latest exploration on the channel."
-
-- date: "2026-01-01"
-  type: "Video"
-  title: "Digitakt 2 + Tonverk: New Year Session"
-  url: "https://www.youtube.com/@kyle-beckdotcom"
-  description: "Starting 2026 with a deep dive into the workflow."
-
-- date: "2025-12-08"
-  type: "Preset"
-  title: "Tonverk Multisample: Sine Bass Stab"
-  url: "https://1408294465511.gumroad.com/l/ucokem"
-  description: "Short stab, great for bass stab duties."
-
-- date: "2025-12-08"
-  type: "Preset"
-  title: "Tonverk Multisample: Chip Pulse Bass"
-  url: "https://kylebeck.gumroad.com/l/gtxnt"
-  description: "Standard chiptuney bass made with pulse waves."
-
-- date: "2025-11-26"
-  type: "Preset"
-  title: "Tonverk Multisample: Studio Grand Piano"
-  url: "https://1408294465511.gumroad.com/l/ecmyzxh"
-  description: "3 microphone studio grand. Recorded with 3 note intervals & 3 velocity layers."
-
-- date: "2025-11-21"
-  type: "Guide"
-  title: "Endorphin.es Plus 3 + DOREMIDI Guide"
-  url: "/plus3-doremidi-guide/"
-  description: "A complete configuration guide for using the Endorphin.es Plus 3 with the DOREMIDI MPC-10."
+- date: '2026-01-04'
+  type: Video
+  title: jamuary continued on the Dirtywave M8
+  url: https://www.youtube.com/watch?v=OgN_4QXN4mM
+  description: 'New upload: jamuary continued on the Dirtywave M8'
+- date: '2026-01-03'
+  type: Video
+  title: Newest Ambient Jam
+  url: https://www.youtube.com/watch?v=pSxxQM4DV6s
+  description: Latest exploration on the channel.
+- date: '2026-01-01'
+  type: Video
+  title: 'Digitakt 2 + Tonverk: New Year Session'
+  url: https://www.youtube.com/@kyle-beckdotcom
+  description: Starting 2026 with a deep dive into the workflow.
+- date: '2025-12-08'
+  type: Preset
+  title: 'Tonverk Multisample: Sine Bass Stab'
+  url: https://1408294465511.gumroad.com/l/ucokem
+  description: Short stab, great for bass stab duties.
+- date: '2025-12-08'
+  type: Preset
+  title: 'Tonverk Multisample: Chip Pulse Bass'
+  url: https://kylebeck.gumroad.com/l/gtxnt
+  description: Standard chiptuney bass made with pulse waves.
+- date: '2025-11-26'
+  type: Preset
+  title: 'Tonverk Multisample: Studio Grand Piano'
+  url: https://1408294465511.gumroad.com/l/ecmyzxh
+  description: 3 microphone studio grand. Recorded with 3 note intervals & 3 velocity layers.
+- date: '2025-11-21'
+  type: Guide
+  title: Endorphin.es Plus 3 + DOREMIDI Guide
+  url: /plus3-doremidi-guide/
+  description: A complete configuration guide for using the Endorphin.es Plus 3 with the DOREMIDI MPC-10.
+- date: '2025-07-03'
+  type: Video
+  title: New Filterverse Update!! Back in Bitwig for some craziness
+  url: https://www.youtube.com/watch?v=KY1LVds-DhA
+  description: 'New upload: New Filterverse Update!! Back in Bitwig for some craziness'
+- date: '2025-06-20'
+  type: Video
+  title: Jamming in Logic (u-he Filterscape & uhbik beta)
+  url: https://www.youtube.com/watch?v=fcKxKjGSd3U
+  description: 'New upload: Jamming in Logic (u-he Filterscape & uhbik beta)'
+- date: '2025-05-17'
+  type: Video
+  title: Playing in Polyverse Filterverse
+  url: https://www.youtube.com/watch?v=IZUOgsrHmsE
+  description: 'New upload: Playing in Polyverse Filterverse'
+- date: '2025-05-16'
+  type: Video
+  title: Playing in Polyverse Filterverse
+  url: https://www.youtube.com/watch?v=TZNwLcYKSUk
+  description: 'New upload: Playing in Polyverse Filterverse'
+- date: '2025-05-08'
+  type: Video
+  title: Playing in Polyverse Filterverse
+  url: https://www.youtube.com/watch?v=ZU6dG9Kg670
+  description: 'New upload: Playing in Polyverse Filterverse'
+- date: '2025-01-15'
+  type: Video
+  title: Plucks and other Alchemy sounds. Jamming in Logic
+  url: https://www.youtube.com/watch?v=D7iz04CdNLU
+  description: 'New upload: Plucks and other Alchemy sounds. Jamming in Logic'
+- date: '2024-12-12'
+  type: Video
+  title: Sketching on the Digitakt 2
+  url: https://www.youtube.com/shorts/INRRH3WtewA
+  description: 'New upload: Sketching on the Digitakt 2'
+- date: '2024-03-26'
+  type: Video
+  title: Logic Pro iPad - Flipping the Hardwell Producer Pack
+  url: https://www.youtube.com/watch?v=H7EGKmIin7M
+  description: 'New upload: Logic Pro iPad - Flipping the Hardwell Producer Pack'
+- date: '2023-09-27'
+  type: Video
+  title: logic ipad jamming
+  url: https://www.youtube.com/watch?v=c3YDvXepFr4
+  description: 'New upload: logic ipad jamming'
+- date: '2023-09-09'
+  type: Video
+  title: Logic on iPad | Desktop Screen Recording Test Jam
+  url: https://www.youtube.com/watch?v=EOL3m_W5HJI
+  description: 'New upload: Logic on iPad | Desktop Screen Recording Test Jam'
+- date: '2023-08-30'
+  type: Video
+  title: Time - Nils Hoffmann (Live Piano Instrumental Cover)
+  url: https://www.youtube.com/watch?v=CLBE1eLW9hY
+  description: 'New upload: Time - Nils Hoffmann (Live Piano Instrumental Cover)'
+- date: '2023-08-27'
+  type: Video
+  title: 'Breathwork #3 - Osmose and Heat+FX'
+  url: https://www.youtube.com/shorts/QE-S0rLGK3E
+  description: 'New upload: Breathwork #3 - Osmose and Heat+FX'
+- date: '2023-08-16'
+  type: Video
+  title: Chill House in Logic feat. FabFilter Twin 3 - pt.2
+  url: https://www.youtube.com/watch?v=0HBglOVNFJ8
+  description: 'New upload: Chill House in Logic feat. FabFilter Twin 3 - pt.2'
