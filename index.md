@@ -27,11 +27,11 @@ title: Kyle Beck - Musician & Developer
 
   <li>
     <h3><a href="/z3-webgpu.html">Zebra 3 Gen (WebGPU Prototype)</a></h3>
-    <p>Experimental <strong>AI-Powered</strong> generator running locally on your GPU. Semantic understanding for complex requests.</p>
+    <p>Experimental Modal Resonator profile generator for <strong>Zebra 3</strong>. Runs locally on your GPU (initial download required, caches for later use).</p>
   </li>
   <li>
     <h3><a href="/uhm-generator.html">Hive 2 UHM Generator</a></h3>
-    <p>Generate wavetable scripts for <strong>u-he Hive 2</strong> using mathematical formulas and interpolation.</p>
+    <p>Experimental UHM wavetable generator for <strong>u-he Hive</strong>. Runs locally on your GPU (initial download required, caches for later use).</p>
   </li>
 </ul>
 
