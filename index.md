@@ -42,14 +42,9 @@ title: Kyle Beck - Musician & Developer
 ## New Stuff
 
 <div class="activity-feed">
-  {% assign sorted_activity = site.data.activity | sort: 'date' | reverse %}
-  {% assign current_date = site.time | date: "%s" %}
-  {% assign thirty_days_sec = 30 | times: 24 | times: 60 | times: 60 %}
-  {% assign cutoff_date = current_date | minus: thirty_days_sec %}
+  {% assign sorted_activity = site.data.activity | sort: 'date' | reverse | limit: 10 %}
 
   {% for activity in sorted_activity %}
-    {% assign item_date = activity.date | date: "%s" | plus: 0 %}
-    {% if item_date > cutoff_date %}
   <div class="activity-item">
     <div class="activity-meta">
       <span class="activity-date">{{ activity.date | date: "%b %d, %Y" }}</span>
@@ -58,7 +53,6 @@ title: Kyle Beck - Musician & Developer
     <h3 class="activity-title"><a href="{{ activity.url }}">{{ activity.title }}</a></h3>
     <p class="activity-desc">{{ activity.description }}</p>
   </div>
-    {% endif %}
   {% endfor %}
 </div>
 
