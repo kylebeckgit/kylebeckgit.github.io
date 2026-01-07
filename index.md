@@ -48,7 +48,7 @@ title: Kyle Beck - Musician & Developer
   {% assign cutoff_date = current_date | minus: thirty_days_sec %}
 
   {% for activity in sorted_activity %}
-    {% assign item_date = activity.date | date: "%s" %}
+    {% assign item_date = activity.date | date: "%s" | plus: 0 %}
     {% comment %} {% if item_date > cutoff_date %} {% endcomment %}
   <div class="activity-item">
     <div class="activity-meta">

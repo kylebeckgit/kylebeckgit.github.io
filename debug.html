@@ -26,7 +26,7 @@ permalink: /debug/
     <tbody>
         {% assign sorted_activity = site.data.activity | sort: 'date' | reverse %}
         {% for activity in sorted_activity %}
-        {% assign item_date = activity.date | date: "%s" %}
+        {% assign item_date = activity.date | date: "%s" | plus: 0 %}
         <tr>
             <td>{{ activity.date }}</td>
             <td>{{ activity.title }}</td>
