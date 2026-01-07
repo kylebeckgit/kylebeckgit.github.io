@@ -56,6 +56,6 @@ code {
     margin: 0 auto 2rem auto !important;
     image-rendering: pixelated !important;
     border-radius: 0 !important;
-    filter: contrast(150%) !important;
+    filter: grayscale(100%) contrast(400%) !important;
     mix-blend-mode: screen !important;
 }
