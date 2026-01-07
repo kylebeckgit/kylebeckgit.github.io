@@ -26,7 +26,7 @@ title: Kyle Beck - Musician & Developer
 <ul style="list-style-type: none; padding: 0;">
 
   <li>
-    <h3><a href="/z3-webgpu.html">Zebra 3 Gen (WebGPU Prototype)</a></h3>
+    <h3><a href="/z3-webgpu.html">Modal Generator for Zebra 3</a></h3>
     <p>Experimental Modal Resonator profile generator for <strong>Zebra 3</strong>. Runs locally on your GPU (initial download required, caches for later use).</p>
   </li>
   <li>
