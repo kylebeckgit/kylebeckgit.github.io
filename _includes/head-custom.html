@@ -80,6 +80,8 @@
     image-rendering: pixelated;
     /* Critical for pixel art */
     border-radius: 0;
+    filter: invert(1) contrast(200%);
+    mix-blend-mode: screen;
   }
 
   /* ... Sidebar styles ... */
@@ -148,7 +150,7 @@
 
   input:checked+.slider:before {
     transform: translateX(20px);
-    background-color: #10b981;
+    background-color: #000;
     /* Black knob */
   }
 
@@ -545,7 +547,7 @@
 
       
         <a href="/" class="sidebar-logo-link">
-            <img src="/assets/images/sidebar-logo.png" alt="Home" class="sidebar-logo">
+            <img src="/assets/images/sidebar-logo.svg" alt="Home" class="sidebar-logo">
         </a>
         
         <div class="nav-section">
