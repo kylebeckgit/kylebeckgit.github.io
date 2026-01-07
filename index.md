@@ -49,7 +49,7 @@ title: Kyle Beck - Musician & Developer
 
   {% for activity in sorted_activity %}
     {% assign item_date = activity.date | date: "%s" | plus: 0 %}
-    {% comment %} {% if item_date > cutoff_date %} {% endcomment %}
+    {% if item_date > cutoff_date %}
   <div class="activity-item">
     <div class="activity-meta">
       <span class="activity-date">{{ activity.date | date: "%b %d, %Y" }}</span>
@@ -58,7 +58,7 @@ title: Kyle Beck - Musician & Developer
     <h3 class="activity-title"><a href="{{ activity.url }}">{{ activity.title }}</a></h3>
     <p class="activity-desc">{{ activity.description }}</p>
   </div>
-    {% comment %} {% endif %} {% endcomment %}
+    {% endif %}
   {% endfor %}
 </div>
 
