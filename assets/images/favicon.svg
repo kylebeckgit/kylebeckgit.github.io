@@ -1,0 +1,25 @@
+<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <style>
+    /* Pixel-art style strokes */
+    .pixel-stroke {
+      fill: none;
+      stroke: #ffffff;
+      stroke-width: 6; 
+      stroke-linecap: butt;
+      shape-rendering: crispEdges; /* Enforce pixelated/sharp look */
+    }
+  </style>
+  
+  <!-- Outer Circle (approximated as pixel octagon/circle) -->
+  <path class="pixel-stroke" d="M20 4 H44 M44 4 L56 16 M56 16 V40 M56 40 L44 52 M44 52 H20 M20 52 L8 40 M8 40 V16 M8 16 L20 4 Z" />
+  
+  <!-- Clock Hands -->
+  <path class="pixel-stroke" d="M32 32 V16" /> <!-- Hour hand up -->
+  <path class="pixel-stroke" d="M32 32 L44 44" /> <!-- Minute hand down-right -->
+  
+  <!-- Hour Marks (Simple dots/lines) -->
+  <path class="pixel-stroke" d="M32 10 V10" /> <!-- 12 -->
+  <path class="pixel-stroke" d="M54 32 H54" /> <!-- 3 -->
+  <path class="pixel-stroke" d="M32 54 V54" /> <!-- 6 -->
+  <path class="pixel-stroke" d="M10 32 H10" /> <!-- 9 -->
+</svg>
