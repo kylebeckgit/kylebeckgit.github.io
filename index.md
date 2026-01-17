@@ -22,6 +22,7 @@ title: Kyle Beck - Musician & Developer
 
 <hr style="margin: 3rem 0; border: 0; border-top: 1px solid #eee;">
 
+<!--
 ## Tools
 <ul style="list-style-type: none; padding: 0;">
 
@@ -30,10 +31,16 @@ title: Kyle Beck - Musician & Developer
     <p>Experimental Modal Resonator profile generator for <strong>Zebra 3</strong>. Runs locally on your GPU (initial download required, caches for later use).</p>
   </li>
   <li>
+  <li>
     <h3><a href="/uhm-generator.html">Hive 2 UHM Generator</a></h3>
     <p>Experimental UHM wavetable generator for <strong>u-he Hive</strong>. Runs locally on your GPU (initial download required, caches for later use).</p>
   </li>
+  <li>
+    <h3><a href="/wav-to-uhm.html">WAV to UHM Converter</a></h3>
+    <p>Convert standard WAV files into Hive 2 compatible wavetables (.uhm + formatted .wav). Resamples and formats audio automatically.</p>
+  </li>
 </ul>
+-->
 
 
 
