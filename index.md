@@ -18,6 +18,10 @@ title: Kyle Beck - Musician & Developer
     <h3><a href="/tonverk-presets/">Tonverk Presets</a></h3>
     <p>A collection of multisample presets for the <strong>Tonverk</strong>.</p>
   </li>
+  <li>
+    <h3><a href="/m8/">M8 Themes</a></h3>
+    <p>Custom themes for the <strong>Dirtywave M8</strong>.</p>
+  </li>
 </ul>
 
 <hr style="margin: 3rem 0; border: 0; border-top: 1px solid #eee;">

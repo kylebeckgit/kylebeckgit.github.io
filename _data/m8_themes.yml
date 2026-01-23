@@ -1,0 +1,5 @@
+- category: Custom Themes
+  items:
+    - name: 'Example Theme'
+      url: /m8/downloads/example_theme.zip
+      description: An example theme for the Dirtywave M8.
