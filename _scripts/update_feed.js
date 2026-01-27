@@ -72,7 +72,7 @@ const ACTIVITY_FILE = path.join(__dirname, '../_data/activity.yml');
                     if (category.items) {
                         category.items.forEach(item => {
                             if (item.date) {
-                                const exists = activityData.find(entry => entry.url === item.url);
+                                const exists = activityData.find(entry => entry.url === item.url || (item.page_url && entry.url === item.page_url));
                                 if (!exists) {
                                     let desc = item.description || `New M8 Theme: ${item.name}`;
                                     if (desc.length > 200) {
@@ -83,7 +83,7 @@ const ACTIVITY_FILE = path.join(__dirname, '../_data/activity.yml');
                                         date: item.date,
                                         type: 'Theme',
                                         title: item.name,
-                                        url: item.url,
+                                        url: item.page_url || item.url,
                                         description: desc
                                     };
                                     activityData.push(newEntry);
