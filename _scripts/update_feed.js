@@ -61,6 +61,44 @@ const ACTIVITY_FILE = path.join(__dirname, '../_data/activity.yml');
             }
         }
 
+        // 3.5 Process M8 Themes
+        const M8_THEMES_FILE = path.join(__dirname, '../_data/m8_themes.yml');
+        try {
+            if (fs.existsSync(M8_THEMES_FILE)) {
+                const m8Content = fs.readFileSync(M8_THEMES_FILE, 'utf8');
+                const m8Data = yaml.load(m8Content) || [];
+
+                m8Data.forEach(category => {
+                    if (category.items) {
+                        category.items.forEach(item => {
+                            if (item.date) {
+                                const exists = activityData.find(entry => entry.url === item.url);
+                                if (!exists) {
+                                    let desc = item.description || `New M8 Theme: ${item.name}`;
+                                    if (desc.length > 200) {
+                                        desc = desc.substring(0, 197) + '...';
+                                    }
+
+                                    const newEntry = {
+                                        date: item.date,
+                                        type: 'Theme',
+                                        title: item.name,
+                                        url: item.url,
+                                        description: desc
+                                    };
+                                    activityData.push(newEntry);
+                                    newItemsCount++;
+                                    console.log(`Added M8 Theme: ${item.name} (${item.date})`);
+                                }
+                            }
+                        });
+                    }
+                });
+            }
+        } catch (e) {
+            console.error("Error processing M8 themes:", e);
+        }
+
         if (newItemsCount > 0) {
             // 4. Save back to YAML
             // Sort by date desc (just to be clean, though Liquid handles it)
