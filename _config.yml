@@ -1,2 +1,22 @@
-# Site is currently in maintenance mode. 
-# Configuration will be restored when site goes live.
+# GitHub Pages publishes this branch with Jekyll (there is no .nojekyll file).
+# The built site at the root is served. Source, screenshots, and art stay in git
+# and are left out of the published site.
+exclude:
+  - art
+  - screens
+  - src
+  - scripts
+  - public
+  - node_modules
+  - vendor
+  - dist
+  - _site
+  - .astro
+  - .jekyll-cache
+  - .github
+  - package.json
+  - package-lock.json
+  - astro.config.mjs
+  - docs-lemonsqueezy-migration.md
+  - Gemfile
+  - Gemfile.lock

@@ -1,0 +1,83 @@
+---
+import Base from '../../layouts/Base.astro';
+import Cover from '../../components/Cover.astro';
+import DemoList from '../../components/DemoList.astro';
+import BuyLink from '../../components/BuyLink.astro';
+import packs from '../../data/packs.json';
+import { isLiveUrl } from '../../lib/links.js';
+import { isPlaceholder, mediaSrc, visible } from '../../lib/copy.js';
+export function getStaticPaths(){ return packs.map((p) => ({ params:{ slug:p.slug }, props:{ p } })); }
+const { p } = Astro.props;
+// Free sampler toggle: packs.json demo.mode, or PUBLIC_DEMO_MODE=email-required|email-optional
+const demoMode = import.meta.env.PUBLIC_DEMO_MODE || p.demo.mode;
+const demoLs = demoMode === 'email-required';
+const samplerHref = demoLs ? p.demo.lsCheckoutUrl : p.demo.directUrl;
+const samplerLive = p.showSampler && isLiveUrl(samplerHref);
+const buyLive = isLiveUrl(p.buyUrl);
+const checkoutLive = buyLive || samplerLive;
+const photos = (p.photos || []).filter((ph) => !isPlaceholder(ph));
+const license = visible(p.license);
+const demos = (p.demos || []).filter((d) => !isPlaceholder(d.name));
+const samplerLabel = visible(p.demo?.label);
+const others = packs.filter((x) => x.slug !== p.slug);
+---
+<Base title={p.title} path={`/packs/${p.slug}/`} description={`${p.title}: ${p.subtitle} by Kyle Beck.`}>
+  <p class="crumb"><a href="/packs/">Packs</a></p>
+  <section class="hero" id="hero">
+    <Cover p={p} />
+    <div class="hero-body">
+      <h1>{p.title}</h1>
+      <p class="pitch">{p.pitch}</p>
+      <p class="price">{p.price}</p>
+      <div class="buyrow">
+        <BuyLink href={p.buyUrl} label={p.buyLabel || 'Buy'} />
+        {samplerLive && <a class={`sec-link ${demoLs ? 'lemonsqueezy-button' : ''}`} href={samplerHref}>Free sampler</a>}
+      </div>
+      <p class="fine">{buyLive && p.buyNote ? p.buyNote + ' ' : ''}Works with {p.worksWith.device} {p.worksWith.os}.</p>
+      <nav class="jump" aria-label="On this page">{p.showDemos && demos.length > 0 && <a href="#listen">Listen</a>}<a href="#inside">What's inside</a><a href="#works">Works with</a><a href="#made">About the pack</a><a href="#faq">FAQ</a></nav>
+    </div>
+  </section>
+
+  {p.showDemos && demos.length > 0 && <section class="block" id="listen"><h2>Listen</h2><DemoList demos={demos} /></section>}
+
+  <div class="two">
+    <section class="block box" id="inside"><h2>What's inside</h2>
+      <table class="spec"><tbody>{p.inside.map(([k, v]) => <tr><th scope="row">{k}</th><td>{v}</td></tr>)}</tbody></table>
+      {p.categories && <><h3>Categories</h3><ul class="cats">{p.categories.map(([n, c, d]) => <li><span class="cn">{n}</span> <span class="cc">{c}</span>{d && <span class="cd">{d}</span>}</li>)}</ul></>}
+    </section>
+    <section class="block box dark" id="works"><h2>Works with</h2>
+      <p><strong>{p.worksWith.device}</strong> {p.worksWith.os}</p>
+      <h3>How to load it</h3><ol>{p.worksWith.load.map((s) => <li>{s}</li>)}</ol>{p.worksWith.poolNote && <p class="pool">{p.worksWith.poolNote}</p>}
+    </section>
+  </div>
+
+  <section class="block made" id="made"><h2>About the pack</h2>
+    <p class="story">{p.story}</p>
+    {photos.length > 0 && <div class="photos">{photos.map((ph) => mediaSrc(ph) ? <img src={mediaSrc(ph)} alt="" /> : <div class="photo-ph">{ph}</div>)}</div>}
+  </section>
+
+  {samplerLive && <section class="block sampler"><div>
+    <h2>Free sampler</h2>
+    <p>{samplerLabel ? samplerLabel + '. ' : ''}{demoLs ? 'Enter your email at checkout and the download link arrives by email. It costs nothing.' : 'Direct download, no email needed.'}</p>
+  </div><a class={`sec-link big ${demoLs ? 'lemonsqueezy-button' : ''}`} href={samplerHref}>Get the free sampler</a></section>}
+  <section class="block" id="faq"><h2>FAQ</h2>
+    <dl class="faq">{p.faq.map(([q, a]) => <><dt>{q}</dt><dd>{a}</dd></>)}</dl>
+    {license && <h3>License</h3>}{license && <p>{license}</p>}
+  </section>
+
+  <section class="block"><h2>More from Kyle</h2>
+    {others.length ? <ul class="packlist">{others.map((o) => <li><a href={`/packs/${o.slug}/`}>{o.title}</a></li>)}</ul>
+      : <p>More packs are on the way. Meanwhile, the <a href="/#h-free">free Tonverk instruments</a> are on the home page.</p>}
+  </section>
+
+  <div class="stickybar" id="stickybar" aria-hidden="true">
+    <div class="wrap"><span class="sb-title">{p.title}</span><span class="sb-price">{p.price}</span><BuyLink href={p.buyUrl} label={p.buyLabel || 'Buy'} tabindex="-1" /></div>
+  </div>
+  <script>
+    const bar = document.getElementById('stickybar'), hero = document.getElementById('hero');
+    const buy = bar.querySelector('a');
+    new IntersectionObserver(([e]) => { const show = !e.isIntersecting; bar.classList.toggle('show', show); bar.setAttribute('aria-hidden', String(!show)); if (buy) buy.tabIndex = show ? 0 : -1; }).observe(hero);
+  </script>
+  <!-- Lemon Squeezy overlay checkout: .lemonsqueezy-button links open the overlay -->
+  {checkoutLive && <script is:inline src="https://app.lemonsqueezy.com/js/lemon.js" defer></script>}
+</Base>

@@ -1,0 +1,80 @@
+---
+import Base from '../layouts/Base.astro';
+import Cover from '../components/Cover.astro';
+import DemoList from '../components/DemoList.astro';
+import BuyLink from '../components/BuyLink.astro';
+import packs from '../data/packs.json';
+import presets from '../data/tonverk_presets.json';
+import copy from '../data/copy.json';
+import { isLiveUrl } from '../lib/links.js';
+import { aboutInNav, isPlaceholder, mediaSrc, visible } from '../lib/copy.js';
+const f = packs[0];
+const buyLive = isLiveUrl(f.buyUrl);
+const samplerLive = f.showSampler && isLiveUrl(f.demo.lsCheckoutUrl);
+const checkoutLive = buyLive || samplerLive;
+const bioLine = visible(copy.bioLine);
+const aboutText = visible(copy.homeAbout);
+const photoSrc = mediaSrc(copy.homePhoto);
+const showHomeAbout = Boolean(aboutText || photoSrc);
+const showAbout = aboutInNav(copy);
+const demos = (f.demos || []).filter((d) => !isPlaceholder(d.name));
+const freebies = presets.flatMap((c) => c.subcategories.flatMap((s) => s.items.map((i) => ({ ...i, group: s.name, name: i.name.replace(/^Tonverk Multisample Instrument:\s*/, '') }))));
+---
+<Base path="/">
+  <div class="hello">
+    <h1 class="name">Kyle Beck</h1>
+    {bioLine && <p class="voice">{bioLine}</p>}
+  </div>
+
+  <section class="feature" aria-labelledby="h-feat">
+    <a href={`/packs/${f.slug}/`} class="feature-cover"><Cover p={f} /></a>
+    <div class="feature-body">
+      <p class="kicker">New pack</p>
+      <h2 id="h-feat" class="feature-title"><a href={`/packs/${f.slug}/`}>{f.title}</a></h2>
+      <p class="pitch">{f.pitch}</p>
+      <p class="price">{f.price}</p>
+      <div class="buyrow">
+        <BuyLink href={f.buyUrl} label={f.buyLabel || 'Buy'} />
+        {samplerLive && <a class="sec-link lemonsqueezy-button" href={f.demo.lsCheckoutUrl}>Free sampler</a>}
+        <a class="sec-link" href={`/packs/${f.slug}/`}>What's inside</a>
+      </div>
+      {buyLive && f.buyNote && <p class="fine">{f.buyNote}</p>}
+      {f.showDemos && demos.length > 0 && <DemoList demos={demos.slice(0, 1)} />}
+    </div>
+  </section>
+
+  <section class="block" aria-labelledby="h-packs">
+    <h2 id="h-packs">Packs</h2>
+    <ul class="packlist">{packs.map((p) => (
+      <li><a href={`/packs/${p.slug}/`} class="pl-cover"><Cover p={p} size="sm" /></a>
+        <div><a class="pl-title" href={`/packs/${p.slug}/`}>{p.title}</a><p>{p.subtitle}</p></div>
+        <span class="pl-price">{p.price}</span></li>))}
+    </ul>
+  </section>
+
+  <section class="block" aria-labelledby="h-free">
+    <h2 id="h-free">Free Tonverk instruments</h2>
+    <p class="note">Multisample instruments I've made for the Tonverk. Free, or pay what you want.</p>
+    <ul class="freelist">{freebies.map((i) => (
+      <li><a href={i.url}>{i.name}</a><span class="fg">{i.group}</span><span class="fd">{i.description}</span><span class="ff">Free</span></li>))}
+    </ul>
+  </section>
+
+  <section class="block" aria-labelledby="h-tools">
+    <h2 id="h-tools">Tools</h2>
+    <ul class="plain">
+      <li><a href="/z3-webgpu.html">Modal Generator for Zebra 3</a> <span>Describe a modal profile in plain language and get a Zebra 3 profile back. Runs locally on WebGPU.</span></li>
+      <li><a href="/uhm-generator.html">.uhm Generator for Hive 2</a> <span>Writes .uhm scripts with a local model. No server, no API key.</span></li>
+    </ul>
+  </section>
+
+  {showHomeAbout && <section class:list={['block', { about: Boolean(photoSrc) }]} aria-labelledby="h-about">
+    {photoSrc && <img src={photoSrc} alt="" />}
+    <div>
+      <h2 id="h-about">About</h2>
+      {aboutText && <p>{aboutText}</p>}
+      <p>{showAbout && <a href="/about/">More about me</a>}{showAbout && ' · '}<a href="mailto:kyle@kyle-beck.com">kyle@kyle-beck.com</a></p>
+    </div>
+  </section>}
+  {checkoutLive && <script is:inline src="https://app.lemonsqueezy.com/js/lemon.js" defer></script>}
+</Base>

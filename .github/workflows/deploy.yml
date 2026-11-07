@@ -1,0 +1,84 @@
+# Pages source is "Deploy from a branch": main, folder /. This workflow does not
+# deploy. kyle-beck.com serves a Jekyll build of the repository root. The Astro
+# output is committed at that root; _config.yml excludes source, screens/, and art/.
+# .nojekyll must stay absent, or those folders would be published too.
+name: Check Pages build
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      ASTRO_TELEMETRY_DISABLED: 1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: node scripts/publish-root.mjs --check
+      - run: node scripts/check-html.mjs dist
+      - name: Launch checks
+        run: |
+          set -euo pipefail
+          if grep -R -n "noindex" dist --include='*.html'; then
+            echo "noindex is still in the build"
+            exit 1
+          fi
+          if grep -R -n "LS_VARIANT_ID_TODO" dist --include='*.html'; then
+            echo "placeholder Lemon Squeezy URL is linked in the build"
+            exit 1
+          fi
+          if grep -R -n "preview-banner" dist --include='*.html'; then
+            echo "preview banner is still in the build"
+            exit 1
+          fi
+          if grep -R -n 'href="/about/"' dist --include='*.html'; then
+            echo "About is linked while its sections are still placeholders"
+            exit 1
+          fi
+          if grep -q 'LS_VARIANT_ID_TODO' src/data/packs.json; then
+            if grep -R -n "Free. Enter your email at checkout" dist --include='*.html'; then
+              echo "checkout note is visible while buyUrl is still a placeholder"
+              exit 1
+            fi
+          fi
+          test ! -e dist/plus3-doremidi-guide
+          test ! -e dist/plus3-doremidi-guide.html
+          test ! -e dist/.nojekyll
+          test ! -e .nojekyll
+          grep -q "Coming soon" dist/index.html
+          grep -q "Coming soon" dist/packs/chordspeak-tonverk/index.html
+          grep -q "Musician" dist/about/index.html
+          grep -qx "kyle-beck.com" dist/CNAME
+          test -f dist/fonts/archivo/archivo-latin-wdth-normal.woff2
+      - name: Build the Pages site with Jekyll
+        uses: actions/jekyll-build-pages@v1
+        with:
+          source: ./
+          destination: ./_site
+      - name: Confirm Jekyll omits source and placeholders
+        run: |
+          set -euo pipefail
+          test -f _site/index.html
+          test -f _site/packs/chordspeak-tonverk/index.html
+          test -f _site/about/index.html
+          test -f _site/CNAME
+          test -f _site/fonts/archivo/archivo-latin-wdth-normal.woff2
+          test -d _site/astro
+          test ! -e _site/screens
+          test ! -e _site/art
+          test ! -e _site/src
+          test ! -e _site/public
+          test ! -e _site/scripts
+          test ! -e _site/dist
+          test ! -e _site/node_modules
+          test ! -e _site/package.json
+          test ! -e _site/plus3-doremidi-guide
+          node scripts/check-html.mjs _site
