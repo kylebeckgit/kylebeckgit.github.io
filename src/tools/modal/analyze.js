@@ -1,0 +1,378 @@
+// Browser-side partial analysis. Nothing here is uploaded.
+// Frequencies use a long FFT and parabolic interpolation.
+// Decay is a T60 fit, the same unit as the Decay column.
+
+function fft(real, imag) {
+  const n = real.length;
+  for (let i = 1, j = 0; i < n; i++) {
+    let bit = n >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j ^= bit;
+    if (i < j) {
+      const tr = real[i];
+      real[i] = real[j];
+      real[j] = tr;
+      const ti = imag[i];
+      imag[i] = imag[j];
+      imag[j] = ti;
+    }
+  }
+  for (let len = 2; len <= n; len <<= 1) {
+    const ang = (-2 * Math.PI) / len;
+    const wlenRe = Math.cos(ang);
+    const wlenIm = Math.sin(ang);
+    for (let i = 0; i < n; i += len) {
+      let wRe = 1;
+      let wIm = 0;
+      const half = len >> 1;
+      for (let j = 0; j < half; j++) {
+        const uRe = real[i + j];
+        const uIm = imag[i + j];
+        const vRe = real[i + j + half] * wRe - imag[i + j + half] * wIm;
+        const vIm = real[i + j + half] * wIm + imag[i + j + half] * wRe;
+        real[i + j] = uRe + vRe;
+        imag[i + j] = uIm + vIm;
+        real[i + j + half] = uRe - vRe;
+        imag[i + j + half] = uIm - vIm;
+        const nextRe = wRe * wlenRe - wIm * wlenIm;
+        wIm = wRe * wlenIm + wIm * wlenRe;
+        wRe = nextRe;
+      }
+    }
+  }
+}
+
+function hann(real, length) {
+  if (length < 2) return;
+  for (let i = 0; i < length; i++) {
+    real[i] *= 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / (length - 1));
+  }
+}
+
+function parabola(left, mid, right) {
+  const denom = left - 2 * mid + right;
+  if (!(Math.abs(denom) > 1e-18)) return { delta: 0, value: mid };
+  const delta = Math.max(-0.6, Math.min(0.6, (0.5 * (left - right)) / denom));
+  return { delta, value: mid - 0.25 * (left - right) * delta };
+}
+
+function nextPow2(value) {
+  let n = 1;
+  while (n < value) n <<= 1;
+  return n;
+}
+
+function magnitudeSpectrum(samples, fftSize) {
+  const real = new Float64Array(fftSize);
+  const imag = new Float64Array(fftSize);
+  const length = Math.min(samples.length, fftSize);
+  for (let i = 0; i < length; i++) real[i] = samples[i];
+  hann(real, length);
+  fft(real, imag);
+  const bins = fftSize >> 1;
+  const mag = new Float64Array(bins);
+  for (let k = 0; k < bins; k++) mag[k] = Math.hypot(real[k], imag[k]);
+  return mag;
+}
+
+function detectFundamental(samples, sampleRate) {
+  const tauMin = Math.max(2, Math.floor(sampleRate / 1200));
+  const tauMax = Math.min(samples.length - 8, Math.floor(sampleRate / 40));
+  const width = Math.min(samples.length - tauMax - 1, Math.floor(sampleRate * 0.2));
+  if (width < 256 || tauMax <= tauMin) return null;
+  const diff = new Float64Array(tauMax + 2);
+  for (let tau = 1; tau <= tauMax; tau++) {
+    let sum = 0;
+    for (let i = 0; i < width; i++) {
+      const delta = samples[i] - samples[i + tau];
+      sum += delta * delta;
+    }
+    diff[tau] = sum;
+  }
+  const cmnd = new Float64Array(tauMax + 2);
+  let running = 0;
+  let bestTau = tauMin;
+  let best = Infinity;
+  for (let tau = 1; tau <= tauMax; tau++) {
+    running += diff[tau];
+    const value = running > 0 ? (diff[tau] * tau) / running : 1;
+    cmnd[tau] = value;
+    if (tau >= tauMin && value < best) {
+      best = value;
+      bestTau = tau;
+    }
+    if (tau >= tauMin && value < 0.12) {
+      return sampleRate / refineLagFrom(cmnd, tau);
+    }
+  }
+  if (!(best < 0.5)) return null;
+  return sampleRate / refineLagFrom(cmnd, bestTau);
+}
+
+function refineLagFrom(values, tau) {
+  const left = values[tau - 1] ?? values[tau];
+  const mid = values[tau];
+  const right = values[tau + 1] ?? values[tau];
+  return tau + parabola(left, mid, right).delta;
+}
+
+function localPeaks(mag, sampleRate, fftSize) {
+  const peaks = [];
+  const minBin = Math.max(2, Math.floor((30 * fftSize) / sampleRate));
+  const maxBin = Math.min(mag.length - 2, Math.floor((sampleRate * 0.45 * fftSize) / sampleRate));
+  for (let k = minBin; k <= maxBin; k++) {
+    if (mag[k] < mag[k - 1] || mag[k] < mag[k + 1]) continue;
+    const dbL = mag[k - 1] > 0 ? 20 * Math.log10(mag[k - 1]) : -240;
+    const dbM = mag[k] > 0 ? 20 * Math.log10(mag[k]) : -240;
+    const dbR = mag[k + 1] > 0 ? 20 * Math.log10(mag[k + 1]) : -240;
+    const fit = parabola(dbL, dbM, dbR);
+    const freq = ((k + fit.delta) * sampleRate) / fftSize;
+    const amp = 10 ** (fit.value / 20);
+    if (freq > 30 && amp > 0) peaks.push({ freq, amp });
+  }
+  peaks.sort((a, b) => b.amp - a.amp);
+  return peaks;
+}
+
+function harmonicScore(candidate, peaks) {
+  let score = 0;
+  for (const peak of peaks.slice(0, 24)) {
+    const ratio = peak.freq / candidate;
+    const nearest = Math.max(1, Math.round(ratio));
+    const error = Math.abs(ratio - nearest) / nearest;
+    if (error < 0.035) score += peak.amp;
+  }
+  return score;
+}
+
+function chooseFundamental(samples, sampleRate, peaks, requested) {
+  const set = Number(requested);
+  if (Number.isFinite(set) && set >= 20 && set <= 5000) return set;
+  const yin = detectFundamental(samples, sampleRate);
+  const strongest = peaks[0]?.amp || 1;
+  const candidates = [];
+  if (yin) candidates.push(yin, yin / 2, yin * 2);
+  for (const peak of peaks.slice(0, 8)) candidates.push(peak.freq);
+  let best = null;
+  let bestScore = -1;
+  for (const candidate of candidates) {
+    if (!(candidate >= 30 && candidate <= 2000)) continue;
+    const near = peaks.find((peak) => Math.abs(peak.freq - candidate) / candidate < 0.045);
+    // A subharmonic with no partial of its own explains the others too well. Ignore it.
+    if (!near || near.amp < strongest * 0.08) continue;
+    const score = harmonicScore(near.freq, peaks);
+    if (score > bestScore) {
+      bestScore = score;
+      best = near.freq;
+    }
+  }
+  return best || peaks[0]?.freq || yin;
+}
+
+function keepPeaks(peaks, fundamental, thresholdDb, maxCount) {
+  if (!peaks.length || !(fundamental > 0)) return [];
+  const strongest = peaks[0].amp;
+  const floor = strongest * 10 ** (-Math.abs(thresholdDb) / 20);
+  const spacing = Math.max(10, fundamental * 0.045);
+  const kept = [];
+  for (const peak of peaks) {
+    if (peak.amp < floor) continue;
+    if (kept.some((item) => Math.abs(item.freq - peak.freq) < spacing)) continue;
+    kept.push(peak);
+    if (kept.length >= maxCount) break;
+  }
+  kept.sort((a, b) => a.freq - b.freq);
+  return kept;
+}
+
+function amplitudeAt(mag, freq, sampleRate, fftSize) {
+  const bin = (freq * fftSize) / sampleRate;
+  const k = Math.round(bin);
+  if (k < 1 || k >= mag.length - 1) return 0;
+  const dbL = mag[k - 1] > 0 ? 20 * Math.log10(mag[k - 1]) : -240;
+  const dbM = mag[k] > 0 ? 20 * Math.log10(mag[k]) : -240;
+  const dbR = mag[k + 1] > 0 ? 20 * Math.log10(mag[k + 1]) : -240;
+  return 10 ** (parabola(dbL, dbM, dbR).value / 20);
+}
+
+function fitT60(times, amps) {
+  let max = 0;
+  for (const amp of amps) if (amp > max) max = amp;
+  if (!(max > 0)) return null;
+  const floor = max * 0.03;
+  let n = 0;
+  let sumT = 0;
+  let sumL = 0;
+  let sumTT = 0;
+  let sumTL = 0;
+  for (let i = 0; i < times.length; i++) {
+    if (!(amps[i] > floor)) continue;
+    const t = times[i];
+    const logAmp = Math.log(amps[i]);
+    n += 1;
+    sumT += t;
+    sumL += logAmp;
+    sumTT += t * t;
+    sumTL += t * logAmp;
+  }
+  if (n < 4) return null;
+  const denom = n * sumTT - sumT * sumT;
+  if (!(Math.abs(denom) > 1e-9)) return null;
+  const slope = (n * sumTL - sumT * sumL) / denom;
+  if (!(slope < -0.05)) return null;
+  const tau = -1 / slope;
+  const t60 = tau * Math.log(1000);
+  if (!(t60 > 0.03 && t60 < 40)) return null;
+  return t60;
+}
+
+export function analyzeSamples(samples, sampleRate, options = {}) {
+  if (!samples?.length || !(sampleRate > 0)) {
+    throw new Error('That recording is empty.');
+  }
+  let peak = 0;
+  for (let i = 0; i < samples.length; i++) peak = Math.max(peak, Math.abs(samples[i]));
+  if (!(peak > 1e-5)) throw new Error('That recording is silent.');
+  const usable = samples.length > sampleRate * 12 ? samples.subarray(0, Math.floor(sampleRate * 12)) : samples;
+  const freqLength = Math.min(usable.length, Math.floor(sampleRate * 1.2));
+  const freqSamples = usable.subarray(0, freqLength);
+  const fftSize = Math.min(131072, nextPow2(Math.max(16384, freqLength)));
+  const mag = magnitudeSpectrum(freqSamples, fftSize);
+  const peaks = localPeaks(mag, sampleRate, fftSize);
+  if (!peaks.length) throw new Error('No spectral peaks were found.');
+  const fundamental = chooseFundamental(usable, sampleRate, peaks, options.fundamental);
+  if (!(fundamental > 0)) throw new Error('Set the fundamental and try again.');
+  const threshold = Number.isFinite(Number(options.thresholdDb)) ? Number(options.thresholdDb) : 40;
+  const maxCount = Math.min(64, Math.max(1, Math.trunc(Number(options.maxPartials) || 64)));
+  const kept = keepPeaks(peaks, fundamental, threshold, maxCount);
+  if (!kept.length) throw new Error('No partials are above the threshold.');
+
+  const frame = 4096;
+  const hop = 1024;
+  const frames = [];
+  for (let start = 0; start + frame <= usable.length && frames.length < 180; start += hop) {
+    const slice = usable.subarray(start, start + frame);
+    frames.push({
+      time: (start + frame / 2) / sampleRate,
+      mag: magnitudeSpectrum(slice, frame),
+    });
+  }
+  const tracks = kept.map(() => ({ times: [], amps: [] }));
+  for (const frameData of frames) {
+    for (let i = 0; i < kept.length; i++) {
+      tracks[i].times.push(frameData.time);
+      tracks[i].amps.push(amplitudeAt(frameData.mag, kept[i].freq, sampleRate, frame));
+    }
+  }
+  const fitted = kept.map((peak, index) => fitT60(tracks[index].times, tracks[index].amps));
+  const fallback = fitted.filter((value) => value).sort((a, b) => a - b)[Math.floor(fitted.filter(Boolean).length / 2)] || 1.2;
+  const strongest = Math.max(...kept.map((peak) => peak.amp));
+  const partials = kept.map((peak, index) => ({
+    ratio: peak.freq / fundamental,
+    gainDb: 20 * Math.log10(peak.amp / strongest),
+    decay: fitted[index] || fallback,
+  }));
+  return {
+    fundamental,
+    partials,
+    usedFallbackDecay: fitted.some((value) => !value),
+  };
+}
+
+function mixToMono(audioBuffer) {
+  const length = audioBuffer.length;
+  const channels = audioBuffer.numberOfChannels;
+  const mono = new Float32Array(length);
+  for (let c = 0; c < channels; c++) {
+    const data = audioBuffer.getChannelData(c);
+    for (let i = 0; i < length; i++) mono[i] += data[i] / channels;
+  }
+  return { sampleRate: audioBuffer.sampleRate, samples: mono };
+}
+
+function readFourcc(view, offset) {
+  return String.fromCharCode(view.getUint8(offset), view.getUint8(offset + 1), view.getUint8(offset + 2), view.getUint8(offset + 3));
+}
+
+function decodeAiff(buffer) {
+  const view = new DataView(buffer);
+  if (buffer.byteLength < 12 || readFourcc(view, 0) !== 'FORM') return null;
+  const kind = readFourcc(view, 8);
+  if (kind !== 'AIFF' && kind !== 'AIFC') return null;
+  let offset = 12;
+  let channels = 0;
+  let frames = 0;
+  let bits = 0;
+  let sampleRate = 0;
+  let ssnd = null;
+  while (offset + 8 <= view.byteLength) {
+    const id = readFourcc(view, offset);
+    const size = view.getUint32(offset + 4, false);
+    const start = offset + 8;
+    if (id === 'COMM' && start + 18 <= view.byteLength) {
+      channels = view.getUint16(start, false);
+      frames = view.getUint32(start + 2, false);
+      bits = view.getUint16(start + 6, false);
+      sampleRate = readFloat80(view, start + 8);
+    } else if (id === 'SSND') {
+      const dataOffset = view.getUint32(start, false);
+      ssnd = start + 8 + dataOffset;
+    }
+    offset = start + size + (size % 2);
+  }
+  if (!ssnd || channels < 1 || frames < 1 || !(sampleRate > 0)) return null;
+  if (bits !== 16 && bits !== 24) return null;
+  const bytesPer = bits / 8;
+  const samples = new Float32Array(frames);
+  const scale = bits === 16 ? 32768 : 8388608;
+  for (let i = 0; i < frames; i++) {
+    let mixed = 0;
+    for (let c = 0; c < channels; c++) {
+      const at = ssnd + (i * channels + c) * bytesPer;
+      if (at + bytesPer > view.byteLength) break;
+      let value = 0;
+      if (bits === 16) value = view.getInt16(at, false);
+      else value = (view.getUint8(at) << 16) | (view.getUint8(at + 1) << 8) | view.getUint8(at + 2);
+      if (bits === 24 && value & 0x800000) value |= ~0xffffff;
+      mixed += value / scale;
+    }
+    samples[i] = mixed / channels;
+  }
+  return { sampleRate, samples };
+}
+
+function readFloat80(view, offset) {
+  const exponent = ((view.getUint8(offset) & 0x7f) << 8) | view.getUint8(offset + 1);
+  let mantissa = 0;
+  for (let i = 0; i < 8; i++) mantissa = mantissa * 256 + view.getUint8(offset + 2 + i);
+  if (exponent === 0 && mantissa === 0) return 0;
+  return Math.pow(2, exponent - 16383) * (mantissa / Math.pow(2, 63));
+}
+
+export async function decodeRecording(file, audioContext) {
+  const buffer = await file.arrayBuffer();
+  try {
+    const audio = await audioContext.decodeAudioData(buffer.slice(0));
+    return mixToMono(audio);
+  } catch {
+    const aiff = decodeAiff(buffer);
+    if (aiff) return aiff;
+    throw new Error('Could not read that recording. Use wav, mp3, or uncompressed aiff.');
+  }
+}
+
+export function resampleMono(samples, fromRate, toRate) {
+  if (fromRate === toRate) return samples;
+  const length = Math.max(1, Math.round((samples.length * toRate) / fromRate));
+  const out = new Float32Array(length);
+  const step = fromRate / toRate;
+  for (let i = 0; i < length; i++) {
+    const pos = i * step;
+    const index = Math.floor(pos);
+    const frac = pos - index;
+    const a = samples[index] || 0;
+    const b = samples[Math.min(index + 1, samples.length - 1)] || 0;
+    out[i] = a * (1 - frac) + b * frac;
+  }
+  return out;
+}
