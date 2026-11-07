@@ -1,5 +1,4 @@
 import { PRESETS, NOTE_BUTTONS, buildPartials, toCsv, fromCsv, noteFrequency, defaultControls, sanitizeControls } from './engine.js';
-import { workletSource } from './resonator.js';
 import { analyzeSamples, decodeRecording, resampleMono, parseRoot, frequencyToNote } from './analyze.js';
 
 export function mount(root) {
@@ -210,7 +209,7 @@ export function mount(root) {
     const button = event.target.closest('[data-note]');
     if (!button) return;
     event.preventDefault();
-    keys.setPointerCapture?.(event.pointerId);
+    try { keys.setPointerCapture?.(event.pointerId); } catch { /* no active pointer */ }
     state.note = button.dataset.note;
     for (const key of root.querySelectorAll('[data-note]')) key.setAttribute('aria-pressed', String(key === button));
     strike(state, true);
@@ -492,6 +491,7 @@ export function mount(root) {
   rebuild();
   updateHistoryButtons();
   showRoot();
+  root.addEventListener('pointerdown', () => primeAudio(state), true);
   root.querySelector('[data-note="A4"]')?.setAttribute('aria-pressed', 'true');
   window.addEventListener('resize', () => draw(canvas, state.partials, state));
 }
@@ -646,41 +646,77 @@ function sendModesFrom(state) {
   state.node.port.postMessage(playMessage(state, 'configure'));
 }
 
+function primeAudio(state) {
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  if (!AudioCtx) return null;
+  if (!state.audio) state.audio = new AudioCtx();
+  const pending = state.audio.resume();
+  state.resumePromise = pending;
+  return pending;
+}
+
+function failWorklet(state) {
+  if (state.workletFailed) return;
+  state.workletFailed = true;
+  state.workletReady = false;
+  try { state.node?.disconnect(); } catch { /* already gone */ }
+  state.node = null;
+  if (state.holdingNote) playFallback(state);
+}
+
+function watchWorklet(state) {
+  state.node.onprocessorerror = () => failWorklet(state);
+  state.node.port.onmessage = (event) => {
+    const data = event.data || {};
+    if (data.type === 'error') failWorklet(state);
+    if (data.type === 'level' && state.expectSound && state.velocity > 0.01 && !(data.peak > 1e-5)) failWorklet(state);
+    if (data.type === 'level') state.expectSound = false;
+  };
+}
+
 async function ensureAudio(state, resume = true) {
   const AudioCtx = window.AudioContext || window.webkitAudioContext;
   if (!AudioCtx) throw new Error('This browser cannot play audio.');
   if (!state.audio) state.audio = new AudioCtx();
-  if (!state.workletReady && !state.workletFailed) {
-    try {
-      const url = URL.createObjectURL(new Blob([workletSource()], { type: 'application/javascript' }));
-      await state.audio.audioWorklet.addModule(url);
-      URL.revokeObjectURL(url);
-      state.node = new AudioWorkletNode(state.audio, 'modal-bank', { numberOfOutputs: 1, outputChannelCount: [1] });
-      state.node.connect(state.audio.destination);
-      state.workletReady = true;
-      if (state.file) {
-        const copy = new Float32Array(state.file);
-        state.node.port.postMessage({ type: 'file', buffer: copy.buffer }, [copy.buffer]);
+  // Start resume in this turn, before any await, so the user gesture still counts.
+  const resumed = resume ? state.audio.resume() : null;
+  if (!state.workletReady && !state.workletFailed && !state.workletLoading) {
+    state.workletLoading = (async () => {
+      try {
+        await state.audio.audioWorklet.addModule('/modal-resonator.worklet.js');
+        state.node = new AudioWorkletNode(state.audio, 'modal-bank', { numberOfOutputs: 1, outputChannelCount: [1] });
+        watchWorklet(state);
+        state.node.connect(state.audio.destination);
+        state.workletReady = true;
+        if (state.file) {
+          const copy = new Float32Array(state.file);
+          state.node.port.postMessage({ type: 'file', buffer: copy.buffer }, [copy.buffer]);
+        }
+      } catch {
+        state.workletFailed = true;
       }
-    } catch {
-      state.workletFailed = true;
-    }
+    })();
   }
-  if (resume) await state.audio.resume();
+  if (state.workletLoading) await state.workletLoading;
+  if (resumed) await resumed;
 }
 
 async function strike(state, down) {
+  state.holdingNote = down;
+  if (down) primeAudio(state);
   try {
     await ensureAudio(state);
   } catch {
     return;
   }
-  if (state.workletReady) {
+  if (down && !state.holdingNote) return;
+  if (state.workletReady && !state.workletFailed) {
     if (!down) {
       state.node.port.postMessage({ type: 'up' });
       return;
     }
     silenceFallback(state);
+    state.expectSound = true;
     state.node.port.postMessage(playMessage(state, 'down'));
     return;
   }

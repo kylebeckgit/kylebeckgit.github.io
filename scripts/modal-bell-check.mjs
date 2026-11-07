@@ -1,7 +1,7 @@
-import { writeFile, mkdir } from 'node:fs/promises';
+import { writeFile, mkdir, readFile } from 'node:fs/promises';
 import { buildPartials, toCsv } from '../src/tools/modal/engine.js';
 import { analyzeSamples } from '../src/tools/modal/analyze.js';
-import { renderPreview, peakStats, workletSource } from '../src/tools/modal/resonator.js';
+import { renderPreview, peakStats } from '../src/tools/modal/resonator.js';
 
 const sampleRate = 44100;
 const prime = 220;
@@ -70,9 +70,12 @@ function wavBytes(samples, rate) {
   return buffer;
 }
 
-const worklet = workletSource();
-if (!worklet.includes('registerProcessor') || !worklet.includes('function processSample')) {
+const worklet = await readFile(new URL('../public/modal-resonator.worklet.js', import.meta.url), 'utf8');
+if (!worklet.includes("registerProcessor('modal-bank'") || !worklet.includes('function processSample')) {
   throw new Error('Worklet source is missing the resonator.');
+}
+if (worklet.includes('.toString()')) {
+  throw new Error('Worklet must not be built from function source text.');
 }
 
 const bell = synthesizeBell();
