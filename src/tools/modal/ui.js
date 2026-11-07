@@ -27,6 +27,9 @@ export function mount(root) {
     redo: [],
     gesture: null,
     scale: null,
+    userHolding: false,
+    autoHearToken: 0,
+    autoHearTimer: 0,
   };
 
   root.querySelector('[data-presets]').innerHTML = PRESETS.map((preset) => `<option value="${preset.id}">${preset.label}</option>`).join('');
@@ -214,9 +217,14 @@ export function mount(root) {
     try { keys.setPointerCapture?.(event.pointerId); } catch { /* no active pointer */ }
     state.note = button.dataset.note;
     for (const key of root.querySelectorAll('[data-note]')) key.setAttribute('aria-pressed', String(key === button));
+    state.userHolding = true;
+    cancelAutoHear();
     strike(state, true);
   });
-  const release = () => strike(state, false);
+  const release = () => {
+    state.userHolding = false;
+    strike(state, false);
+  };
   keys.addEventListener('pointerup', release);
   keys.addEventListener('pointercancel', release);
   root.querySelector('[data-stop]').addEventListener('click', () => silence(state));
@@ -520,10 +528,27 @@ export function mount(root) {
       render();
       pushModes();
     }
-    if (hear) {
-      strike(state, true);
-      window.setTimeout(() => strike(state, false), (recipe.exciter || state.exciter) === 'bow' ? 900 : 180);
-    }
+    if (hear) autoHear(recipe);
+  }
+
+  function cancelAutoHear() {
+    state.autoHearToken += 1;
+    window.clearTimeout(state.autoHearTimer);
+    state.autoHearTimer = 0;
+  }
+
+  async function autoHear(recipe) {
+    const token = ++state.autoHearToken;
+    window.clearTimeout(state.autoHearTimer);
+    state.autoHearTimer = 0;
+    await strike(state, true);
+    if (token !== state.autoHearToken || state.userHolding || !state.holdingNote) return;
+    const ms = (recipe.exciter || state.exciter) === 'bow' ? 900 : 180;
+    state.autoHearTimer = window.setTimeout(() => {
+      state.autoHearTimer = 0;
+      if (token !== state.autoHearToken || state.userHolding) return;
+      strike(state, false, 'auto');
+    }, ms);
   }
 
   function profileFromState() {
@@ -783,7 +808,8 @@ async function ensureAudio(state, resume = true) {
   if (resumed) await resumed;
 }
 
-async function strike(state, down) {
+async function strike(state, down, source = 'user') {
+  if (!down && source === 'auto' && state.userHolding) return;
   state.holdingNote = down;
   if (down) primeAudio(state);
   try {
@@ -792,6 +818,7 @@ async function strike(state, down) {
     return;
   }
   if (down && !state.holdingNote) return;
+  if (!down && source === 'auto' && (state.userHolding || state.holdingNote)) return;
   if (state.workletReady && !state.workletFailed) {
     if (!down) {
       state.node.port.postMessage({ type: 'up' });

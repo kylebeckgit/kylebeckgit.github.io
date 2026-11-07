@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { buildPartials } from './engine.js';
 import { describePrompt, fileSlug, readRecipe } from './recipes.js';
+import { rememberedIndex } from './studio.js';
 
 test('a glass bowl becomes four different plate variations', () => {
   const prompt = 'glass bowl struck softly, slightly detuned, long shimmer';
@@ -34,6 +35,14 @@ test('refining keeps the object and moves one physical control', () => {
   assert.ok(shorter.controls.damping > bowl.controls.damping);
   assert.equal(gamelan.controls.preset, 'bell');
   assert.ok(gamelan.controls.stiffness > 0.4);
+});
+
+test('step back restores the variation that was selected', () => {
+  const bowl = describePrompt('glass bowl struck softly') ;
+  const turn = { variations: bowl, selected: 2 };
+  assert.equal(rememberedIndex(turn), 2);
+  assert.equal(rememberedIndex({ variations: bowl }), 0);
+  assert.equal(rememberedIndex({ variations: bowl, selected: 9 }), 3);
 });
 
 test('the same sentence always gives the same recipe', () => {

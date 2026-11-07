@@ -60,6 +60,7 @@ export function mountStudio(root, api) {
     const variation = turn?.variations[index];
     if (!variation) return;
     selected = index;
+    turn.selected = index;
     api.applyRecipe(variation, { hear });
     render();
   }
@@ -77,9 +78,11 @@ export function mountStudio(root, api) {
       setStatus('');
     }
     const previous = turns[turns.length - 1];
+    if (previous) previous.selected = selected;
     turns.push({
       thread: previous ? [...previous.thread, prompt] : [prompt],
       variations,
+      selected: 0,
     });
     selected = 0;
     setUsed(count + 1);
@@ -121,9 +124,8 @@ export function mountStudio(root, api) {
   backButton?.addEventListener('click', () => {
     if (turns.length < 2) return;
     turns.pop();
-    selected = 0;
     setStatus('');
-    choose(0, false);
+    choose(rememberedIndex(turns[turns.length - 1]), false);
   });
 
   cards.addEventListener('click', (event) => {
@@ -179,6 +181,13 @@ export function mountStudio(root, api) {
     starterRoot.innerHTML = STARTERS.map((recipe, index) =>
       `<button type="button" class="btn" data-starter="${index}">${escapeHtml(recipe.name)}</button>`).join('');
   }
+}
+
+export function rememberedIndex(turn) {
+  const count = turn?.variations?.length || 0;
+  if (!count) return 0;
+  const index = Number.isInteger(turn.selected) ? turn.selected : 0;
+  return Math.max(0, Math.min(index, count - 1));
 }
 
 export function encodeProfile(profile) {
