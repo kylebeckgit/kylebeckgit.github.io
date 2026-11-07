@@ -1,6 +1,6 @@
 import { PRESETS, NOTE_BUTTONS, buildPartials, toCsv, fromCsv, noteFrequency, defaultControls, sanitizeControls } from './engine.js';
 import { workletSource } from './resonator.js';
-import { analyzeSamples, decodeRecording, resampleMono } from './analyze.js';
+import { analyzeSamples, decodeRecording, resampleMono, parseRoot, frequencyToNote } from './analyze.js';
 
 export function mount(root) {
   const describeUrl = (root.dataset.describeUrl || '').trim();
@@ -142,7 +142,7 @@ export function mount(root) {
     draw(canvas, state.partials, state);
     tableBody.innerHTML = state.partials.map((partial, index) => `
       <tr>
-        <th scope="row">${index + 1}</th>
+        <th scope="row"><button type="button" class="partial-index" data-make-root="${index}" aria-label="Make partial ${index + 1} the root">${index + 1}</button></th>
         <td><input type="number" step="0.0001" min="0.0001" data-index="${index}" data-field="ratio" value="${partial.ratio.toFixed(4)}" aria-label="Partial ${index + 1} ratio"></td>
         <td><input type="number" step="0.01" data-index="${index}" data-field="gainDb" value="${partial.gainDb.toFixed(2)}" aria-label="Partial ${index + 1} gain"></td>
         <td><input type="number" step="0.001" min="0.001" data-index="${index}" data-field="decay" value="${partial.decay.toFixed(3)}" aria-label="Partial ${index + 1} decay"></td>
@@ -175,6 +175,11 @@ export function mount(root) {
     });
   }
 
+  tableBody.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-make-root]');
+    if (!button) return;
+    makeRoot(Number(button.dataset.makeRoot));
+  });
   tableBody.addEventListener('focusin', (event) => {
     if (event.target instanceof HTMLInputElement) state.beforeEdit = snapshot();
   });
@@ -235,24 +240,36 @@ export function mount(root) {
     const point = canvasPoint(canvas, event);
     state.gesture = {
       shift: event.shiftKey,
+      x: point.x,
+      y: point.y,
       lastX: point.x,
       lastY: point.y,
+      moved: false,
       scale: state.scale ? { ...state.scale } : null,
     };
-    pushHistory();
-    editAt(state, point.x, point.y, true);
   });
   canvas.addEventListener('pointermove', (event) => {
     if (!state.gesture) return;
     const point = canvasPoint(canvas, event);
+    const travel = Math.hypot(point.x - state.gesture.x, point.y - state.gesture.y);
+    if (!state.gesture.moved && travel < 5) return;
+    if (!state.gesture.moved) {
+      state.gesture.moved = true;
+      pushHistory();
+    }
     state.gesture.shift = event.shiftKey;
-    editAt(state, point.x, point.y, false);
+    editAt(state, point.x, point.y, state.gesture.lastX === state.gesture.x && state.gesture.lastY === state.gesture.y);
     state.gesture.lastX = point.x;
     state.gesture.lastY = point.y;
   });
-  const endGesture = () => { state.gesture = null; };
-  canvas.addEventListener('pointerup', endGesture);
-  canvas.addEventListener('pointercancel', endGesture);
+  canvas.addEventListener('pointerup', () => {
+    if (state.gesture && !state.gesture.moved && !state.drawMode) {
+      const index = nearestPartial(state.partials, state.gesture.x, state.gesture.scale || state.scale);
+      if (index >= 0) makeRoot(index);
+    }
+    state.gesture = null;
+  });
+  canvas.addEventListener('pointercancel', () => { state.gesture = null; });
 
   root.querySelector('[data-export]').addEventListener('click', () => {
     const blob = new Blob([toCsv(state.partials)], { type: 'text/csv' });
@@ -304,7 +321,7 @@ export function mount(root) {
   const takeRecording = async (file) => {
     if (!file) return;
     try {
-      await ensureAudio(state);
+      await ensureAudio(state, false);
       state.recording = await decodeRecording(file, state.audio);
       setAnalyze('Recording ready. Press Analyze.');
     } catch (error) {
@@ -327,26 +344,39 @@ export function mount(root) {
       setAnalyze('Drop a recording first.');
       return;
     }
-    const requested = Number(root.querySelector('[data-fundamental]').value);
+    const requested = parseRoot(root.querySelector('[data-fundamental]').value);
     const thresholdDb = Number(root.querySelector('[data-threshold]').value);
     const maxPartials = Number(root.querySelector('[data-max-partials]').value);
     try {
       const result = analyzeSamples(state.recording.samples, state.recording.sampleRate, {
-        fundamental: requested,
+        fundamental: requested || undefined,
         thresholdDb,
         maxPartials,
       });
       pushHistory();
       state.partials = result.partials;
       state.custom = true;
+      state.rootHz = result.fundamental;
+      state.rootConfidence = result.confidence;
+      state.rootManual = result.confidence === 'set';
       render();
       pushModes();
-      const hz = result.fundamental.toFixed(1);
-      root.querySelector('[data-fundamental]').value = hz;
-      setAnalyze(`Found ${result.partials.length} partials. Fundamental ${hz} Hz.${result.usedFallbackDecay ? ' Some decays were too noisy to fit, so those used a typical value.' : ''}`);
+      showRoot();
+      setAnalyze(`Found ${result.partials.length} partials.${result.usedFallbackDecay ? ' Some decays were too noisy to fit, so those used a typical value.' : ''}`);
     } catch (error) {
       setAnalyze(error.message);
     }
+  });
+  root.querySelector('[data-root-down]').addEventListener('click', () => shiftOctave(-1));
+  root.querySelector('[data-root-up]').addEventListener('click', () => shiftOctave(1));
+  root.querySelector('[data-fundamental]').addEventListener('change', () => {
+    const hz = parseRoot(root.querySelector('[data-fundamental]').value);
+    if (!hz) {
+      state.rootManual = false;
+      showRoot();
+      return;
+    }
+    retargetRoot(hz);
   });
 
   describeButton?.addEventListener('click', async () => {
@@ -400,11 +430,68 @@ export function mount(root) {
     sendModesFrom(state);
   }
 
+  function showRoot() {
+    const readout = root.querySelector('[data-root-readout]');
+    const down = root.querySelector('[data-root-down]');
+    const up = root.querySelector('[data-root-up]');
+    if (!readout) return;
+    if (!(state.rootHz > 0)) {
+      readout.textContent = 'Root appears after analysis.';
+      if (down) down.disabled = true;
+      if (up) up.disabled = true;
+      return;
+    }
+    const note = frequencyToNote(state.rootHz);
+    const hz = state.rootHz.toFixed(1);
+    const confidence = state.rootManual ? 'Set by hand.' : `Confidence ${state.rootConfidence || 'medium'}.`;
+    readout.textContent = `Root ${note}, ${hz} Hz. ${confidence}`;
+    if (down) down.disabled = state.rootHz / 2 < 20;
+    if (up) up.disabled = state.rootHz * 2 > 5000;
+  }
+
+  function retargetRoot(nextHz) {
+    if (!(nextHz > 0)) return;
+    if (state.rootHz > 0 && state.partials.length) {
+      const factor = nextHz / state.rootHz;
+      if (Math.abs(factor - 1) > 1e-6) {
+        pushHistory();
+        for (const partial of state.partials) partial.ratio = Math.min(64, Math.max(0.02, partial.ratio / factor));
+        state.custom = true;
+        render();
+        pushModes();
+      }
+    }
+    state.rootHz = nextHz;
+    state.rootManual = true;
+    const field = root.querySelector('[data-fundamental]');
+    if (field) field.value = nextHz.toFixed(1);
+    showRoot();
+  }
+
+  function makeRoot(index) {
+    const ratio = state.partials[index]?.ratio;
+    if (!(ratio > 0)) return;
+    if (state.rootHz > 0) retargetRoot(state.rootHz * ratio);
+    else {
+      pushHistory();
+      for (const partial of state.partials) partial.ratio /= ratio;
+      state.custom = true;
+      render();
+      pushModes();
+    }
+  }
+
+  function shiftOctave(direction) {
+    if (!(state.rootHz > 0)) return;
+    retargetRoot(state.rootHz * (direction > 0 ? 2 : 0.5));
+  }
+
   state.canvas = canvas;
 
   readPlayControls();
   rebuild();
   updateHistoryButtons();
+  showRoot();
   root.querySelector('[data-note="A4"]')?.setAttribute('aria-pressed', 'true');
   window.addEventListener('resize', () => draw(canvas, state.partials, state));
 }
@@ -559,7 +646,7 @@ function sendModesFrom(state) {
   state.node.port.postMessage(playMessage(state, 'configure'));
 }
 
-async function ensureAudio(state) {
+async function ensureAudio(state, resume = true) {
   const AudioCtx = window.AudioContext || window.webkitAudioContext;
   if (!AudioCtx) throw new Error('This browser cannot play audio.');
   if (!state.audio) state.audio = new AudioCtx();
@@ -579,7 +666,7 @@ async function ensureAudio(state) {
       state.workletFailed = true;
     }
   }
-  await state.audio.resume();
+  if (resume) await state.audio.resume();
 }
 
 async function strike(state, down) {

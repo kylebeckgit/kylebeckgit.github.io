@@ -4,8 +4,8 @@ about/index.html
 assets/images/favicon.png
 assets/images/sidebar-logo.png
 astro/about.D0vleC1P.css
-astro/z3-webgpu.DJzMXCK2.css
-astro/z3-webgpu.astro_astro_type_script_index_0_lang.BluiCVU5.js
+astro/z3-webgpu.astro_astro_type_script_index_0_lang.DUJfOK0q.js
+astro/z3-webgpu.kj1TRWLu.css
 contact/index.html
 fonts/archivo/LICENSE
 fonts/archivo/archivo-latin-wdth-normal.woff2

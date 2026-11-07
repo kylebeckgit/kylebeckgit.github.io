@@ -99,7 +99,10 @@ for (let i = 0; i < bell.length; i++) {
 const noisyResult = analyzeSamples(noisy, sampleRate, { fundamental: prime, thresholdDb: 30, maxPartials: 16 });
 console.log('noisy partials', noisyResult.partials.length, 'fallback', noisyResult.usedFallbackDecay);
 
-console.log('auto fundamental', auto.fundamental.toFixed(2));
+console.log('auto fundamental', auto.fundamental.toFixed(2), auto.note, auto.confidence);
+if (Math.abs(auto.fundamental - prime) / prime > 0.03) {
+  throw new Error(`Auto root ${auto.fundamental.toFixed(2)} Hz is not the prime.`);
+}
 console.log('guided partials', guided.partials.length);
 let ratioSum = 0;
 let decaySum = 0;

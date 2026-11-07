@@ -84,8 +84,8 @@ const membership = import.meta.env.PUBLIC_MEMBERSHIP_ENABLED === 'true';
         <label class="btn">Choose a recording<input data-recording type="file" accept=".wav,.mp3,.aiff,.aif,audio/*" hidden></label>
       </div>
       <div class="analyze-grid">
-        <label>Fundamental Hz
-          <input data-fundamental type="number" min="20" max="5000" step="0.1" placeholder="Auto">
+        <label>Root
+          <input data-fundamental type="text" placeholder="Auto, or A3, or 220">
         </label>
         <label>Threshold <span data-threshold-out>40</span>
           <input data-threshold type="range" min="12" max="80" step="1" value="40">
@@ -95,6 +95,12 @@ const membership = import.meta.env.PUBLIC_MEMBERSHIP_ENABLED === 'true';
         </label>
       </div>
       <div class="row"><button type="button" class="btn" data-analyze>Analyze</button></div>
+      <p class="note" data-root-readout>Root appears after analysis.</p>
+      <div class="row">
+        <button type="button" class="btn" data-root-down disabled>Octave down</button>
+        <button type="button" class="btn" data-root-up disabled>Octave up</button>
+      </div>
+      <p class="note">Click a partial number to make it ratio 1. Type a note or a frequency to override the root.</p>
       <p class="note" data-analyze-msg></p>
     </section>
 
@@ -143,6 +149,7 @@ const membership = import.meta.env.PUBLIC_MEMBERSHIP_ENABLED === 'true';
   table.partials th, table.partials td { text-align: left; padding: .45rem .6rem .45rem 0; border-bottom: 1px solid var(--line); }
   table.partials th { color: var(--muted); font-weight: 500; }
   table.partials input { width: 7rem; max-width: 100%; padding: .3rem .4rem; border: 1px solid var(--line); background: var(--card); border-radius: 4px; }
+  button.partial-index { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; text-underline-offset: .15em; }
   @media (max-width: 700px) {
     table.partials input { width: 4.6rem; }
     table.partials th, table.partials td { padding-right: .35rem; }

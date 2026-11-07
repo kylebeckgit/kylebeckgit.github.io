@@ -134,39 +134,157 @@ function localPeaks(mag, sampleRate, fftSize) {
   return peaks;
 }
 
-function harmonicScore(candidate, peaks) {
-  let score = 0;
-  for (const peak of peaks.slice(0, 24)) {
-    const ratio = peak.freq / candidate;
-    const nearest = Math.max(1, Math.round(ratio));
-    const error = Math.abs(ratio - nearest) / nearest;
-    if (error < 0.035) score += peak.amp;
+const NOTE_SEMIS = { C: -9, D: -7, E: -5, F: -4, G: -2, A: 0, B: 2 };
+const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+
+export function parseRoot(text) {
+  const raw = String(text ?? '').trim();
+  if (!raw) return null;
+  const hz = Number(raw.replace(/hz/i, '').trim());
+  if (Number.isFinite(hz) && hz >= 20 && hz <= 5000 && !/[a-z]/i.test(raw.replace(/hz/i, ''))) return hz;
+  const match = /^([A-Ga-g])([#b♯♭])?(-?\d)$/.exec(raw.replace(/\s+/g, ''));
+  if (!match) return null;
+  let semi = NOTE_SEMIS[match[1].toUpperCase()];
+  if (match[2] === '#' || match[2] === '♯') semi += 1;
+  if (match[2] === 'b' || match[2] === '♭') semi -= 1;
+  const octave = Number(match[3]);
+  const freq = 440 * 2 ** ((semi + (octave - 4) * 12) / 12);
+  return freq >= 20 && freq <= 5000 ? freq : null;
+}
+
+export function frequencyToNote(hz) {
+  if (!(hz > 0)) return '';
+  const semisFromC4 = Math.round(12 * Math.log2(hz / 261.6255653005986));
+  const name = NOTE_NAMES[((semisFromC4 % 12) + 12) % 12];
+  const octave = 4 + Math.floor(semisFromC4 / 12);
+  return `${name}${octave}`;
+}
+
+function peakNear(peaks, freq) {
+  let best = null;
+  let error = 0.045;
+  for (const peak of peaks) {
+    const rel = Math.abs(peak.freq - freq) / freq;
+    if (rel < error) {
+      error = rel;
+      best = peak;
+    }
   }
-  return score;
+  return best;
+}
+
+function explainCandidate(f0, peaks) {
+  let matched = 0;
+  let possible = 0;
+  let rootAmp = 0;
+  let onsetAtRoot = 0;
+  for (const peak of peaks) {
+    const weight = peak.amp * (0.4 + 0.6 * (peak.onset ?? 1));
+    possible += weight;
+    const ratio = peak.freq / f0;
+    const harmonic = Math.round(ratio);
+    if (harmonic < 1 || harmonic > 48) continue;
+    const tol = Math.min(0.05, 0.03 + 0.0015 * harmonic);
+    if (Math.abs(ratio - harmonic) / harmonic <= tol) matched += weight;
+    if (Math.abs(ratio - 1) <= 0.04) {
+      rootAmp = Math.max(rootAmp, peak.amp);
+      onsetAtRoot = Math.max(onsetAtRoot, peak.onset ?? 1);
+    }
+  }
+  return { matched, possible, rootAmp, onsetAtRoot, coverage: possible > 0 ? matched / possible : 0 };
+}
+
+function candidateValue(f0, peaks, strongest) {
+  const explained = explainCandidate(f0, peaks);
+  const octaveUp = peakNear(peaks, f0 * 2);
+  const third = peakNear(peaks, f0 * 3);
+  const fourth = peakNear(peaks, f0 * 4);
+  let factor = 1;
+  // A quiet partial an octave under a much stronger one is the hum, not the strike.
+  if (explained.rootAmp > 0 && octaveUp && octaveUp.amp > explained.rootAmp * 2.2 && octaveUp.amp >= strongest * 0.45) {
+    factor = 0.38;
+  } else if (explained.rootAmp === 0) {
+    const evenOnly = octaveUp && fourth && !third;
+    if (evenOnly || !octaveUp) factor = 0.2;
+    else factor = 1.08;
+  }
+  const onset = 0.75 + 0.25 * explained.onsetAtRoot;
+  return { ...explained, value: explained.matched * factor * onset, f0 };
+}
+
+export function selectRoot(peaks) {
+  if (!peaks?.length) return null;
+  const strongest = peaks[0].amp || 1;
+  const strong = peaks.filter((peak) => peak.amp >= strongest * 0.1 && peak.freq >= 30 && peak.freq <= 2500);
+  const lows = [...strong].sort((a, b) => a.freq - b.freq).slice(0, 8);
+  const candidates = new Set();
+  for (const peak of lows) {
+    candidates.add(peak.freq);
+    if (peak.freq / 2 >= 30) candidates.add(peak.freq / 2);
+    if (peak.freq * 2 <= 4000) candidates.add(peak.freq * 2);
+  }
+  if (peaks.yin) {
+    candidates.add(peaks.yin);
+    if (peaks.yin / 2 >= 30) candidates.add(peaks.yin / 2);
+    if (peaks.yin * 2 <= 4000) candidates.add(peaks.yin * 2);
+  }
+  const ranked = [];
+  for (const f0 of candidates) {
+    if (!(f0 >= 30 && f0 <= 2000)) continue;
+    const scored = candidateValue(f0, peaks.slice(0, 20), strongest);
+    const snapped = peakNear(peaks, f0);
+    scored.f0 = snapped && Math.abs(snapped.freq - f0) / f0 < 0.04 ? snapped.freq : f0;
+    ranked.push(scored);
+  }
+  ranked.sort((a, b) => b.value - a.value);
+  const best = ranked[0];
+  if (!best) return { hz: peaks[0].freq, confidence: 'low' };
+  const lowestReal = lows[0]?.freq || peaks[0].freq;
+  const missing = ranked.find((item) => (
+    item.rootAmp <= 0
+    && Math.abs(item.f0 * 2 - lowestReal) / lowestReal < 0.04
+    && peakNear(peaks, item.f0 * 3)
+    && item.coverage > 0.55
+  ));
+  if (missing && (best.rootAmp < strongest * 0.2 || missing.value >= best.value * 0.85)) {
+    return { hz: missing.f0, confidence: missing.coverage > 0.75 ? 'high' : 'medium' };
+  }
+  const missingStack = best.rootAmp <= 0 && peakNear(peaks, best.f0 * 2) && peakNear(peaks, best.f0 * 3);
+  if (best.rootAmp < strongest * 0.2 && !missingStack) {
+    const loud = peaks.filter((peak) => peak.amp >= strongest * 0.4 && peak.freq <= 2000);
+    loud.sort((a, b) => a.freq - b.freq);
+    return { hz: (loud[0] || peaks[0]).freq, confidence: 'medium' };
+  }
+  if (best.coverage < 0.32 && !missingStack) {
+    const loud = peaks.filter((peak) => peak.amp >= strongest * 0.45 && peak.freq <= 2000);
+    loud.sort((a, b) => (b.onset ?? 1) - (a.onset ?? 1) || a.freq - b.freq);
+    const low = [...loud].sort((a, b) => a.freq - b.freq)[0];
+    return { hz: (low || peaks[0]).freq, confidence: 'low' };
+  }
+  const up = candidateValue(best.f0 * 2, peaks.slice(0, 20), strongest);
+  const down = best.f0 / 2 >= 30 ? candidateValue(best.f0 / 2, peaks.slice(0, 20), strongest) : null;
+  let hz = best.f0;
+  let margin = best.value / Math.max(up.value, down?.value || 0, 1e-9);
+  const upPeak = peakNear(peaks, best.f0 * 2);
+  const here = peakNear(peaks, best.f0);
+  if (here && upPeak && upPeak.amp > here.amp * 2.2 && upPeak.amp >= strongest * 0.45 && up.value > best.value * 0.45) {
+    hz = upPeak.freq;
+    margin = up.value / Math.max(best.value, 1e-9);
+  } else if (down && !(here && here.amp > (peakNear(peaks, best.f0 / 2)?.amp || 0) * 2)) {
+    margin = best.value / Math.max(down.value, up.value, 1e-9);
+  }
+  const confidence = margin > 1.3 && best.coverage > 0.4 ? 'high' : margin > 1.08 ? 'medium' : 'low';
+  return { hz, confidence };
 }
 
 function chooseFundamental(samples, sampleRate, peaks, requested) {
-  const set = Number(requested);
-  if (Number.isFinite(set) && set >= 20 && set <= 5000) return set;
-  const yin = detectFundamental(samples, sampleRate);
-  const strongest = peaks[0]?.amp || 1;
-  const candidates = [];
-  if (yin) candidates.push(yin, yin / 2, yin * 2);
-  for (const peak of peaks.slice(0, 8)) candidates.push(peak.freq);
-  let best = null;
-  let bestScore = -1;
-  for (const candidate of candidates) {
-    if (!(candidate >= 30 && candidate <= 2000)) continue;
-    const near = peaks.find((peak) => Math.abs(peak.freq - candidate) / candidate < 0.045);
-    // A subharmonic with no partial of its own explains the others too well. Ignore it.
-    if (!near || near.amp < strongest * 0.08) continue;
-    const score = harmonicScore(near.freq, peaks);
-    if (score > bestScore) {
-      bestScore = score;
-      best = near.freq;
-    }
+  const set = typeof requested === 'number' ? requested : parseRoot(requested);
+  if (Number.isFinite(set) && set >= 20 && set <= 5000) {
+    return { hz: set, confidence: 'set' };
   }
-  return best || peaks[0]?.freq || yin;
+  const yin = detectFundamental(samples, sampleRate);
+  peaks.yin = yin || 0;
+  return selectRoot(peaks);
 }
 
 function keepPeaks(peaks, fundamental, thresholdDb, maxCount) {
@@ -240,7 +358,9 @@ export function analyzeSamples(samples, sampleRate, options = {}) {
   const mag = magnitudeSpectrum(freqSamples, fftSize);
   const peaks = localPeaks(mag, sampleRate, fftSize);
   if (!peaks.length) throw new Error('No spectral peaks were found.');
-  const fundamental = chooseFundamental(usable, sampleRate, peaks, options.fundamental);
+  attachOnset(peaks, usable, sampleRate);
+  const chosen = chooseFundamental(usable, sampleRate, peaks, options.fundamental);
+  const fundamental = chosen?.hz;
   if (!(fundamental > 0)) throw new Error('Set the fundamental and try again.');
   const threshold = Number.isFinite(Number(options.thresholdDb)) ? Number(options.thresholdDb) : 40;
   const maxCount = Math.min(64, Math.max(1, Math.trunc(Number(options.maxPartials) || 64)));
@@ -274,9 +394,31 @@ export function analyzeSamples(samples, sampleRate, options = {}) {
   }));
   return {
     fundamental,
+    confidence: chosen.confidence,
+    note: frequencyToNote(fundamental),
     partials,
     usedFallbackDecay: fitted.some((value) => !value),
   };
+}
+
+function attachOnset(peaks, samples, sampleRate) {
+  const length = Math.min(samples.length, Math.max(2048, Math.floor(sampleRate * 0.08)));
+  const fftSize = nextPow2(length);
+  const early = magnitudeSpectrum(samples.subarray(0, length), fftSize);
+  let maxRatio = 0;
+  for (const peak of peaks) {
+    const earlyAmp = amplitudeAt(early, peak.freq, sampleRate, fftSize);
+    peak.onset = earlyAmp / (peak.amp + 1e-12);
+    if (peak.onset > maxRatio) maxRatio = peak.onset;
+  }
+  if (maxRatio > 0) {
+    for (const peak of peaks) peak.onset = Math.min(1, peak.onset / maxRatio);
+  }
+}
+
+export function estimateRoot(samples, sampleRate) {
+  const result = analyzeSamples(samples, sampleRate, { maxPartials: 16, thresholdDb: 50 });
+  return { hz: result.fundamental, note: result.note, confidence: result.confidence };
 }
 
 function mixToMono(audioBuffer) {
