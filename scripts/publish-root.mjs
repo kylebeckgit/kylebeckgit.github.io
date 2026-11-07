@@ -54,7 +54,7 @@ if (await exists(path.join(dist, '.nojekyll')) || await exists(path.join(root, '
   process.exit(1);
 }
 const config = await readFile(path.join(root, '_config.yml'), 'utf8');
-for (const name of ['art', 'screens', 'src', 'public', 'scripts', 'dist', 'node_modules']) {
+for (const name of ['art', 'screens', 'src', 'public', 'scripts', 'workers', 'dist', 'node_modules']) {
   if (!new RegExp(`^\\s*-\\s+${name}\\s*$`, 'm').test(config)) {
     console.error(`_config.yml must exclude ${name} so it is not served.`);
     process.exit(1);
