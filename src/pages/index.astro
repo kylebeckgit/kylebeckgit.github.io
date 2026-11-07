@@ -1,42 +1,61 @@
 ---
 import Base from '../layouts/Base.astro';
-import PackTable from '../components/PackTable.astro';
+import Cover from '../components/Cover.astro';
+import DemoList from '../components/DemoList.astro';
 import packs from '../data/packs.json';
-import activity from '../data/activity.json';
-const fmt = (d) => new Date(d + 'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+import presets from '../data/tonverk_presets.json';
+const f = packs[0];
+const freebies = presets.flatMap((c) => c.subcategories.flatMap((s) => s.items.map((i) => ({ ...i, group: s.name, name: i.name.replace(/^Tonverk Multisample Instrument:\s*/, '') }))));
 ---
 <Base path="/">
-  <p class="eyebrow">Musician &amp; Developer</p>
-  <h1>Sample packs, synth guides and sound design tools.</h1>
-  <p class="lede">[BIO: one or two sentences, to confirm. For example, what you play, what you make, and where.]</p>
-  <div class="row"><a class="btn solid" href="/packs/">Browse packs</a><a class="btn" href="/tools/">Try the tools</a></div>
+  <div class="hello">
+    <h1 class="name">Kyle Beck</h1>
+    <p class="voice">[BIO line: to confirm]</p>
+  </div>
 
-  <section aria-labelledby="h-packs">
-    <div class="sechead"><h2 id="h-packs">Packs</h2><a href="/packs/">All packs</a></div>
-    <PackTable packs={packs} />
+  <section class="feature" aria-labelledby="h-feat">
+    <a href={`/packs/${f.slug}/`} class="feature-cover"><Cover p={f} /></a>
+    <div class="feature-body">
+      <p class="kicker">New pack</p>
+      <h2 id="h-feat" class="feature-title"><a href={`/packs/${f.slug}/`}>{f.title}</a></h2>
+      <p class="pitch">{f.subtitle}. {f.pitch}</p>
+      <p class="price">{f.price}</p>
+      <div class="buyrow">
+        <a class="buy lemonsqueezy-button" href={f.buyUrl}>Buy</a>
+        <a class="sec-link lemonsqueezy-button" href={f.demo.lsCheckoutUrl}>Free sampler</a>
+      </div>
+      <DemoList demos={f.demos.slice(0, 1)} />
+    </div>
   </section>
 
-  <section aria-labelledby="h-lib">
-    <div class="sechead"><h2 id="h-lib">Library</h2><a href="/library/">All</a></div>
-    <ul class="list">
-      <li><a href="/plus3-doremidi-guide/"><h3>Endorphin.es Plus 3 + DOREMIDI Guide</h3></a><p>Configuration guide for connecting the Endorphin.es Plus 3 expression pedal to software synthesizers using the DOREMIDI MPC-10.</p></li>
-      <li><a href="/library/tonverk-presets/"><h3>Tonverk Presets</h3></a><p>Multisample instruments for the Elektron Tonverk: bass, keys, mallets and percussion.</p></li>
+  <section class="block" aria-labelledby="h-packs">
+    <h2 id="h-packs">Packs</h2>
+    <ul class="packlist">{packs.map((p) => (
+      <li><a href={`/packs/${p.slug}/`} class="pl-cover"><Cover p={p} size="sm" /></a>
+        <div><a class="pl-title" href={`/packs/${p.slug}/`}>{p.title}</a><p>{p.subtitle}</p></div>
+        <span class="pl-price">{p.price}</span></li>))}
     </ul>
   </section>
 
-  <section aria-labelledby="h-tools">
-    <div class="sechead"><h2 id="h-tools">Tools</h2><a href="/tools/">All</a></div>
-    <table class="index">
-      <thead><tr><th>Tool</th><th class="hide-s">For</th><th>Runs</th></tr></thead>
-      <tbody>
-        <tr><td><a href="/z3-webgpu.html">Modal Generator</a><p>Describe a modal profile in plain language; the tool builds a Zebra 3 profile that resembles it.</p></td><td class="m hide-s">u-he Zebra 3</td><td class="m">Local WebGPU</td></tr>
-        <tr><td><a href="/uhm-generator.html">.uhm Generator</a><p>Generates .uhm scripts with a local model. No server, no API key.</p></td><td class="m hide-s">u-he Hive 2</td><td class="m">Local WebGPU</td></tr>
-      </tbody>
-    </table>
+  <section class="block" aria-labelledby="h-free">
+    <h2 id="h-free">Free Tonverk instruments</h2>
+    <p class="note">Multisample instruments I've made for the Tonverk. Free, or pay what you want.</p>
+    <ul class="freelist">{freebies.map((i) => (
+      <li><a href={i.url}>{i.name}</a><span class="fg">{i.group}</span><span class="fd">{i.description}</span><span class="ff">Free</span></li>))}
+    </ul>
   </section>
 
-  <section aria-labelledby="h-up">
-    <div class="sechead"><h2 id="h-up">Recent updates</h2></div>
-    <ul class="list updates">{activity.slice(0,5).map((a) => <li><time datetime={a.date}>{fmt(a.date)}</time> <a href={a.url}>{a.title}</a></li>)}</ul>
+  <section class="block" aria-labelledby="h-tools">
+    <h2 id="h-tools">Tools</h2>
+    <ul class="plain">
+      <li><a href="/z3-webgpu.html">Modal Generator for Zebra 3</a> <span>Describe a modal profile in plain language and get a Zebra 3 profile back. Runs locally on WebGPU.</span></li>
+      <li><a href="/uhm-generator.html">.uhm Generator for Hive 2</a> <span>Writes .uhm scripts with a local model. No server, no API key.</span></li>
+    </ul>
   </section>
+
+  <section class="block about" aria-labelledby="h-about">
+    <div class="photo-ph" role="img" aria-label="Photo of Kyle (placeholder)">[PHOTO: Kyle or the studio, pending]</div>
+    <div><h2 id="h-about">About</h2><p>[ABOUT: two or three sentences in your own words, to confirm]</p><p><a href="/about/">More about me</a> · <a href="mailto:kyle@kyle-beck.com">kyle@kyle-beck.com</a></p></div>
+  </section>
+  <script is:inline src="https://app.lemonsqueezy.com/js/lemon.js" defer></script>
 </Base>

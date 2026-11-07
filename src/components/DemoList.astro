@@ -1,0 +1,36 @@
+---
+import { peaks } from '../lib/peaks.js';
+const { demos } = Astro.props;
+const rows = demos.map((d) => ({ ...d, pk: peaks(d.file) }));
+---
+<ol class="demos">{rows.map((d, i) => (
+  <li class="demo" data-src={d.file ? '/' + d.file : ''}>
+    <button class="play" type="button" aria-label={`Play ${d.name}`} disabled={!d.file}><span class="ico" aria-hidden="true"></span></button>
+    <div class="dmeta"><span class="dname">{d.name}</span><span class="ddesc">{d.desc}</span></div>
+    <div class="wave" aria-hidden="true">
+      <svg viewBox={`0 0 ${d.pk.values.length * 3} 40`} preserveAspectRatio="none">
+        {d.pk.values.map((v, k) => <rect x={k * 3} y={20 - Math.max(v, .04) * 19} width="2" height={Math.max(v, .04) * 38} />)}
+      </svg>
+      <div class="prog"></div>
+      {!d.pk.real && <span class="wavenote">Placeholder waveform, audio pending</span>}
+    </div>
+    <span class="dur">{d.file ? '' : '–:––'}</span>
+  </li>))}
+</ol>
+<script>
+  let cur = null;
+  document.querySelectorAll('.demo').forEach((row) => {
+    const src = row.dataset.src; if (!src) return;
+    const a = new Audio(); a.preload = 'none'; a.src = src;
+    const btn = row.querySelector('.play'), prog = row.querySelector('.prog'), dur = row.querySelector('.dur');
+    const fmt = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+    btn.addEventListener('click', () => {
+      if (cur && cur !== a) { cur.pause(); }
+      if (a.paused) { a.play(); cur = a; } else a.pause();
+    });
+    a.addEventListener('play', () => { document.querySelectorAll('.demo.on').forEach((r) => r.classList.remove('on')); row.classList.add('on'); });
+    a.addEventListener('pause', () => row.classList.remove('on'));
+    a.addEventListener('timeupdate', () => { prog.style.width = (a.currentTime / a.duration * 100 || 0) + '%'; dur.textContent = fmt(a.duration - a.currentTime); });
+    row.querySelector('.wave').addEventListener('click', (e) => { if (!a.duration) return; const r = e.currentTarget.getBoundingClientRect(); a.currentTime = (e.clientX - r.left) / r.width * a.duration; });
+  });
+</script>
