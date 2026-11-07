@@ -1,0 +1,1 @@
+Hard sync: the right stem of an h restarts past the cycle.
