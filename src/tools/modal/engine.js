@@ -174,6 +174,7 @@ export function buildPartials(rawControls) {
     let gainDb = tilt * octaves;
     const odd = sortedIndex % 2 === 0;
     gainDb += controls.oddEven * (odd ? 8 : -8);
+    // Decay is T60 in seconds: the time for this partial to fall 60 dB.
     const decay = (2.8 * (1.05 - 0.85 * controls.damping)) / 2 ** (octaves * (0.3 + controls.damping * 1.4));
     return {
       ratio,
