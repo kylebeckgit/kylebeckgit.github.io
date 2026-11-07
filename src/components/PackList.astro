@@ -1,7 +1,0 @@
----
-const { packs } = Astro.props;
----
-<ul class="entries">{packs.map((p) => (
-  <li><a class="t" href={`/packs/${p.slug}/`}>{p.title}</a>, <span class="k">{p.subtitle[0].toLowerCase() + p.subtitle.slice(1)}</span>
-    <span class="d">{p.status}. <span class="todo">{p.price}</span></span></li>))}
-</ul>

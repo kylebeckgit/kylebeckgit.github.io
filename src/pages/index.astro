@@ -1,25 +1,42 @@
 ---
 import Base from '../layouts/Base.astro';
-import PackList from '../components/PackList.astro';
+import PackTable from '../components/PackTable.astro';
 import packs from '../data/packs.json';
 import activity from '../data/activity.json';
-const fmt = (d) => new Date(d + 'T12:00:00').toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
+const fmt = (d) => new Date(d + 'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
 ---
 <Base path="/">
-  <h1>Kyle Beck makes sounds, and the tools for making them.</h1>
-  <p class="intro">Wavetables and multisample instruments for the Elektron Tonverk, setup guides for odd bits of gear, and small generators for u-he synths that run in your browser. <span class="todo">[BIO: a sentence about you, to confirm]</span></p>
+  <p class="eyebrow">Musician &amp; Developer</p>
+  <h1>Sample packs, synth guides and sound design tools.</h1>
+  <p class="lede">[BIO: one or two sentences, to confirm. For example, what you play, what you make, and where.]</p>
+  <div class="row"><a class="btn solid" href="/packs/">Browse packs</a><a class="btn" href="/tools/">Try the tools</a></div>
 
-  <section class="sec"><h2>Packs</h2><div><PackList packs={packs} /><p><a href="/packs/">All packs</a></p></div></section>
+  <section aria-labelledby="h-packs">
+    <div class="sechead"><h2 id="h-packs">Packs</h2><a href="/packs/">All packs</a></div>
+    <PackTable packs={packs} />
+  </section>
 
-  <section class="sec"><h2>Library</h2><div><ul class="entries">
-    <li><a class="t" href="/plus3-doremidi-guide/">Endorphin.es Plus 3 with the DOREMIDI MPC-10</a>, <span class="k">a setup guide</span><span class="d">How to get the Plus 3 expression pedal talking to software synthesizers through the MPC-10.</span></li>
-    <li><a class="t" href="/library/tonverk-presets/">Tonverk presets</a>, <span class="k">single instruments</span><span class="d">Bass, keys, mallets and percussion multisamples, each pay what you want.</span></li>
-  </ul></div></section>
+  <section aria-labelledby="h-lib">
+    <div class="sechead"><h2 id="h-lib">Library</h2><a href="/library/">All</a></div>
+    <ul class="list">
+      <li><a href="/plus3-doremidi-guide/"><h3>Endorphin.es Plus 3 + DOREMIDI Guide</h3></a><p>Configuration guide for connecting the Endorphin.es Plus 3 expression pedal to software synthesizers using the DOREMIDI MPC-10.</p></li>
+      <li><a href="/library/tonverk-presets/"><h3>Tonverk Presets</h3></a><p>Multisample instruments for the Elektron Tonverk: bass, keys, mallets and percussion.</p></li>
+    </ul>
+  </section>
 
-  <section class="sec"><h2>Tools</h2><div><ul class="entries">
-    <li><a class="t" href="/z3-webgpu.html">Modal Generator</a>, <span class="k">for Zebra 3</span><span class="d">Describe a modal profile in words and get one back. It runs on your own graphics card; nothing leaves the browser.</span></li>
-    <li><a class="t" href="/uhm-generator.html">.uhm Generator</a>, <span class="k">for Hive 2</span><span class="d">Writes .uhm scripts with a small local model. No server, no API key.</span></li>
-  </ul></div></section>
+  <section aria-labelledby="h-tools">
+    <div class="sechead"><h2 id="h-tools">Tools</h2><a href="/tools/">All</a></div>
+    <table class="index">
+      <thead><tr><th>Tool</th><th class="hide-s">For</th><th>Runs</th></tr></thead>
+      <tbody>
+        <tr><td><a href="/z3-webgpu.html">Modal Generator</a><p>Describe a modal profile in plain language; the tool builds a Zebra 3 profile that resembles it.</p></td><td class="m hide-s">u-he Zebra 3</td><td class="m">Local WebGPU</td></tr>
+        <tr><td><a href="/uhm-generator.html">.uhm Generator</a><p>Generates .uhm scripts with a local model. No server, no API key.</p></td><td class="m hide-s">u-he Hive 2</td><td class="m">Local WebGPU</td></tr>
+      </tbody>
+    </table>
+  </section>
 
-  <section class="sec"><h2>Lately</h2><div><ul class="entries">{activity.slice(0,4).map((a) => <li><a href={a.url}>{a.title.replace('Tonverk Multisample: ','')}</a> <span class="k">{a.type.toLowerCase()}, {fmt(a.date)}</span></li>)}</ul></div></section>
+  <section aria-labelledby="h-up">
+    <div class="sechead"><h2 id="h-up">Recent updates</h2></div>
+    <ul class="list updates">{activity.slice(0,5).map((a) => <li><time datetime={a.date}>{fmt(a.date)}</time> <a href={a.url}>{a.title}</a></li>)}</ul>
+  </section>
 </Base>
