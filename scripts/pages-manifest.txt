@@ -1,12 +1,18 @@
 404.html
 CNAME
 about/index.html
+assets/images/apple-touch-icon.png
+assets/images/favicon-32.png
 assets/images/favicon.png
-assets/images/sidebar-logo.png
+assets/images/favicon.svg
+assets/images/icon-192.png
+assets/images/icon-512.png
+assets/images/og.png
 astro/about.D0vleC1P.css
 astro/z3-webgpu.astro_astro_type_script_index_0_lang.BSahuK8s.js
 astro/z3-webgpu.kj1TRWLu.css
 contact/index.html
+favicon.ico
 fonts/archivo/LICENSE
 fonts/archivo/archivo-latin-wdth-normal.woff2
 fonts/big-shoulders-display/LICENSE
@@ -32,5 +38,6 @@ modal-resonator.worklet.js
 packs/chordspeak-tonverk/cover.webp
 packs/chordspeak-tonverk/index.html
 packs/index.html
+site.webmanifest
 tools/index.html
 z3-webgpu.html
