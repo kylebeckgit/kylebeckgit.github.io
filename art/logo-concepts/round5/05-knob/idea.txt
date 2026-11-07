@@ -1,0 +1,1 @@
+A dial with the pointer at one o'clock.
