@@ -9,6 +9,7 @@
   "blurb": "[DESCRIPTION: to confirm. One or two sentences on the wavetables and how they were made.]",
   "requirements": "[REQUIREMENTS: Tonverk OS version, to confirm]",
   "buyUrl": "https://kylebeck.lemonsqueezy.com/buy/LS_VARIANT_ID_TODO_CHORDSPEAK_FREE?embed=1",
+  "_buyUrl": "While buyUrl contains TODO, the control renders as non-link text: Coming soon. Replace buyUrl with the live Lemon Squeezy checkout URL to turn the button back on.",
   "titleNote": "PACK_NAME: single source of truth; change only here",
   "demo": {
    "mode": "email-required",

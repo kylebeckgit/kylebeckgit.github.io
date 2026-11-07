@@ -1,0 +1,8 @@
+---
+import { isLiveUrl } from '../lib/links.js';
+const { href, label = 'Buy', tabindex } = Astro.props;
+const live = isLiveUrl(href);
+---
+{live
+  ? <a class="buy lemonsqueezy-button" href={href} tabindex={tabindex}>{label}</a>
+  : <span class="soon">Coming soon</span>}

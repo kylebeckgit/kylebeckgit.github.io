@@ -41,7 +41,6 @@ dl.spec{display:grid;grid-template-columns:max-content 1fr;gap:.4rem 1.25rem;mar
 footer.site{border-top:1px solid var(--line);padding:2rem 0;color:var(--muted);font-size:.9rem}
 footer.site .wrap{display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap}
 footer.site ul{display:flex;gap:1rem;list-style:none;margin:0;padding:0}
-.preview-banner{background:#7a4b00;color:#fff;font-size:.9rem;text-align:center;padding:.4rem}
 
 /* Editorial index tables (replace card grids) */
 table.index{width:100%;border-collapse:collapse;font-size:.95rem}
@@ -65,6 +64,7 @@ table.index td p{margin:.25rem 0 0;color:var(--muted)}
 .buyrow{display:flex;gap:1rem;align-items:center;flex-wrap:wrap;margin-bottom:1.25rem}
 a.buy{display:inline-block;background:var(--accent);color:#fff;text-decoration:none;font-weight:650;font-size:1.05rem;padding:.8rem 2.2rem;border-radius:3px}
 a.buy:hover{background:#b3360f}
+.soon{color:var(--muted);font-weight:650;font-size:1.05rem;cursor:default}
 .sec-link{font-weight:600;text-decoration:underline;text-decoration-color:var(--fg);text-underline-offset:4px}
 .sec-link.big{font-size:1.15rem;white-space:nowrap}
 .fine{color:var(--muted);font-size:.95rem;margin:0}
@@ -126,6 +126,7 @@ table.spec th{font-weight:500;color:var(--muted);width:48%}
 .stickybar .wrap{display:flex;align-items:center;gap:1.25rem;min-height:3.5rem}
 .sb-title{font-family:var(--head);font-stretch:var(--head-stretch);font-weight:var(--head-weight);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sb-price{font-weight:600;white-space:nowrap}.stickybar .buy{padding:.5rem 1.4rem;font-size:.95rem}
+.stickybar .soon{font-size:.95rem}
 @media(max-width:820px){
  .feature,.hero,.two,.about{grid-template-columns:1fr;gap:1.5rem}
  .about .photo-ph{max-width:14rem}

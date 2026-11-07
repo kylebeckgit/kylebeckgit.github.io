@@ -1,18 +1,46 @@
-# Deploys to GitHub Pages. Requires repo Settings > Pages > Source = "GitHub Actions" (Kyle's approval).
-name: Deploy
-on: { push: { branches: [main] }, workflow_dispatch: {} }
-permissions: { contents: read, pages: write, id-token: write }
-concurrency: { group: pages, cancel-in-progress: false }
+# Pages source is "Deploy from a branch": main, folder /. This workflow does not
+# deploy. kyle-beck.com serves the committed build at the repository root
+# (CNAME + .nojekyll). The job fails if a fresh Astro build does not match that root.
+name: Check Pages build
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      ASTRO_TELEMETRY_DISABLED: 1
     steps:
       - uses: actions/checkout@v4
-      - uses: withastro/action@v3
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment: { name: github-pages, url: "${{ steps.d.outputs.page_url }}" }
-    steps:
-      - id: d
-        uses: actions/deploy-pages@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: node scripts/publish-root.mjs --check
+      - name: Launch checks
+        run: |
+          set -euo pipefail
+          if grep -R -n "noindex" dist --include='*.html'; then
+            echo "noindex is still in the build"
+            exit 1
+          fi
+          if grep -R -n "LS_VARIANT_ID_TODO" dist --include='*.html'; then
+            echo "placeholder Lemon Squeezy URL is linked in the build"
+            exit 1
+          fi
+          if grep -R -n "preview-banner" dist --include='*.html'; then
+            echo "preview banner is still in the build"
+            exit 1
+          fi
+          test ! -e dist/plus3-doremidi-guide
+          test ! -e dist/plus3-doremidi-guide.html
+          grep -q "Coming soon" dist/index.html
+          grep -q "Coming soon" dist/packs/chordspeak-tonverk/index.html
+          grep -qx "kyle-beck.com" dist/CNAME
+          test -f dist/.nojekyll
+          test -f dist/fonts/archivo/archivo-latin-wdth-normal.woff2

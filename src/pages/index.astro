@@ -2,9 +2,13 @@
 import Base from '../layouts/Base.astro';
 import Cover from '../components/Cover.astro';
 import DemoList from '../components/DemoList.astro';
+import BuyLink from '../components/BuyLink.astro';
 import packs from '../data/packs.json';
 import presets from '../data/tonverk_presets.json';
+import { isLiveUrl } from '../lib/links.js';
 const f = packs[0];
+const samplerLive = f.showSampler && isLiveUrl(f.demo.lsCheckoutUrl);
+const checkoutLive = isLiveUrl(f.buyUrl) || samplerLive;
 const freebies = presets.flatMap((c) => c.subcategories.flatMap((s) => s.items.map((i) => ({ ...i, group: s.name, name: i.name.replace(/^Tonverk Multisample Instrument:\s*/, '') }))));
 ---
 <Base path="/">
@@ -21,8 +25,8 @@ const freebies = presets.flatMap((c) => c.subcategories.flatMap((s) => s.items.m
       <p class="pitch">{f.pitch}</p>
       <p class="price">{f.price}</p>
       <div class="buyrow">
-        <a class="buy lemonsqueezy-button" href={f.buyUrl}>{f.buyLabel || 'Buy'}</a>
-        {f.showSampler && <a class="sec-link lemonsqueezy-button" href={f.demo.lsCheckoutUrl}>Free sampler</a>}
+        <BuyLink href={f.buyUrl} label={f.buyLabel || 'Buy'} />
+        {samplerLive && <a class="sec-link lemonsqueezy-button" href={f.demo.lsCheckoutUrl}>Free sampler</a>}
         <a class="sec-link" href={`/packs/${f.slug}/`}>What's inside</a>
       </div>
       {f.buyNote && <p class="fine">{f.buyNote}</p>}
@@ -59,5 +63,5 @@ const freebies = presets.flatMap((c) => c.subcategories.flatMap((s) => s.items.m
     <div class="photo-ph" role="img" aria-label="Photo of Kyle (placeholder)">[PHOTO: Kyle or the studio, pending]</div>
     <div><h2 id="h-about">About</h2><p>[ABOUT: two or three sentences in your own words, to confirm]</p><p><a href="/about/">More about me</a> · <a href="mailto:kyle@kyle-beck.com">kyle@kyle-beck.com</a></p></div>
   </section>
-  <script is:inline src="https://app.lemonsqueezy.com/js/lemon.js" defer></script>
+  {checkoutLive && <script is:inline src="https://app.lemonsqueezy.com/js/lemon.js" defer></script>}
 </Base>
