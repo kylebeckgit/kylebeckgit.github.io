@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+<rect width="512" height="512" fill="#F2EDE3"/>
+<line x1="32" y1="8" x2="32" y2="504" stroke="#C8BBA8" stroke-width="1"/>
+<line x1="8" y1="32" x2="504" y2="32" stroke="#C8BBA8" stroke-width="1"/>
+<line x1="64" y1="8" x2="64" y2="504" stroke="#C8BBA8" stroke-width="1"/>
+<line x1="8" y1="64" x2="504" y2="64" stroke="#C8BBA8" stroke-width="1"/>
+<line x1="96" y1="8" x2="96" y2="504" stroke="#C8BBA8" stroke-width="1"/>
+<line x1="8" y1="96" x2="504" y2="96" stroke="#C8BBA8" stroke-width="1"/>
+<line x1="128" y1="8" x2="128" y2="504" stroke="#C8BBA8" stroke-width="1"/>
+<line x1="8" y1="128" x2="504" y2="128" stroke="#C8BBA8" stroke-width="1"/>
+<line x1="160" y1="8" x2="160" y2="504" stroke="#C8BBA8" stroke-width="1"/>
+<line x1="8" y1="160" x2="504" y2="160" stroke="#C8BBA8" stroke-width="1"/>
+<line x1="192" y1="8" x2="192" y2="504" stroke="#C8BBA8" stroke-width="1"/>
+<line x1="8" y1="192" x2="504" y2="192" stroke="#C8BBA8" stroke-width="1"/>
+<line x1="224" y1="8" x2="224" y2="504" stroke="#C8BBA8" stroke-width="1"/>
+<line x1="8" y1="224" x2="504" y2="224" stroke="#C8BBA8" stroke-width="1"/>
+<line x1="256" y1="8" x2="256" y2="504" stroke="#C8BBA8" stroke-width="1"/>
+<line x1="8" y1="256" x2="504" y2="256" stroke="#C8BBA8" stroke-width="1"/>
+<line x1="288" y1="8" x2="288" y2="504" stroke="#C8BBA8" stroke-width="1"/>
+<line x1="8" y1="288" x2="504" y2="288" stroke="#C8BBA8" stroke-width="1"/>
+<line x1="320" y1="8" x2="320" y2="504" stroke="#C8BBA8" stroke-width="1"/>
+<line x1="8" y1="320" x2="504" y2="320" stroke="#C8BBA8" stroke-width="1"/>
+<line x1="352" y1="8" x2="352" y2="504" stroke="#C8BBA8" stroke-width="1"/>
+<line x1="8" y1="352" x2="504" y2="352" stroke="#C8BBA8" stroke-width="1"/>
+<line x1="384" y1="8" x2="384" y2="504" stroke="#C8BBA8" stroke-width="1"/>
+<line x1="8" y1="384" x2="504" y2="384" stroke="#C8BBA8" stroke-width="1"/>
+<line x1="416" y1="8" x2="416" y2="504" stroke="#C8BBA8" stroke-width="1"/>
+<line x1="8" y1="416" x2="504" y2="416" stroke="#C8BBA8" stroke-width="1"/>
+<line x1="448" y1="8" x2="448" y2="504" stroke="#C8BBA8" stroke-width="1"/>
+<line x1="8" y1="448" x2="504" y2="448" stroke="#C8BBA8" stroke-width="1"/>
+<line x1="480" y1="8" x2="480" y2="504" stroke="#C8BBA8" stroke-width="1"/>
+<line x1="8" y1="480" x2="504" y2="480" stroke="#C8BBA8" stroke-width="1"/>
+<line x1="20" y1="44.0" x2="492" y2="44.0" stroke="#D4421C" stroke-width="1.5"/>
+<line x1="20" y1="184.0" x2="492" y2="184.0" stroke="#D4421C" stroke-width="1.5"/>
+<line x1="20" y1="326.0" x2="492" y2="326.0" stroke="#D4421C" stroke-width="1.5"/>
+<line x1="20" y1="468.0" x2="492" y2="468.0" stroke="#D4421C" stroke-width="1.5"/>
+<path d="M 281.15 44.00 L 263.15 62.00 L 263.15 452.00 L 279.15 468.00 L 318.83 468.00 L 324.43 468.00 L 466.03 468.00 L 480.43 453.60 L 480.43 285.50 L 466.93 272.00 L 340.43 272.00 L 340.43 62.00 L 322.43 44.00 L 281.15 44.00 Z M 446.43 306.40 L 446.43 419.90 L 438.33 428.00 L 350.53 428.00 L 342.43 419.90 L 342.43 306.40 L 350.53 298.30 L 438.33 298.30 L 446.43 306.40 Z M 172.72 184.00 L 115.57 241.15 L 115.57 62.00 L 97.57 44.00 L 49.57 44.00 L 31.57 62.00 L 31.57 452.00 L 47.57 468.00 L 99.57 468.00 L 115.57 452.00 L 115.57 410.85 L 172.72 468.00 L 215.15 425.57 L 115.57 326.00 L 215.15 226.43 L 172.72 184.00 Z" fill="#1F1D1A"/>
+</svg>
