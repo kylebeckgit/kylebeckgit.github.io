@@ -9,8 +9,7 @@ const development = visible(copy.about.development);
 ---
 <Base title="About" path="/about/">
   <p class="eyebrow">About</p>
-  <h1>Kyle Beck</h1>
-  {lede && <p class="lede">{lede}</p>}
+  {lede ? <h1>{lede}</h1> : <h1>About</h1>}
   {bio && <p>{bio}</p>}
   {music && <h2 style="margin-top:2rem">Music</h2>}
   {music && <p>{music}</p>}

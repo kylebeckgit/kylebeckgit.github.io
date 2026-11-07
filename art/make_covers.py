@@ -17,8 +17,9 @@ def title(d, col, x=140, y=S-330, sub=True):
     d.text((x, y), 'Chordspeak', font=font('exp_bold', 150), fill=col)
     if sub: d.text((x + 6, y + 190), 'for Tonverk  ·  Kyle Beck', font=font('reg', 58), fill=col)
 
-# 1 waterfall of the chord-phrase table, drawn flat with occlusion
-def c1():
+# 1 waterfall of the chord-phrase table, drawn flat with occlusion.
+# The site cover is this drawing with no printed title (the page heading names the pack).
+def c1(labeled=True):
     im = Image.new('RGB', (S, S), PAPER); d = ImageDraw.Draw(im)
     t = load('CS_CHD01_Chord_Phrases'); xs = np.linspace(140, S - 140, 2048 // 4)
     for i in range(64):
@@ -26,7 +27,9 @@ def c1():
         pts = [(x, y0 - v * 110) for x, v in zip(xs, f)]
         d.polygon(pts + [(xs[-1], y0 + 400), (xs[0], y0 + 400)], fill=PAPER)
         d.line(pts, fill=ORANGE if i == 40 else INK, width=6 if i == 40 else 3)
-    d.rectangle([0, S - 420, S, S], fill=PAPER); title(d, INK); return im
+    if labeled:
+        d.rectangle([0, S - 420, S, S], fill=PAPER); title(d, INK)
+    return im
 # 2 all 64 waves of one table as an 8x8 grid on ink
 def c2():
     im = Image.new('RGB', (S, S), INK); d = ImageDraw.Draw(im)
@@ -54,6 +57,44 @@ def c4():
         h = 120 + 520 * (rms.std() / (rms.mean() + 1e-9))
         x = 130 + i * w; d.rectangle([x, 1620 - min(h, 640), x + w * .55, 1620], fill=INK)
     d.text((136, 1700), 'for Tonverk  ·  64 wavetables  ·  Kyle Beck', font=font('reg', 60), fill=INK); return im
-for n, fn in enumerate([c1, c2, c3, c4], 1):
-    p = f'{OUT}/chordspeak-cover-concept{n}-{fn.__name__ and ["waterfall","grid","single-cycle","index"][n-1]}.png'
-    fn().save(p); print(p)
+SITE = os.path.join(os.path.dirname(__file__), '..', 'public', 'packs', 'chordspeak-tonverk')
+
+def cover_from_concept():
+    """Wavetables are not in this checkout. Crop the title off concept 1 and square the waves."""
+    src = Image.open(os.path.join(OUT, 'chordspeak-cover-concept1-waterfall.png')).convert('RGB')
+    w, h = src.size
+    px = src.load()
+    def ink(x, y):
+        r, g, b = px[x, y]
+        return abs(r - PAPER[0]) + abs(g - PAPER[1]) + abs(b - PAPER[2]) > 18
+    # Waveform sits above the caption; the caption is a separate band of glyphs.
+    ys = [y for y in range(h) if sum(ink(x, y) for x in range(0, w, 4)) > 8 and y < 1600]
+    xs = [x for x in range(w) if any(ink(x, y) for y in range(ys[0], ys[-1], 3))]
+    m = 96
+    box = (max(0, xs[0] - m), max(0, ys[0] - m), min(w, xs[-1] + m), min(h, ys[-1] + m))
+    crop = src.crop(box)
+    side = max(crop.size)
+    canvas = Image.new('RGB', (side, side), PAPER)
+    canvas.paste(crop, ((side - crop.size[0]) // 2, (side - crop.size[1]) // 2))
+    return canvas
+
+def save_site_cover(im):
+    os.makedirs(SITE, exist_ok=True)
+    # One file: the home page shows this art large and as a thumbnail, so a srcset
+    # would download it twice. 960px covers a 390px phone at 2x and stays under 200 KB.
+    out = im.resize((960, 960), Image.Resampling.LANCZOS)
+    path = os.path.join(SITE, 'cover.webp')
+    out.save(path, 'WEBP', quality=48, method=6)
+    print(path, os.path.getsize(path))
+    for stale in ('cover.jpg', 'cover-720.jpg'):
+        old = os.path.join(SITE, stale)
+        if os.path.exists(old):
+            os.remove(old)
+
+if os.path.isdir(WT):
+    for n, fn in enumerate([c1, c2, c3, c4], 1):
+        p = f'{OUT}/chordspeak-cover-concept{n}-{["waterfall","grid","single-cycle","index"][n-1]}.png'
+        fn().save(p); print(p)
+    save_site_cover(c1(labeled=False))
+else:
+    save_site_cover(cover_from_concept())

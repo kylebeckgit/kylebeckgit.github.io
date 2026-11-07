@@ -21,16 +21,13 @@ const demos = (f.demos || []).filter((d) => !isPlaceholder(d.name));
 const freebies = presets.flatMap((c) => c.subcategories.flatMap((s) => s.items.map((i) => ({ ...i, group: s.name, name: i.name.replace(/^Tonverk Multisample Instrument:\s*/, '') }))));
 ---
 <Base path="/">
-  <div class="hello">
-    <h1 class="name">Kyle Beck</h1>
-    {bioLine && <p class="voice">{bioLine}</p>}
-  </div>
+  {bioLine && <p class="voice hello">{bioLine}</p>}
 
-  <section class="feature" aria-labelledby="h-feat">
+  <section class:list={['feature', { first: !bioLine }]} aria-labelledby="h-feat">
     <a href={`/packs/${f.slug}/`} class="feature-cover"><Cover p={f} /></a>
     <div class="feature-body">
       <p class="kicker">New pack</p>
-      <h2 id="h-feat" class="feature-title"><a href={`/packs/${f.slug}/`}>{f.title}</a></h2>
+      <h1 id="h-feat" class="feature-title"><a href={`/packs/${f.slug}/`}>{f.title}</a></h1>
       <p class="pitch">{f.pitch}</p>
       <p class="price">{f.price}</p>
       <div class="buyrow">

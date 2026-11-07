@@ -19,8 +19,8 @@
    "label": "Free sampler: [number of wavetables, to confirm] wavetables"
   },
   "pitch": "64 wavetables for the Tonverk's Wavefinder machine, built around chords that move like speech.",
-  "cover": "/packs/chordspeak-tonverk/cover.jpg",
-  "coverNote": "Concept 1 (waterfall) from art/concepts; swap when Kyle picks",
+  "cover": "/packs/chordspeak-tonverk/cover.webp",
+  "coverNote": "Concept 1 waterfall with no printed title, 960px WebP.",
   "inside": [
    [
     "Wavetables",
