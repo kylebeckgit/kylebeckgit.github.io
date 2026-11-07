@@ -25,7 +25,7 @@ nav ul{display:flex;gap:1.25rem;list-style:none;margin:0;padding:0;flex-wrap:wra
 nav a{text-decoration:none;color:var(--muted);font-size:.95rem}nav a[aria-current=page]{color:var(--fg)}
 main{padding:3rem 0 4rem}
 h1,h2,h3{font-family:var(--head);font-stretch:var(--head-stretch);font-weight:var(--head-weight);line-height:1.1;margin:0 0 .5rem}
-html[data-font="specsheet"]:not([data-heads="archivo"]) :is(h1,h2,h3,.pl-title,.feature-title,.sb-title){letter-spacing:0;line-height:1.2}
+html[data-font="specsheet"] :is(h1,h2,h3,.pl-title,.feature-title,.sb-title){line-height:1.2}
 h1{font-size:clamp(2.2rem,5.5vw,3.75rem);max-width:20ch}
 h2{font-size:1.5rem}h3{font-size:1.1rem}
 .lede{font-size:1.15rem;color:var(--muted);max-width:56ch;margin:1rem 0 0}
