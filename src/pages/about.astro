@@ -5,7 +5,6 @@ import { visible } from '../lib/copy.js';
 const lede = visible(copy.about.lede);
 const bio = visible(copy.about.bio);
 const music = visible(copy.about.music);
-const development = visible(copy.about.development);
 ---
 <Base title="About" path="/about/">
   <p class="eyebrow">About</p>
@@ -13,6 +12,4 @@ const development = visible(copy.about.development);
   {bio && <p>{bio}</p>}
   {music && <h2 style="margin-top:2rem">Music</h2>}
   {music && <p>{music}</p>}
-  {development && <h2 style="margin-top:2rem">Development</h2>}
-  {development && <p>{development}</p>}
 </Base>

@@ -15,8 +15,8 @@ export function mediaSrc(value) {
   return /^(https?:\/\/|\/)/.test(text) ? text : '';
 }
 
-// About stays off the nav until bio, music, or development has real text.
+// About stays off the nav until bio or music has real text.
 // The /about/ route is still built.
 export function aboutInNav(copy) {
-  return [copy.about.bio, copy.about.music, copy.about.development].some((item) => !isPlaceholder(item));
+  return [copy.about.bio, copy.about.music].some((item) => !isPlaceholder(item));
 }

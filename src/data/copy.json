@@ -4,9 +4,8 @@
   "homeAbout": "[ABOUT: two or three sentences in your own words, to confirm]",
   "homePhoto": "[PHOTO: Kyle or the studio, pending]",
   "about": {
-    "lede": "Musician & Developer.",
-    "bio": "[BIO: to confirm. Two or three short paragraphs: music background, instruments and gear, development work.]",
-    "music": "[MUSIC: releases or embeds to confirm, e.g. Bandcamp or SoundCloud links]",
-    "development": "[DEV: selected work to confirm]"
+    "lede": "Musician & Sound Designer.",
+    "bio": "[BIO: to confirm. Two or three short paragraphs: music background, instruments and gear.]",
+    "music": "[MUSIC: releases or embeds to confirm, e.g. Bandcamp or SoundCloud links]"
   }
 }

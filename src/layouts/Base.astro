@@ -5,8 +5,8 @@ import copy from '../data/copy.json';
 import { aboutInNav } from '../lib/copy.js';
 // Font pairing switch: PUBLIC_FONT=specsheet|linernotes|frontpanel at build/dev time
 const font = import.meta.env.PUBLIC_FONT || 'specsheet';
-const { title, description = 'Kyle Beck: musician and developer. Tonverk sample packs, synth guides and browser-based sound design tools.', path = '/', robots } = Astro.props;
-const full = title ? `${title} | Kyle Beck` : 'Kyle Beck, Musician & Developer';
+const { title, description = 'Kyle Beck: musician and sound designer. Tonverk sample packs, synth guides and browser-based sound design tools.', path = '/', robots } = Astro.props;
+const full = title ? `${title} | Kyle Beck` : 'Kyle Beck, Musician & Sound Designer';
 const nav = [['/packs/','Packs'],['/library/','Library'],['/tools/','Tools'],...(aboutInNav(copy) ? [['/about/','About']] : []),['/contact/','Contact']];
 const canonical = new URL(path, 'https://kyle-beck.com').href;
 const ogImage = 'https://kyle-beck.com/assets/images/og.png';
@@ -33,7 +33,7 @@ const ogImage = 'https://kyle-beck.com/assets/images/og.png';
 <link rel="apple-touch-icon" href="/assets/images/apple-touch-icon.png">
 <link rel="manifest" href="/site.webmanifest">
 <meta name="theme-color" content="#f2ede3">
-<script type="application/ld+json" set:html={JSON.stringify({"@context":"https://schema.org","@type":"Person","name":"Kyle Beck","url":"https://kyle-beck.com","sameAs":["https://github.com/kylebeckgit"]})}></script>
+<script type="application/ld+json" set:html={JSON.stringify({"@context":"https://schema.org","@type":"Person","name":"Kyle Beck","jobTitle":"Musician & Sound Designer","url":"https://kyle-beck.com","sameAs":["https://github.com/kylebeckgit"]})}></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
