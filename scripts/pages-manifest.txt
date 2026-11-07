@@ -10,7 +10,10 @@ assets/images/icon-512.png
 assets/images/mark-on-dark.svg
 assets/images/og.png
 astro/about.ok-P9InA.css
-astro/z3-webgpu.astro_astro_type_script_index_0_lang.BoVA_l00.js
+astro/ui.BeTtwVek.js
+astro/z3-describe-preview.D_eBwYGf.css
+astro/z3-describe-preview.astro_astro_type_script_index_0_lang.Dmw-K1mO.js
+astro/z3-webgpu.astro_astro_type_script_index_0_lang.Dmw-K1mO.js
 astro/z3-webgpu.kj1TRWLu.css
 contact/index.html
 favicon.ico
@@ -43,4 +46,5 @@ packs/chordspeak-tonverk/index.html
 packs/index.html
 site.webmanifest
 tools/index.html
+z3-describe-preview.html
 z3-webgpu.html

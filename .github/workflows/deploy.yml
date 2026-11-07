@@ -27,8 +27,13 @@ jobs:
       - name: Launch checks
         run: |
           set -euo pipefail
-          if grep -R -n "noindex" dist --include='*.html'; then
-            echo "noindex is still in the build"
+          if grep -R -l -n "noindex" dist --include='*.html' | grep -v '/z3-describe-preview.html$'; then
+            echo "noindex is on a public page"
+            exit 1
+          fi
+          grep -q 'name="robots" content="noindex, nofollow"' dist/z3-describe-preview.html
+          if grep -R -n 'z3-describe-preview' dist --include='*.html' | grep -v 'z3-describe-preview.html:'; then
+            echo "the describe preview is linked from another page"
             exit 1
           fi
           if grep -R -n "LS_VARIANT_ID_TODO" dist --include='*.html'; then

@@ -1,0 +1,227 @@
+---
+import Base from '../layouts/Base.astro';
+---
+<Base title="Modal generator preview" path="/z3-describe-preview.html" description="Unlisted preview. Describe a sound, hear a few variations, and download the Zebra 3 modal profile." robots="noindex, nofollow">
+  <p class="eyebrow"><a href="/tools/">Tools</a></p>
+  <h1>Modal generator preview</h1>
+  <p class="lede">Describe a sound, hear a few variations, and download the profile Zebra 3 reads.</p>
+
+  <div id="modal-app">
+    <section class="studio">
+      <p class="note">Unlisted preview. A sentence is read in this browser as a physical object, then turned into partials. A model is not called, and nothing is sent.</p>
+      <label class="ask">Describe
+        <textarea data-ask rows="3" placeholder="Glass bowl struck softly, slightly detuned, long shimmer"></textarea>
+      </label>
+      <div class="row">
+        <button type="button" class="btn solid" data-ask-btn>Describe</button>
+      </div>
+      <p class="note" data-allowance></p>
+      <p class="note" data-studio-status></p>
+
+      <div data-results hidden>
+        <h2>Variations</h2>
+        <ol class="thread" data-thread></ol>
+        <div class="var-grid" data-cards></div>
+        <div class="refine">
+          <label>Refine
+            <input data-refine-text type="text" placeholder="Darker, or shorter tail">
+          </label>
+          <div class="row">
+            <button type="button" class="btn" data-refine-btn>Refine</button>
+            <button type="button" class="btn" data-step-back disabled>Step back</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="listen">
+      <h2>Listen</h2>
+      <canvas aria-label="Partial spectrum"></canvas>
+      <p class="note">Drag a partial up or down for gain. Shift-drag it sideways for ratio. Draw paints a gain curve. Undo and redo cover those edits.</p>
+      <div class="listen-controls">
+        <label>Exciter
+          <select data-exciter>
+            <option value="click">Click</option>
+            <option value="mallet">Mallet</option>
+            <option value="burst">Noise burst</option>
+            <option value="bow">Bow</option>
+            <option value="file">Audio file</option>
+          </select>
+        </label>
+        <label data-hardness-field hidden>Hardness <span data-hardness-out>0.50</span>
+          <input data-hardness type="range" min="0" max="1" step="0.01" value="0.5">
+        </label>
+        <label>Velocity <span data-velocity-out>0.80</span>
+          <input data-velocity type="range" min="0" max="1" step="0.01" value="0.8">
+        </label>
+        <label>Strike position <span data-position-out>0.18</span>
+          <input data-position type="range" min="0.02" max="0.98" step="0.01" value="0.18">
+        </label>
+        <label data-file-field hidden>Exciter file
+          <input data-exciter-file type="file" accept=".wav,.mp3,.aiff,.aif,audio/*">
+        </label>
+      </div>
+      <p class="note">The preview approximates Zebra 3's modal resonator and is not verified against it. Strike position uses a string-like mode shape, which is only an approximation. Hold a key for the bow.</p>
+      <div class="row">
+        <button type="button" class="btn" data-draw aria-pressed="false">Draw</button>
+        <button type="button" class="btn" data-undo disabled>Undo</button>
+        <button type="button" class="btn" data-redo disabled>Redo</button>
+        <button type="button" class="btn solid" data-stop>Stop</button>
+      </div>
+      <div class="keys" data-keys role="group" aria-label="Pitch"></div>
+      <div class="save-row">
+        <label>Name
+          <input data-name type="text" value="Modal profile">
+        </label>
+        <div class="row">
+          <button type="button" class="btn" data-share>Copy link</button>
+          <button type="button" class="btn" data-export>Export profile</button>
+          <label class="btn">Import profile<input data-import type="file" accept=".csv,text/csv" hidden></label>
+        </div>
+      </div>
+    </section>
+
+    <section class="starters">
+      <h2>Starters</h2>
+      <p class="note">Fixed recipes, not generated. Useful when you want a known object before describing your own.</p>
+      <div class="starter-row" data-starters></div>
+    </section>
+
+    <details class="adjust">
+      <summary>Adjust</summary>
+      <form class="modal-controls" onsubmit="return false">
+        <label>Starting point
+          <select data-presets></select>
+        </label>
+        <label>Stiffness <span data-stiffness-out>0.00</span>
+          <input data-stiffness type="range" min="0" max="1" step="0.01" value="0">
+        </label>
+        <label>Brightness <span data-brightness-out>0.00</span>
+          <input data-brightness type="range" min="-1" max="1" step="0.01" value="0">
+        </label>
+        <label>Damping <span data-damping-out>0.35</span>
+          <input data-damping type="range" min="0" max="1" step="0.01" value="0.35">
+        </label>
+        <label>Odd and even <span data-odd-even-out>0.00</span>
+          <input data-odd-even type="range" min="-1" max="1" step="0.01" value="0">
+        </label>
+        <label>Seed
+          <span class="seed-row"><input data-seed type="number" min="0" step="1" value="0"><button type="button" class="btn" data-random>Randomize</button></span>
+        </label>
+        <p class="note">Moving these controls rebuilds all 64 partials. Edits in the list stay until the next rebuild.</p>
+      </form>
+      <div class="partial-scroll">
+        <table class="partials">
+          <thead><tr><th scope="col">#</th><th scope="col">Ratio</th><th scope="col">Gain dB</th><th scope="col">Decay</th></tr></thead>
+          <tbody data-partials></tbody>
+        </table>
+      </div>
+    </details>
+
+    <section class="analyze">
+      <h2>From a recording</h2>
+      <p class="note">Drop a wav, mp3, or aiff. Partials are measured in this browser and the file is not uploaded. The model is not involved. Noisy takes can be thinned with the threshold.</p>
+      <div class="drop" data-drop>
+        <label class="btn">Choose a recording<input data-recording type="file" accept=".wav,.mp3,.aiff,.aif,audio/*" hidden></label>
+      </div>
+      <div class="analyze-grid">
+        <label>Root
+          <input data-fundamental type="text" placeholder="Auto, or A3, or 220">
+        </label>
+        <label>Threshold <span data-threshold-out>40</span>
+          <input data-threshold type="range" min="12" max="80" step="1" value="40">
+        </label>
+        <label>Max partials
+          <input data-max-partials type="number" min="1" max="64" step="1" value="64">
+        </label>
+      </div>
+      <div class="row"><button type="button" class="btn" data-analyze>Analyze</button></div>
+      <p class="note" data-root-readout>Root appears after analysis.</p>
+      <div class="row">
+        <button type="button" class="btn" data-root-down disabled>Octave down</button>
+        <button type="button" class="btn" data-root-up disabled>Octave up</button>
+      </div>
+      <p class="note">Click a partial number to make it ratio 1. Type a note or a frequency to override the root.</p>
+      <p class="note" data-analyze-msg></p>
+    </section>
+
+  </div>
+</Base>
+
+<style>
+  #modal-app { margin-top: 2rem; }
+  .studio, .listen, .starters { margin-top: 2.5rem; }
+  .studio { margin-top: 2rem; }
+  .ask, .refine label, .listen-controls label, .save-row label, .modal-controls label, .analyze-grid label {
+    display: flex;
+    flex-direction: column;
+    gap: .35rem;
+  }
+  textarea, select, .refine input, .save-row input, .seed-row input, .analyze-grid input, .modal-controls input[type="file"] {
+    font: inherit;
+    color: inherit;
+    padding: .55rem .65rem;
+    border: 1px solid var(--line);
+    background: var(--card);
+    border-radius: 4px;
+  }
+  textarea { width: 100%; max-width: 46rem; margin-top: .35rem; }
+  .refine { margin-top: 1.25rem; max-width: 28rem; }
+  .refine input { width: 100%; }
+  .thread { margin: .25rem 0 1rem; padding-left: 1.2rem; color: var(--muted); }
+  .thread li { margin: .15rem 0; }
+  .var-grid { display: grid; gap: .75rem; }
+  @media (min-width: 860px) { .var-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+  :global(.var-card) {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: .9rem;
+    display: flex;
+    flex-direction: column;
+    gap: .45rem;
+  }
+  :global(.var-card.is-selected) { border-color: var(--fg); box-shadow: inset 3px 0 0 var(--accent); }
+  :global(.var-card h3) { font-size: 1.15rem; }
+  :global(.var-card p) { margin: 0; color: var(--muted); font-size: .95rem; }
+  :global(.var-card .btn) { margin-top: auto; align-self: flex-start; }
+  canvas { width: 100%; height: 240px; display: block; background: var(--card); border: 1px solid var(--line); border-radius: 4px; touch-action: none; cursor: ns-resize; }
+  canvas.is-drawing { cursor: crosshair; }
+  .listen-controls { display: grid; gap: 1rem; margin-top: 1rem; }
+  @media (min-width: 700px) { .listen-controls { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .listen-controls input[type="range"], .modal-controls input[type="range"] { width: 100%; accent-color: var(--accent); }
+  .listen-controls span, .modal-controls span { color: var(--muted); }
+  .listen-controls label[hidden] { display: none; }
+  .keys { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: 1rem; }
+  :global(.key) { padding: .45rem .6rem; }
+  :global(.key[aria-pressed="true"]) { background: var(--fg); color: var(--bg); }
+  .save-row { margin-top: 1.25rem; max-width: 24rem; }
+  .save-row input { width: 100%; }
+  .starter-row { display: flex; flex-wrap: wrap; gap: .5rem; }
+  details.adjust { margin-top: 2.5rem; }
+  details.adjust summary { cursor: pointer; font-family: var(--head); font-stretch: var(--head-stretch); font-weight: var(--head-weight); font-size: 1.5rem; }
+  .modal-controls { display: flex; flex-direction: column; gap: 1rem; margin-top: 1rem; max-width: 22rem; }
+  .seed-row { display: flex; gap: .5rem; align-items: center; }
+  .seed-row input { width: 7rem; }
+  .partial-scroll { margin-top: 1.5rem; max-height: 22rem; overflow: auto; border-top: 1px solid var(--fg); }
+  table.partials { width: 100%; border-collapse: collapse; }
+  table.partials th, table.partials td { text-align: left; padding: .45rem .6rem .45rem 0; border-bottom: 1px solid var(--line); }
+  table.partials th { color: var(--muted); font-weight: 500; }
+  table.partials input { width: 7rem; max-width: 100%; padding: .3rem .4rem; border: 1px solid var(--line); background: var(--card); border-radius: 4px; font: inherit; color: inherit; }
+  :global(button.partial-index) { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; text-underline-offset: .15em; }
+  @media (max-width: 700px) {
+    table.partials input { width: 4.6rem; }
+    table.partials th, table.partials td { padding-right: .35rem; }
+  }
+  .btn:disabled { opacity: .4; }
+  .analyze { margin-top: 2.5rem; }
+  .analyze-grid { display: grid; gap: 1rem; margin-top: .5rem; }
+  @media (min-width: 700px) { .analyze-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  .drop { margin: .75rem 0; }
+  .drop.is-over { outline: 1px dashed var(--fg); }
+</style>
+
+<script>
+  import { mount } from '../tools/modal/ui.js';
+  mount(document.getElementById('modal-app'));
+</script>
