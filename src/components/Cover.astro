@@ -2,7 +2,7 @@
 const { p, size = 'lg' } = Astro.props;
 ---
 {p.cover
-  ? <img class={`cover ${size}`} src={p.cover} alt={`${p.title} cover art`} />
+  ? <img class={`cover ${size}`} src={p.cover} alt="" />
   : <div class={`cover ${size} cover-ph`} role="img" aria-label={`${p.title} cover art (placeholder)`}>
       <span class="ct">{p.title}</span><span class="cn">Cover art pending</span>
     </div>}
