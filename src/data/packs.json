@@ -2,13 +2,13 @@
  {
   "slug": "chordspeak-tonverk",
   "title": "Chordspeak for Tonverk",
-  "subtitle": "Wavetable pack for the Elektron Tonverk",
+  "subtitle": "Wavetables for the Elektron Tonverk",
   "status": "Coming soon",
-  "price": "[PRICE: to confirm]",
+  "price": "Free",
   "platform": "Elektron Tonverk",
   "blurb": "[DESCRIPTION: to confirm. One or two sentences on the wavetables and how they were made.]",
   "requirements": "[REQUIREMENTS: Tonverk OS version, to confirm]",
-  "buyUrl": "https://kylebeck.lemonsqueezy.com/buy/LS_VARIANT_ID_TODO_CHORDSPEAK_PAID?embed=1",
+  "buyUrl": "https://kylebeck.lemonsqueezy.com/buy/LS_VARIANT_ID_TODO_CHORDSPEAK_FREE?embed=1",
   "titleNote": "PACK_NAME: single source of truth; change only here",
   "demo": {
    "mode": "email-required",
@@ -17,41 +17,47 @@
    "directUrl": "DEMO_ZIP_DIRECT_URL_TODO (e.g. GitHub Release asset)",
    "label": "Free sampler: [number of wavetables, to confirm] wavetables"
   },
-  "pitch": "[PITCH: one line on what these wavetables sound like, to confirm]",
-  "cover": null,
-  "coverNote": "COVER ART: pending, put file in public/packs/chordspeak-tonverk/cover.jpg and set this field",
+  "pitch": "64 wavetables for the Tonverk's Wavefinder machine, built around chords that move like speech.",
+  "cover": "/packs/chordspeak-tonverk/cover.jpg",
+  "coverNote": "Concept 1 (waterfall) from art/concepts; swap when Kyle picks",
   "inside": [
    [
     "Wavetables",
-    "[count, to confirm]"
+    "64, in nine categories"
    ],
    [
-    "Frames per table",
-    "[to confirm]"
+    "Band-limited versions",
+    "63 (Chordspeak_LowAlias, harmonics capped at 45)"
    ],
    [
-    "File format",
-    "[to confirm]"
+    "Waves per table",
+    "64 waves of 2048 samples"
    ],
    [
-    "Sample rate / bit depth",
-    "[to confirm]"
+    "Format",
+    "WAV, mono, 24-bit, 48 kHz"
+   ],
+   [
+    "Level",
+    "Each table peak-normalized to -1 dBFS"
    ],
    [
     "Download size",
-    "[to confirm]"
+    "46.5 MB zip (49.9 MB unzipped)"
    ]
   ],
   "worksWith": {
    "device": "Elektron Tonverk",
-   "os": "[Tonverk OS version, to confirm]",
+   "os": "OS 1.3.0 or later (Wavefinder machine)",
    "load": [
-    "[LOAD STEP 1: e.g. copy the folder to the Tonverk over USB, to confirm]",
-    "[LOAD STEP 2: to confirm]",
-    "[LOAD STEP 3: to confirm]"
-   ]
+    "On the Tonverk, open SETTINGS > USB DISK MODE and press YES, then connect it to your computer. A card reader works too.",
+    "Copy the Chordspeak and Chordspeak_LowAlias folders from User/Wavetables in the download into User/Wavetables on the SD card. Create that folder if it isn't there.",
+    "Eject the card on the computer, then press NO on the Tonverk to leave disk mode.",
+    "On an audio track, choose the Wavefinder machine, pick a table with SLOT, and sweep POS to move through the waves. ANIM with A.POS animates the sweep."
+   ],
+   "poolNote": "The 127 files fill exactly one project's wavetable pool, so the whole set loads into an otherwise empty project."
   },
-  "story": "[STORY: how Chordspeak was made, in your own words, to confirm]",
+  "story": "Chordspeak started with one idea: a chord that talks. In the twelve chord speech tables each wave holds a whole chord, so sweeping position plays a short phrase: a question rising, a call and a reply, a tight cluster opening out to an octave. Several of them are tuned in just intonation. Around those I built tables that move the way voices, wind, animals, glass and slow physical processes move, with formants sliding, a breath turning into a flute tone, and partials dying away one at a time. Every sound was generated from scratch. Nothing is sampled from a recording. Most tables also have a band-limited LowAlias twin for when the bright ones get gritty above about C4.",
   "photos": [
    "[PHOTO 1: Tonverk or studio, pending]",
    "[PHOTO 2: pending]"
@@ -59,18 +65,22 @@
   "faq": [
    [
     "Can I use these in released music?",
-    "[ANSWER: to confirm]"
+    "Yes. You can use them in your own music, film, game and broadcast work, live performance and sound design, including commercial releases, without payment or credit."
    ],
    [
-    "Do I need anything besides a Tonverk?",
-    "[ANSWER: to confirm]"
+    "What can't I do?",
+    "Redistribute, resell, share or upload the wavetable files themselves, alone or inside another pack or instrument, modified or not."
    ],
    [
-    "What do I get after paying?",
-    "[ANSWER: e.g. an email with a download link, to confirm]"
+    "Which Tonverk OS do I need?",
+    "OS 1.3.0 or later, which added the Wavefinder machine."
+   ],
+   [
+    "When should I use the LowAlias tables?",
+    "When a bright table sounds gritty in the upper register, roughly C4 and above."
    ]
   ],
-  "license": "[LICENSE: wording to confirm]",
+  "license": "[LICENSE: final text pending. The summary above is from the draft that ships with the pack.]",
   "demos": [
    {
     "name": "[DEMO 1: name, to confirm]",
@@ -102,6 +112,59 @@
     "desc": "[one-line description, to confirm]",
     "file": null
    }
+  ],
+  "free": true,
+  "showDemos": false,
+  "showSampler": false,
+  "_flags": "showDemos: Listen section + home play row. showSampler: separate free sampler block/link (redundant while the pack is free).",
+  "buyLabel": "Download free",
+  "buyNote": "Free. Enter your email at checkout and the download link arrives by email.",
+  "categories": [
+   [
+    "Chord speech",
+    12,
+    "whole chords inside each wave, so sweeping position plays a chord phrase"
+   ],
+   [
+    "Science and spectral motion",
+    15,
+    "slow spectral processes: absorption, doubling, resonance searches"
+   ],
+   [
+    "Voice and formant",
+    9,
+    ""
+   ],
+   [
+    "Wind and blown",
+    8,
+    ""
+   ],
+   [
+    "Animal-inspired, modelled",
+    7,
+    ""
+   ],
+   [
+    "Metal, glass and tuned percussion",
+    6,
+    ""
+   ],
+   [
+    "Organ and lead",
+    3,
+    ""
+   ],
+   [
+    "Bass",
+    2,
+    ""
+   ],
+   [
+    "Pads",
+    2,
+    ""
+   ]
   ]
  }
 ]

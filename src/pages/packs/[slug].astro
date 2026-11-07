@@ -17,39 +17,39 @@ const others = packs.filter((x) => x.slug !== p.slug);
     <Cover p={p} />
     <div class="hero-body">
       <h1>{p.title}</h1>
-      <p class="pitch">{p.subtitle}. {p.pitch}</p>
+      <p class="pitch">{p.pitch}</p>
       <p class="price">{p.price}</p>
       <div class="buyrow">
-        <a class="buy lemonsqueezy-button" href={p.buyUrl}>Buy</a>
-        <a class={`sec-link ${demoLs ? 'lemonsqueezy-button' : ''}`} href={samplerHref}>Free sampler</a>
+        <a class="buy lemonsqueezy-button" href={p.buyUrl}>{p.buyLabel || 'Buy'}</a>
+        {p.showSampler && <a class={`sec-link ${demoLs ? 'lemonsqueezy-button' : ''}`} href={samplerHref}>Free sampler</a>}
       </div>
-      <p class="fine">Instant download. Works with {p.worksWith.device}, {p.worksWith.os}.</p>
-      <nav class="jump" aria-label="On this page"><a href="#listen">Listen</a><a href="#inside">What's inside</a><a href="#works">Works with</a><a href="#made">How it was made</a><a href="#faq">FAQ</a></nav>
+      <p class="fine">{p.buyNote ? p.buyNote + ' ' : ''}Works with {p.worksWith.device} {p.worksWith.os}.</p>
+      <nav class="jump" aria-label="On this page">{p.showDemos && <a href="#listen">Listen</a>}<a href="#inside">What's inside</a><a href="#works">Works with</a><a href="#made">About the pack</a><a href="#faq">FAQ</a></nav>
     </div>
   </section>
 
-  <section class="block" id="listen"><h2>Listen</h2><DemoList demos={p.demos} /></section>
+  {p.showDemos && <section class="block" id="listen"><h2>Listen</h2><DemoList demos={p.demos} /></section>}
 
   <div class="two">
     <section class="block box" id="inside"><h2>What's inside</h2>
       <table class="spec"><tbody>{p.inside.map(([k, v]) => <tr><th scope="row">{k}</th><td>{v}</td></tr>)}</tbody></table>
+      {p.categories && <><h3>Categories</h3><ul class="cats">{p.categories.map(([n, c, d]) => <li><span class="cn">{n}</span> <span class="cc">{c}</span>{d && <span class="cd">{d}</span>}</li>)}</ul></>}
     </section>
     <section class="block box dark" id="works"><h2>Works with</h2>
-      <p><strong>{p.worksWith.device}</strong>, {p.worksWith.os}</p>
-      <h3>How to load it</h3><ol>{p.worksWith.load.map((s) => <li>{s}</li>)}</ol>
+      <p><strong>{p.worksWith.device}</strong> {p.worksWith.os}</p>
+      <h3>How to load it</h3><ol>{p.worksWith.load.map((s) => <li>{s}</li>)}</ol>{p.worksWith.poolNote && <p class="pool">{p.worksWith.poolNote}</p>}
     </section>
   </div>
 
-  <section class="block made" id="made"><h2>How it was made</h2>
+  <section class="block made" id="made"><h2>About the pack</h2>
     <p class="story">{p.story}</p>
     <div class="photos">{p.photos.map((ph) => <div class="photo-ph" role="img" aria-label="Photo placeholder">{ph}</div>)}</div>
   </section>
 
-  <section class="block sampler"><div>
+  {p.showSampler && <section class="block sampler"><div>
     <h2>Free sampler</h2>
     <p>{p.demo.label}. {demoLs ? 'Enter your email at checkout and the download link arrives by email. It costs nothing.' : 'Direct download, no email needed.'}</p>
-  </div><a class={`sec-link big ${demoLs ? 'lemonsqueezy-button' : ''}`} href={samplerHref}>Get the free sampler</a></section>
-
+  </div><a class={`sec-link big ${demoLs ? 'lemonsqueezy-button' : ''}`} href={samplerHref}>Get the free sampler</a></section>}
   <section class="block" id="faq"><h2>FAQ</h2>
     <dl class="faq">{p.faq.map(([q, a]) => <><dt>{q}</dt><dd>{a}</dd></>)}</dl>
     <h3>License</h3><p>{p.license}</p>
@@ -61,7 +61,7 @@ const others = packs.filter((x) => x.slug !== p.slug);
   </section>
 
   <div class="stickybar" id="stickybar" aria-hidden="true">
-    <div class="wrap"><span class="sb-title">{p.title}</span><span class="sb-price">{p.price}</span><a class="buy lemonsqueezy-button" href={p.buyUrl} tabindex="-1">Buy</a></div>
+    <div class="wrap"><span class="sb-title">{p.title}</span><span class="sb-price">{p.price}</span><a class="buy lemonsqueezy-button" href={p.buyUrl} tabindex="-1">{p.buyLabel || 'Buy'}</a></div>
   </div>
   <script>
     const bar = document.getElementById('stickybar'), hero = document.getElementById('hero');

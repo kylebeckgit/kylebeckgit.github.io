@@ -18,13 +18,15 @@ const freebies = presets.flatMap((c) => c.subcategories.flatMap((s) => s.items.m
     <div class="feature-body">
       <p class="kicker">New pack</p>
       <h2 id="h-feat" class="feature-title"><a href={`/packs/${f.slug}/`}>{f.title}</a></h2>
-      <p class="pitch">{f.subtitle}. {f.pitch}</p>
+      <p class="pitch">{f.pitch}</p>
       <p class="price">{f.price}</p>
       <div class="buyrow">
-        <a class="buy lemonsqueezy-button" href={f.buyUrl}>Buy</a>
-        <a class="sec-link lemonsqueezy-button" href={f.demo.lsCheckoutUrl}>Free sampler</a>
+        <a class="buy lemonsqueezy-button" href={f.buyUrl}>{f.buyLabel || 'Buy'}</a>
+        {f.showSampler && <a class="sec-link lemonsqueezy-button" href={f.demo.lsCheckoutUrl}>Free sampler</a>}
+        <a class="sec-link" href={`/packs/${f.slug}/`}>What's inside</a>
       </div>
-      <DemoList demos={f.demos.slice(0, 1)} />
+      {f.buyNote && <p class="fine">{f.buyNote}</p>}
+      {f.showDemos && <DemoList demos={f.demos.slice(0, 1)} />}
     </div>
   </section>
 

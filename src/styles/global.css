@@ -138,3 +138,8 @@ table.spec th{font-weight:500;color:var(--muted);width:48%}
 }
 .feature-cover,.pl-cover{text-decoration:none;display:block}
 .cover-ph{text-align:left;align-items:flex-start}
+.cats{list-style:none;padding:0;margin:.5rem 0 0}.cats li{padding:.35rem 0;border-bottom:1px solid var(--line);display:grid;grid-template-columns:1fr auto;gap:0 1rem}
+.cats .cc{color:var(--muted);text-align:right}.cats .cd{grid-column:1/-1;color:var(--muted);font-size:.92rem}
+.pool{margin:1rem 0 0;opacity:.8;font-size:.95rem}
+.made .story{font-size:1.15rem;line-height:1.65;max-width:38em}
+.photos .photo-ph{aspect-ratio:3/2}
