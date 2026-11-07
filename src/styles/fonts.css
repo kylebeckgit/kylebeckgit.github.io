@@ -1,0 +1,18 @@
+/* All faces SIL OFL 1.1, self-hosted from public/fonts (LICENSE files alongside). */
+@font-face{font-family:"Archivo";src:url(/fonts/archivo/archivo-latin-wdth-normal.woff2) format("woff2-variations");font-weight:100 900;font-stretch:62% 125%;font-display:swap}
+@font-face{font-family:"IBM Plex Mono";src:url(/fonts/ibm-plex-mono/ibm-plex-mono-latin-400-normal.woff2) format("woff2");font-weight:400;font-display:swap}
+@font-face{font-family:"IBM Plex Mono";src:url(/fonts/ibm-plex-mono/ibm-plex-mono-latin-500-normal.woff2) format("woff2");font-weight:500;font-display:swap}
+@font-face{font-family:"Young Serif";src:url(/fonts/young-serif/young-serif-latin-400-normal.woff2) format("woff2");font-weight:400;font-display:swap}
+@font-face{font-family:"Source Serif 4";src:url(/fonts/source-serif-4/source-serif-4-latin-opsz-normal.woff2) format("woff2-variations");font-weight:200 900;font-display:swap}
+@font-face{font-family:"Source Serif 4";src:url(/fonts/source-serif-4/source-serif-4-latin-opsz-italic.woff2) format("woff2-variations");font-weight:200 900;font-style:italic;font-display:swap}
+@font-face{font-family:"Martian Mono";src:url(/fonts/martian-mono/martian-mono-latin-wght-normal.woff2) format("woff2-variations");font-weight:100 800;font-display:swap}
+@font-face{font-family:"Big Shoulders Display";src:url(/fonts/big-shoulders-display/big-shoulders-display-latin-wght-normal.woff2) format("woff2-variations");font-weight:100 900;font-display:swap}
+@font-face{font-family:"Public Sans";src:url(/fonts/public-sans/public-sans-latin-wght-normal.woff2) format("woff2-variations");font-weight:100 900;font-display:swap}
+@font-face{font-family:"Red Hat Mono";src:url(/fonts/red-hat-mono/red-hat-mono-latin-wght-normal.woff2) format("woff2-variations");font-weight:300 700;font-display:swap}
+
+/* Pairing 1: spec sheet. Archivo Expanded + Archivo + IBM Plex Mono */
+html[data-font="specsheet"]{--head:"Archivo",serif;--body:"Archivo",serif;--mono:"IBM Plex Mono",monospace;--head-stretch:125%;--head-weight:750;--head-case:none;--head-track:-.02em;--body-stretch:100%}
+/* Pairing 2: liner notes. Young Serif + Source Serif 4 + Martian Mono */
+html[data-font="linernotes"]{--head:"Young Serif",serif;--body:"Source Serif 4",serif;--mono:"Martian Mono",monospace;--head-stretch:100%;--head-weight:400;--head-case:none;--head-track:-.01em;--body-stretch:100%}
+/* Pairing 3: front panel. Big Shoulders Display + Public Sans + Red Hat Mono */
+html[data-font="frontpanel"]{--head:"Big Shoulders Display",sans-serif;--body:"Public Sans",sans-serif;--mono:"Red Hat Mono",monospace;--head-stretch:100%;--head-weight:800;--head-case:uppercase;--head-track:.01em;--body-stretch:100%}

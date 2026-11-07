@@ -1,0 +1,11 @@
+---
+const { packs } = Astro.props;
+---
+<table class="index">
+  <thead><tr><th>No.</th><th>Pack</th><th class="hide-s">Platform</th><th>Status</th><th class="hide-s">Price</th></tr></thead>
+  <tbody>{packs.map((p, i) => (
+    <tr><td class="n">{String(i + 1).padStart(2, '0')}</td>
+      <td><a href={`/packs/${p.slug}/`}>{p.title}</a><p>{p.subtitle}</p></td>
+      <td class="m hide-s">{p.platform}</td><td class="m">{p.status}</td><td class="m hide-s">{p.price}</td></tr>))}
+  </tbody>
+</table>

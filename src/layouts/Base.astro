@@ -1,0 +1,36 @@
+---
+import '../styles/fonts.css';
+import '../styles/global.css';
+// Font pairing switch: PUBLIC_FONT=specsheet|linernotes|frontpanel at build/dev time
+const font = import.meta.env.PUBLIC_FONT || 'specsheet';
+const { title, description = 'Kyle Beck: musician and developer. Tonverk sample packs, synth guides and browser-based sound design tools.', path = '/' } = Astro.props;
+const full = title ? `${title} | Kyle Beck` : 'Kyle Beck, Musician & Developer';
+const nav = [['/packs/','Packs'],['/library/','Library'],['/tools/','Tools'],['/about/','About'],['/contact/','Contact']];
+const canonical = new URL(path, 'https://kyle-beck.com').href;
+---
+<!doctype html>
+<html lang="en" data-font={font}>
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{full}</title><meta name="description" content={description}>
+<link rel="canonical" href={canonical}>
+<meta property="og:title" content={full}><meta property="og:description" content={description}>
+<meta property="og:url" content={canonical}><meta property="og:type" content="website">
+<meta name="robots" content="noindex"><!-- PREVIEW ONLY: remove before launch -->
+<link rel="preload" as="font" type="font/woff2" crossorigin href={{specsheet:"/fonts/archivo/archivo-latin-wdth-normal.woff2",linernotes:"/fonts/young-serif/young-serif-latin-400-normal.woff2",frontpanel:"/fonts/big-shoulders-display/big-shoulders-display-latin-wght-normal.woff2"}[font]}>
+<link rel="icon" href="/assets/images/favicon.png" type="image/png">
+<script type="application/ld+json" set:html={JSON.stringify({"@context":"https://schema.org","@type":"Person","name":"Kyle Beck","url":"https://kyle-beck.com","sameAs":["https://github.com/kylebeckgit"]})}></script>
+</head>
+<body>
+<div class="preview-banner">Private preview: placeholders in [brackets] need Kyle's text</div>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site"><div class="wrap">
+  <a class="brand" href="/">Kyle Beck</a>
+  <nav aria-label="Main"><ul>{nav.map(([h,l]) => <li><a href={h} aria-current={path.startsWith(h) ? 'page' : undefined}>{l}</a></li>)}</ul></nav>
+</div></header>
+<main id="main"><div class="wrap"><slot /></div></main>
+<footer class="site"><div class="wrap">
+  <span>© {new Date().getFullYear()} Kyle Beck</span>
+  <ul><li><a href="mailto:kyle@kyle-beck.com">Email</a></li><li><a href="https://github.com/kylebeckgit">GitHub</a></li><li><a href="https://buymeacoffee.com/kylebeck">Buy Me a Coffee</a></li></ul>
+</div></footer>
+</body></html>

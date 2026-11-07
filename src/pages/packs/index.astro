@@ -1,0 +1,13 @@
+---
+import Base from '../../layouts/Base.astro';
+import PackTable from '../../components/PackTable.astro';
+import packs from '../../data/packs.json';
+---
+<Base title="Packs" path="/packs/" description="Wavetable and multisample packs for the Elektron Tonverk by Kyle Beck.">
+  <p class="eyebrow">Packs</p>
+  <h1>Wavetable and sample packs</h1>
+  <p class="lede">Instruments built for hardware samplers. Every pack has a free demo you can try before you buy.</p>
+  <section><PackTable packs={packs} /></section>
+  <section aria-labelledby="h-single"><div class="sechead"><h2 id="h-single">Single instruments</h2></div>
+  <p>Individual Tonverk multisample instruments are in the <a href="/library/tonverk-presets/">Library</a>.</p></section>
+</Base>

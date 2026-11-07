@@ -1,0 +1,30 @@
+[
+ {
+  "slug": "chordspeak-tonverk",
+  "title": "Chordspeak for Tonverk",
+  "subtitle": "Wavetable pack for the Elektron Tonverk",
+  "status": "Coming soon",
+  "price": "[PRICE: to confirm]",
+  "platform": "Elektron Tonverk",
+  "blurb": "[DESCRIPTION: to confirm. One or two sentences on the wavetables and how they were made.]",
+  "contents": [
+   "[CONTENTS: number of wavetables, to confirm]",
+   "[CONTENTS: frames per wavetable and file format, to confirm]",
+   "[CONTENTS: sample rate and bit depth, to confirm]"
+  ],
+  "requirements": "[REQUIREMENTS: Tonverk OS version, to confirm]",
+  "buyUrl": "LS_CHECKOUT_URL_TODO_CHORDSPEAK_PAID",
+  "audio": [
+   "[AUDIO DEMO 1: file pending]",
+   "[AUDIO DEMO 2: file pending]"
+  ],
+  "titleNote": "PACK_NAME: single source of truth; change only here",
+  "demo": {
+   "mode": "email-required",
+   "_modes": "email-required = Lemon Squeezy $0 product (checkout collects email); email-optional = direct download link, no checkout",
+   "lsCheckoutUrl": "LS_CHECKOUT_URL_TODO_CHORDSPEAK_FREE_DEMO",
+   "directUrl": "DEMO_ZIP_DIRECT_URL_TODO (e.g. GitHub Release asset)",
+   "label": "Free demo: [DEMO: number of wavetables, to confirm] wavetables"
+  }
+ }
+]
