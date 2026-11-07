@@ -30,5 +30,4 @@ packs/chordspeak-tonverk/cover.webp
 packs/chordspeak-tonverk/index.html
 packs/index.html
 tools/index.html
-uhm-generator.html
 z3-webgpu.html
