@@ -1,5 +1,7 @@
 node_modules/
 dist/
+_site/
+.jekyll-cache/
 .astro/
 .DS_Store
 .env*

@@ -1,10 +1,9 @@
-.nojekyll
 404.html
 CNAME
-_astro/about.DlPBz5nu.css
 about/index.html
 assets/images/favicon.png
 assets/images/sidebar-logo.png
+astro/about.DlPBz5nu.css
 contact/index.html
 fonts/archivo/LICENSE
 fonts/archivo/archivo-latin-wdth-normal.woff2

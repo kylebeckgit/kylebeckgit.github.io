@@ -1,11 +1,13 @@
 ---
 import '../styles/fonts.css';
 import '../styles/global.css';
+import copy from '../data/copy.json';
+import { aboutInNav } from '../lib/copy.js';
 // Font pairing switch: PUBLIC_FONT=specsheet|linernotes|frontpanel at build/dev time
 const font = import.meta.env.PUBLIC_FONT || 'specsheet';
 const { title, description = 'Kyle Beck: musician and developer. Tonverk sample packs, synth guides and browser-based sound design tools.', path = '/' } = Astro.props;
 const full = title ? `${title} | Kyle Beck` : 'Kyle Beck, Musician & Developer';
-const nav = [['/packs/','Packs'],['/library/','Library'],['/tools/','Tools'],['/about/','About'],['/contact/','Contact']];
+const nav = [['/packs/','Packs'],['/library/','Library'],['/tools/','Tools'],...(aboutInNav(copy) ? [['/about/','About']] : []),['/contact/','Contact']];
 const canonical = new URL(path, 'https://kyle-beck.com').href;
 ---
 <!doctype html>

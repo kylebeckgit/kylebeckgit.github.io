@@ -1,6 +1,7 @@
-// GitHub Pages for this repo publishes the main branch root ("Deploy from a branch").
-// Astro writes dist/. This copies that build onto the repository root, which is what
-// kyle-beck.com serves, and checks the copy still matches after a rebuild.
+// GitHub Pages for this repo publishes the main branch root ("Deploy from a branch")
+// and runs Jekyll. Astro writes dist/. This copies that build onto the repository
+// root. _config.yml then keeps source, screens/, and art/ out of the served site.
+// There must be no .nojekyll file, or Jekyll will not run and those folders go live.
 import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
@@ -48,9 +49,16 @@ if (cname.trim() !== 'kyle-beck.com') {
   console.error('dist/CNAME must contain kyle-beck.com');
   process.exit(1);
 }
-if (!(await exists(path.join(dist, '.nojekyll')))) {
-  console.error('dist/.nojekyll is missing. Keep an empty public/.nojekyll so Jekyll does not swallow /_astro.');
+if (await exists(path.join(dist, '.nojekyll')) || await exists(path.join(root, '.nojekyll')) || files.includes('.nojekyll')) {
+  console.error('.nojekyll would turn Jekyll off and publish screens/, art/, and src/.');
   process.exit(1);
+}
+const config = await readFile(path.join(root, '_config.yml'), 'utf8');
+for (const name of ['art', 'screens', 'src', 'public', 'scripts', 'dist', 'node_modules']) {
+  if (!new RegExp(`^\\s*-\\s+${name}\\s*$`, 'm').test(config)) {
+    console.error(`_config.yml must exclude ${name} so it is not served.`);
+    process.exit(1);
+  }
 }
 
 if (check) {

@@ -5,16 +5,25 @@ import DemoList from '../components/DemoList.astro';
 import BuyLink from '../components/BuyLink.astro';
 import packs from '../data/packs.json';
 import presets from '../data/tonverk_presets.json';
+import copy from '../data/copy.json';
 import { isLiveUrl } from '../lib/links.js';
+import { aboutInNav, isPlaceholder, mediaSrc, visible } from '../lib/copy.js';
 const f = packs[0];
+const buyLive = isLiveUrl(f.buyUrl);
 const samplerLive = f.showSampler && isLiveUrl(f.demo.lsCheckoutUrl);
-const checkoutLive = isLiveUrl(f.buyUrl) || samplerLive;
+const checkoutLive = buyLive || samplerLive;
+const bioLine = visible(copy.bioLine);
+const aboutText = visible(copy.homeAbout);
+const photoSrc = mediaSrc(copy.homePhoto);
+const showHomeAbout = Boolean(aboutText || photoSrc);
+const showAbout = aboutInNav(copy);
+const demos = (f.demos || []).filter((d) => !isPlaceholder(d.name));
 const freebies = presets.flatMap((c) => c.subcategories.flatMap((s) => s.items.map((i) => ({ ...i, group: s.name, name: i.name.replace(/^Tonverk Multisample Instrument:\s*/, '') }))));
 ---
 <Base path="/">
   <div class="hello">
     <h1 class="name">Kyle Beck</h1>
-    <p class="voice">[BIO line: to confirm]</p>
+    {bioLine && <p class="voice">{bioLine}</p>}
   </div>
 
   <section class="feature" aria-labelledby="h-feat">
@@ -29,8 +38,8 @@ const freebies = presets.flatMap((c) => c.subcategories.flatMap((s) => s.items.m
         {samplerLive && <a class="sec-link lemonsqueezy-button" href={f.demo.lsCheckoutUrl}>Free sampler</a>}
         <a class="sec-link" href={`/packs/${f.slug}/`}>What's inside</a>
       </div>
-      {f.buyNote && <p class="fine">{f.buyNote}</p>}
-      {f.showDemos && <DemoList demos={f.demos.slice(0, 1)} />}
+      {buyLive && f.buyNote && <p class="fine">{f.buyNote}</p>}
+      {f.showDemos && demos.length > 0 && <DemoList demos={demos.slice(0, 1)} />}
     </div>
   </section>
 
@@ -59,9 +68,13 @@ const freebies = presets.flatMap((c) => c.subcategories.flatMap((s) => s.items.m
     </ul>
   </section>
 
-  <section class="block about" aria-labelledby="h-about">
-    <div class="photo-ph" role="img" aria-label="Photo of Kyle (placeholder)">[PHOTO: Kyle or the studio, pending]</div>
-    <div><h2 id="h-about">About</h2><p>[ABOUT: two or three sentences in your own words, to confirm]</p><p><a href="/about/">More about me</a> · <a href="mailto:kyle@kyle-beck.com">kyle@kyle-beck.com</a></p></div>
-  </section>
+  {showHomeAbout && <section class:list={['block', { about: Boolean(photoSrc) }]} aria-labelledby="h-about">
+    {photoSrc && <img src={photoSrc} alt="" />}
+    <div>
+      <h2 id="h-about">About</h2>
+      {aboutText && <p>{aboutText}</p>}
+      <p>{showAbout && <a href="/about/">More about me</a>}{showAbout && ' · '}<a href="mailto:kyle@kyle-beck.com">kyle@kyle-beck.com</a></p>
+    </div>
+  </section>}
   {checkoutLive && <script is:inline src="https://app.lemonsqueezy.com/js/lemon.js" defer></script>}
 </Base>
