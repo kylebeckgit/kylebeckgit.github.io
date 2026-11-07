@@ -5,7 +5,7 @@ import copy from '../data/copy.json';
 import { aboutInNav } from '../lib/copy.js';
 // Font pairing switch: PUBLIC_FONT=specsheet|linernotes|frontpanel at build/dev time
 const font = import.meta.env.PUBLIC_FONT || 'specsheet';
-const { title, description = 'Kyle Beck: musician and developer. Tonverk sample packs, synth guides and browser-based sound design tools.', path = '/' } = Astro.props;
+const { title, description = 'Kyle Beck: musician and developer. Tonverk sample packs, synth guides and browser-based sound design tools.', path = '/', robots } = Astro.props;
 const full = title ? `${title} | Kyle Beck` : 'Kyle Beck, Musician & Developer';
 const nav = [['/packs/','Packs'],['/library/','Library'],['/tools/','Tools'],...(aboutInNav(copy) ? [['/about/','About']] : []),['/contact/','Contact']];
 const canonical = new URL(path, 'https://kyle-beck.com').href;
@@ -18,6 +18,7 @@ const canonical = new URL(path, 'https://kyle-beck.com').href;
 <link rel="canonical" href={canonical}>
 <meta property="og:title" content={full}><meta property="og:description" content={description}>
 <meta property="og:url" content={canonical}><meta property="og:type" content="website">
+{robots && <meta name="robots" content={robots}>}
 <link rel="preload" as="font" type="font/woff2" crossorigin href={{specsheet:"/fonts/archivo/archivo-latin-wdth-normal.woff2",linernotes:"/fonts/young-serif/young-serif-latin-400-normal.woff2",frontpanel:"/fonts/big-shoulders-display/big-shoulders-display-latin-wght-normal.woff2"}[font]}>
 <link rel="icon" href="/assets/images/favicon.png" type="image/png">
 <script type="application/ld+json" set:html={JSON.stringify({"@context":"https://schema.org","@type":"Person","name":"Kyle Beck","url":"https://kyle-beck.com","sameAs":["https://github.com/kylebeckgit"]})}></script>

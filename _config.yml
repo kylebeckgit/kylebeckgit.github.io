@@ -6,6 +6,7 @@ exclude:
   - screens
   - src
   - scripts
+  - workers
   - public
   - node_modules
   - vendor
