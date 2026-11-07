@@ -26,19 +26,24 @@ const ogImage = 'https://kyle-beck.com/assets/images/og.png';
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content={ogImage}>
 {robots && <meta name="robots" content={robots}>}
-<link rel="preload" as="font" type="font/woff2" crossorigin href={{specsheet:"/fonts/archivo/archivo-latin-wdth-normal.woff2",linernotes:"/fonts/young-serif/young-serif-latin-400-normal.woff2",frontpanel:"/fonts/big-shoulders-display/big-shoulders-display-latin-wght-normal.woff2"}[font]}>
+<link rel="preload" as="font" type="font/woff2" crossorigin href={{specsheet:"/fonts/figtree/figtree-latin-wght-normal.woff2",linernotes:"/fonts/young-serif/young-serif-latin-400-normal.woff2",frontpanel:"/fonts/big-shoulders-display/big-shoulders-display-latin-wght-normal.woff2"}[font]}>
 <link rel="icon" href="/favicon.ico" sizes="any">
 <link rel="icon" href="/assets/images/favicon.svg" type="image/svg+xml">
 <link rel="icon" href="/assets/images/favicon-32.png" type="image/png" sizes="32x32">
 <link rel="apple-touch-icon" href="/assets/images/apple-touch-icon.png">
 <link rel="manifest" href="/site.webmanifest">
-<meta name="theme-color" content="#f2ede3">
+<meta name="theme-color" content="#f2ede3" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#161513" media="(prefers-color-scheme: dark)">
 <script type="application/ld+json" set:html={JSON.stringify({"@context":"https://schema.org","@type":"Person","name":"Kyle Beck","jobTitle":"Musician & Sound Designer","url":"https://kyle-beck.com","sameAs":["https://github.com/kylebeckgit"]})}></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
 <header class="site"><div class="wrap">
-  <a class="brand" href="/">Kyle Beck</a>
+  <a class="brand" href="/">
+    <img class="mark mark-for-light" src="/assets/images/favicon.svg" alt="" width="34" height="34">
+    <img class="mark mark-for-dark" src="/assets/images/mark-on-dark.svg" alt="" width="34" height="34">
+    <span class="visually-hidden">Kyle Beck</span>
+  </a>
   <nav aria-label="Main"><ul>{nav.map(([h,l]) => <li><a href={h} aria-current={path.startsWith(h) ? 'page' : undefined}>{l}</a></li>)}</ul></nav>
 </div></header>
 <main id="main"><div class="wrap"><slot /></div></main>

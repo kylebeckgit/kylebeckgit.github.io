@@ -7,9 +7,10 @@ assets/images/favicon.png
 assets/images/favicon.svg
 assets/images/icon-192.png
 assets/images/icon-512.png
+assets/images/mark-on-dark.svg
 assets/images/og.png
-astro/about.D0vleC1P.css
-astro/z3-webgpu.astro_astro_type_script_index_0_lang.BSahuK8s.js
+astro/about.ok-P9InA.css
+astro/z3-webgpu.astro_astro_type_script_index_0_lang.BoVA_l00.js
 astro/z3-webgpu.kj1TRWLu.css
 contact/index.html
 favicon.ico
@@ -17,6 +18,8 @@ fonts/archivo/LICENSE
 fonts/archivo/archivo-latin-wdth-normal.woff2
 fonts/big-shoulders-display/LICENSE
 fonts/big-shoulders-display/big-shoulders-display-latin-wght-normal.woff2
+fonts/figtree/LICENSE
+fonts/figtree/figtree-latin-wght-normal.woff2
 fonts/ibm-plex-mono/LICENSE
 fonts/ibm-plex-mono/ibm-plex-mono-latin-400-normal.woff2
 fonts/ibm-plex-mono/ibm-plex-mono-latin-500-normal.woff2

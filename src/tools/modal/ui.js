@@ -494,6 +494,10 @@ export function mount(root) {
   root.addEventListener('pointerdown', () => primeAudio(state), true);
   root.querySelector('[data-note="A4"]')?.setAttribute('aria-pressed', 'true');
   window.addEventListener('resize', () => draw(canvas, state.partials, state));
+  const scheme = window.matchMedia('(prefers-color-scheme: dark)');
+  const onScheme = () => draw(canvas, state.partials, state);
+  if (typeof scheme.addEventListener === 'function') scheme.addEventListener('change', onScheme);
+  else scheme.addListener(onScheme);
 }
 
 function canvasPoint(canvas, event) {
@@ -602,6 +606,18 @@ function clamp(value, lo, hi) {
   return Math.min(hi, Math.max(lo, value));
 }
 
+function canvasColors() {
+  const style = getComputedStyle(document.documentElement);
+  const read = (name, fallback) => style.getPropertyValue(name).trim() || fallback;
+  return {
+    card: read('--card', '#fbf8f2'),
+    line: read('--line', '#d8d0c1'),
+    accent: read('--accent', '#d4421c'),
+    // Quiet partials follow the text color. --ink stays dark in both schemes.
+    ink: read('--fg', '#1f1d1a'),
+  };
+}
+
 function draw(canvas, partials, state, frozen) {
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   const width = canvas.clientWidth || 640;
@@ -610,12 +626,13 @@ function draw(canvas, partials, state, frozen) {
   canvas.height = Math.round(height * dpr);
   const ctx = canvas.getContext('2d');
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.fillStyle = '#fbf8f2';
+  const colors = canvasColors();
+  ctx.fillStyle = colors.card;
   ctx.fillRect(0, 0, width, height);
   if (!partials.length) return;
   const scale = frozen || layout(partials, width, height);
   if (!frozen) state.scale = scale;
-  ctx.strokeStyle = '#d8d0c1';
+  ctx.strokeStyle = colors.line;
   ctx.beginPath();
   ctx.moveTo(scale.pad, height - scale.pad);
   ctx.lineTo(width - scale.pad, height - scale.pad);
@@ -624,7 +641,7 @@ function draw(canvas, partials, state, frozen) {
     const x = ratioToX(partial.ratio, scale);
     const gain = Math.max(-80, Math.min(0, partial.gainDb));
     const bar = ((gain + 80) / 80) * (height - scale.pad * 2);
-    ctx.fillStyle = partial.gainDb > -18 ? '#d4421c' : '#1f1d1a';
+    ctx.fillStyle = partial.gainDb > -18 ? colors.accent : colors.ink;
     ctx.fillRect(x - 1.5, height - scale.pad - bar, 3, bar);
   }
 }

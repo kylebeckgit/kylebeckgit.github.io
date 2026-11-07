@@ -1,4 +1,5 @@
 /* All faces SIL OFL 1.1, self-hosted from public/fonts (LICENSE files alongside). */
+@font-face{font-family:"Figtree";src:url(/fonts/figtree/figtree-latin-wght-normal.woff2) format("woff2-variations");font-weight:300 900;font-display:swap}
 @font-face{font-family:"Archivo";src:url(/fonts/archivo/archivo-latin-wdth-normal.woff2) format("woff2-variations");font-weight:100 900;font-stretch:62% 125%;font-display:swap}
 @font-face{font-family:"IBM Plex Mono";src:url(/fonts/ibm-plex-mono/ibm-plex-mono-latin-400-normal.woff2) format("woff2");font-weight:400;font-display:swap}
 @font-face{font-family:"IBM Plex Mono";src:url(/fonts/ibm-plex-mono/ibm-plex-mono-latin-500-normal.woff2) format("woff2");font-weight:500;font-display:swap}
@@ -10,8 +11,8 @@
 @font-face{font-family:"Public Sans";src:url(/fonts/public-sans/public-sans-latin-wght-normal.woff2) format("woff2-variations");font-weight:100 900;font-display:swap}
 @font-face{font-family:"Red Hat Mono";src:url(/fonts/red-hat-mono/red-hat-mono-latin-wght-normal.woff2) format("woff2-variations");font-weight:300 700;font-display:swap}
 
-/* Pairing 1: spec sheet. Archivo Expanded + Archivo + IBM Plex Mono */
-html[data-font="specsheet"]{--head:"Archivo",serif;--body:"Archivo",serif;--mono:"IBM Plex Mono",monospace;--head-stretch:125%;--head-weight:750;--body-stretch:100%}
+/* Pairing 1: Figtree for text and headings. */
+html[data-font="specsheet"]{--head:"Figtree",sans-serif;--body:"Figtree",sans-serif;--mono:"IBM Plex Mono",monospace;--head-stretch:100%;--head-weight:700;--body-stretch:100%}
 /* Pairing 2: liner notes. Young Serif + Source Serif 4 + Martian Mono */
 html[data-font="linernotes"]{--head:"Young Serif",serif;--body:"Source Serif 4",serif;--mono:"Martian Mono",monospace;--head-stretch:100%;--head-weight:400;--body-stretch:100%}
 /* Pairing 3: front panel. Big Shoulders Display + Public Sans + Red Hat Mono */
