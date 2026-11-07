@@ -27,7 +27,6 @@ fonts/young-serif/young-serif-latin-400-normal.woff2
 index.html
 library/index.html
 library/tonverk-presets/index.html
-membership/index.html
 packs/chordspeak-tonverk/cover.webp
 packs/chordspeak-tonverk/index.html
 packs/index.html

@@ -1,9 +1,0 @@
-{
-  "_note": "Shown only when a value is non-empty and contains no [. Membership stays off the nav.",
-  "price": "[PRICE: amount and interval, to confirm]",
-  "checkoutUrl": "",
-  "perks": [
-    "[PERK: pack access, wording to confirm]",
-    "[PERK: Describe allowance, wording to confirm]"
-  ]
-}
