@@ -1,14 +1,16 @@
 ---
 import Base from '../layouts/Base.astro';
 // Set PUBLIC_MODAL_DESCRIBE_URL at build time to the deployed Worker. Empty hides Describe.
+// PUBLIC_MEMBERSHIP_ENABLED=true shows the license key field. The Worker still ignores keys until MEMBERSHIP_ENABLED is true.
 const describeUrl = import.meta.env.PUBLIC_MODAL_DESCRIBE_URL || '';
+const membership = import.meta.env.PUBLIC_MEMBERSHIP_ENABLED === 'true';
 ---
 <Base title="Modal generator" path="/z3-webgpu.html" description="Shape a Zebra 3 modal profile, hear a preview, and download the file.">
   <p class="eyebrow"><a href="/tools/">Tools</a></p>
   <h1>Modal generator</h1>
   <p class="lede">Shape the partials of a Zebra 3 modal profile, hear a preview, and download the file Zebra reads.</p>
 
-  <div id="modal-app" data-describe-url={describeUrl}>
+  <div id="modal-app" data-describe-url={describeUrl} data-membership={membership ? 'true' : 'false'}>
     <div class="modal-layout">
       <form class="modal-controls" onsubmit="return false">
         <label>Starting point
@@ -53,6 +55,9 @@ const describeUrl = import.meta.env.PUBLIC_MODAL_DESCRIBE_URL || '';
       <h2>Describe</h2>
       <p class="note">Optional. Sends one sentence to a small model, which sets the controls above. The editor works without it.</p>
       <textarea data-describe-text rows="3" placeholder="A short bright bar"></textarea>
+      <label data-license hidden>License key
+        <input data-license-key type="password" autocomplete="off">
+      </label>
       <div class="row"><button type="button" class="btn" data-describe-btn>Describe</button></div>
       <p class="note" data-describe-msg></p>
     </section>
@@ -90,6 +95,8 @@ const describeUrl = import.meta.env.PUBLIC_MODAL_DESCRIBE_URL || '';
   table.partials th { color: var(--muted); font-weight: 500; }
   table.partials input { width: 7rem; max-width: 100%; padding: .3rem .4rem; border: 1px solid var(--line); background: var(--card); border-radius: 4px; }
   [data-describe] { margin-top: 2.5rem; }
+  [data-license]:not([hidden]) { display: flex; flex-direction: column; gap: .35rem; margin-top: .75rem; max-width: 24rem; }
+  [data-license] input { font: inherit; color: inherit; padding: .5rem .6rem; border: 1px solid var(--line); background: var(--card); border-radius: 4px; }
 </style>
 
 <script>

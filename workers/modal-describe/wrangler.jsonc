@@ -6,6 +6,10 @@
   "ai": {
     "binding": "AI"
   },
+  "vars": {
+    "MEMBERSHIP_ENABLED": "false",
+    "MEMBERSHIP_PRODUCT_ID": ""
+  },
   "durable_objects": {
     "bindings": [
       { "name": "LIMITER", "class_name": "Limiter" }

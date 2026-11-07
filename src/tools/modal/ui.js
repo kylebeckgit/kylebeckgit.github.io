@@ -2,6 +2,7 @@ import { PRESETS, NOTE_BUTTONS, buildPartials, toCsv, fromCsv, noteFrequency, de
 
 export function mount(root) {
   const describeUrl = (root.dataset.describeUrl || '').trim();
+  const membershipOn = root.dataset.membership === 'true';
   const state = {
     controls: defaultControls(),
     partials: buildPartials(defaultControls()),
@@ -36,6 +37,9 @@ export function mount(root) {
   const describeMsg = root.querySelector('[data-describe-msg]');
 
   if (describeUrl) describe.hidden = false;
+  const licenseField = root.querySelector('[data-license]');
+  const licenseInput = root.querySelector('[data-license-key]');
+  if (describeUrl && membershipOn && licenseField) licenseField.hidden = false;
 
   function readControls() {
     state.controls = sanitizeControls({
@@ -133,17 +137,21 @@ export function mount(root) {
     describeButton.disabled = true;
     setMessage('Asking for settings.');
     try {
+      const licenseKey = membershipOn ? (licenseInput?.value || '').trim() : '';
       const response = await fetch(describeUrl, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ prompt }),
+        body: JSON.stringify(licenseKey ? { prompt, licenseKey } : { prompt }),
       });
       const payload = await response.json().catch(() => null);
       if (!response.ok || !payload?.controls) {
         const limited = response.status === 429;
+        const licenseRejected = response.status === 403;
         setMessage(limited
           ? 'Describe is limited for now. The partials are unchanged.'
-          : 'Describe did not return usable settings. The partials are unchanged.');
+          : licenseRejected
+            ? 'That license key was not accepted. The partials are unchanged.'
+            : 'Describe did not return usable settings. The partials are unchanged.');
         return;
       }
       const controls = sanitizeControls(payload.controls);

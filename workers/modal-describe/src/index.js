@@ -1,10 +1,13 @@
-// Optional Describe endpoint for the modal editor. Not deployed from this repo.
-// CORS allows only https://kyle-beck.com. Limits are enforced in one Durable Object.
+// Optional Describe endpoint. Not deployed from this repo.
+// Membership checks stay off unless MEMBERSHIP_ENABLED is the string "true".
+// CORS allows only https://kyle-beck.com.
 
 const MODEL = '@cf/meta/llama-3.2-3b-instruct';
 const ORIGIN = 'https://kyle-beck.com';
-const PER_IP_PER_HOUR = 8;
-const DAILY_CEILING = 400;
+const FREE_PER_IP_PER_DAY = 5;
+const MEMBER_PER_DAY = 40;
+const GLOBAL_PER_DAY = 400;
+const LICENSE_CACHE_MS = 10 * 60 * 1000;
 const PRESETS = new Set(['string', 'bar', 'bell', 'plate', 'membrane', 'open-pipe', 'closed-pipe']);
 
 const SYSTEM = `You set controls for a modal synthesis editor. Reply with JSON only, no markdown.
@@ -30,12 +33,13 @@ export default {
     if (!prompt) return json({ error: 'prompt' }, 400);
 
     const ip = request.headers.get('cf-connecting-ip') || 'unknown';
+    const licenseKey = typeof body?.licenseKey === 'string' ? body.licenseKey.trim() : '';
     const gate = await env.LIMITER.get(env.LIMITER.idFromName('global')).fetch('https://limiter/check', {
       method: 'POST',
-      body: JSON.stringify({ ip }),
+      body: JSON.stringify({ ip, licenseKey }),
     });
     const limit = await gate.json();
-    if (!limit.allowed) return json({ error: limit.reason }, 429);
+    if (!limit.allowed) return json({ error: limit.reason }, limit.reason === 'license' ? 403 : 429);
 
     let raw;
     try {
@@ -61,30 +65,90 @@ export default {
 };
 
 export class Limiter {
-  constructor(ctx) {
+  constructor(ctx, env) {
     this.storage = ctx.storage;
+    this.env = env;
   }
 
   async fetch(request) {
-    const { ip } = await request.json();
+    const { ip, licenseKey } = await request.json();
+    const membershipOn = String(this.env.MEMBERSHIP_ENABLED || '').toLowerCase() === 'true';
+    let memberId = '';
+    if (membershipOn && licenseKey) {
+      const verdict = await this.cachedLicense(licenseKey);
+      if (!verdict.ok) return Response.json({ allowed: false, reason: 'license' });
+      memberId = verdict.id;
+    }
+
     const now = Date.now();
-    const hour = String(Math.floor(now / 3_600_000));
     const day = new Date(now).toISOString().slice(0, 10);
-    const state = (await this.storage.get('state')) || { day, dayCount: 0, hours: {} };
+    const state = (await this.storage.get('quotas')) || { day, global: 0, ip: {}, member: {} };
     if (state.day !== day) {
       state.day = day;
-      state.dayCount = 0;
-      state.hours = {};
+      state.global = 0;
+      state.ip = {};
+      state.member = {};
     }
-    if (!state.hours[hour]) state.hours = { [hour]: {} };
-    const used = state.hours[hour][ip] || 0;
-    if (used >= PER_IP_PER_HOUR) return Response.json({ allowed: false, reason: 'ip' });
-    if (state.dayCount >= DAILY_CEILING) return Response.json({ allowed: false, reason: 'day' });
-    state.hours[hour][ip] = used + 1;
-    state.dayCount += 1;
-    await this.storage.put('state', state);
-    return Response.json({ allowed: true });
+    if (state.global >= GLOBAL_PER_DAY) return Response.json({ allowed: false, reason: 'day' });
+
+    if (memberId) {
+      const used = state.member[memberId] || 0;
+      if (used >= MEMBER_PER_DAY) return Response.json({ allowed: false, reason: 'member' });
+      state.member[memberId] = used + 1;
+    } else {
+      const used = state.ip[ip] || 0;
+      if (used >= FREE_PER_IP_PER_DAY) return Response.json({ allowed: false, reason: 'ip' });
+      state.ip[ip] = used + 1;
+    }
+    state.global += 1;
+    await this.storage.put('quotas', state);
+    return Response.json({ allowed: true, member: Boolean(memberId) });
   }
+
+  async cachedLicense(licenseKey) {
+    const hash = await sha256(licenseKey);
+    const cacheKey = `lic:${hash}`;
+    const cached = await this.storage.get(cacheKey);
+    if (cached && cached.exp > Date.now()) return cached;
+    const verdict = await validateLicense(licenseKey, this.env.MEMBERSHIP_PRODUCT_ID);
+    const stored = { ...verdict, exp: Date.now() + LICENSE_CACHE_MS };
+    await this.storage.put(cacheKey, stored);
+    return stored;
+  }
+}
+
+export function interpretLicense(payload, expectedProductId) {
+  if (!payload || payload.valid !== true) return { ok: false };
+  const license = payload.license_key || {};
+  if (license.status !== 'active') return { ok: false };
+  if (license.expires_at && Date.parse(license.expires_at) < Date.now()) return { ok: false };
+  const productId = String(payload.meta?.product_id ?? '');
+  if (!expectedProductId || productId !== String(expectedProductId)) return { ok: false };
+  const id = String(license.id ?? '');
+  if (!id) return { ok: false };
+  return { ok: true, id };
+}
+
+async function validateLicense(licenseKey, expectedProductId) {
+  if (!expectedProductId) return { ok: false };
+  let payload;
+  try {
+    const response = await fetch('https://api.lemonsqueezy.com/v1/licenses/validate', {
+      method: 'POST',
+      headers: { accept: 'application/json', 'content-type': 'application/json' },
+      body: JSON.stringify({ license_key: licenseKey }),
+    });
+    payload = await response.json();
+  } catch {
+    return { ok: false };
+  }
+  return interpretLicense(payload, expectedProductId);
+}
+
+async function sha256(value) {
+  const bytes = new TextEncoder().encode(value);
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 function parseControls(raw) {
