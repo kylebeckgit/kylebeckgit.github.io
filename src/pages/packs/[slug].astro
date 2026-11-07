@@ -7,33 +7,32 @@ const { p } = Astro.props;
 const demoMode = import.meta.env.PUBLIC_DEMO_MODE || p.demo.mode;
 const demoLs = demoMode === 'email-required';
 ---
-<Base title={`${p.title}: ${p.subtitle}`} path={`/packs/${p.slug}/`} description={`${p.title}, a ${p.subtitle.toLowerCase()} by Kyle Beck.`}>
-  <p class="eyebrow"><a href="/packs/">Packs</a> / {p.platform}</p>
+<Base title={p.title} path={`/packs/${p.slug}/`} description={`${p.title}: ${p.subtitle.toLowerCase()} by Kyle Beck.`}>
+  <p><a href="/packs/">Packs</a></p>
   <div class="product">
-    <div class="ph cover" role="img" aria-label="Cover art placeholder">[COVER ART: pending]</div>
+    <div class="cover" role="img" aria-label="Cover art to come">cover art to come</div>
     <div>
       <h1>{p.title}</h1>
-      <p class="lede">{p.subtitle}</p>
-      <p>{p.blurb}</p>
-      <div class="row">
-        <a class="btn solid lemonsqueezy-button" href={p.buyUrl}>Buy · {p.price}</a>
+      <p class="intro">{p.subtitle}. <span class="todo">{p.blurb}</span></p>
+      <p class="actions">
+        <a class="buy lemonsqueezy-button" href={p.buyUrl}>Buy it, <span class="todo">{p.price}</span></a>
         {demoLs
-          ? <a class="btn lemonsqueezy-button" href={p.demo.lsCheckoutUrl}>{p.demo.label} (email for download link)</a>
-          : <a class="btn" href={p.demo.directUrl} download>{p.demo.label}</a>}
-      </div>
-      <dl class="spec">
-        <dt>Platform</dt><dd>{p.platform}</dd>
-        <dt>Requires</dt><dd>{p.requirements}</dd>
-        <dt>Status</dt><dd>{p.status}</dd>
-      </dl>
-      <h2>What's inside</h2>
-      <ul>{p.contents.map((c) => <li>{c}</li>)}</ul>
-      <h2>Listen</h2>
-      {p.audio.map((a) => <figure style="margin:0 0 .75rem"><div class="ph">{a}</div><!-- <audio controls preload="none" src="/audio/..."></audio> --></figure>)}
-      <h2>License</h2>
-      <p class="ph">[LICENSE: royalty-free use in released music, no redistribution of raw samples. Wording to confirm]</p>
+          ? <a class="lemonsqueezy-button" href={p.demo.lsCheckoutUrl}>Get the free demo</a>
+          : <a href={p.demo.directUrl} download>Download the free demo</a>}
+      </p>
+      <p class="k"><span class="todo">{p.demo.label}</span>{demoLs ? '. We email you the download link.' : '. No sign-up needed.'}</p>
     </div>
   </div>
+  <section class="sec"><h2>In the pack</h2><div>
+    <table class="contents"><tbody>
+      <tr><th scope="row">Wavetables</th><td><span class="todo">[count, to confirm]</span></td></tr>
+      <tr><th scope="row">Frames</th><td><span class="todo">[frames per table, to confirm]</span></td></tr>
+      <tr><th scope="row">Format</th><td><span class="todo">[file format, sample rate, bit depth, to confirm]</span></td></tr>
+      <tr><th scope="row">Works with</th><td>{p.platform}, <span class="todo">{p.requirements}</span></td></tr>
+    </tbody></table>
+  </div></section>
+  <section class="sec"><h2>Listen</h2><div>{p.audio.map((a) => <p><span class="todo">{a}</span></p>)}</div></section>
+  <section class="sec"><h2>Licence</h2><div><p><span class="todo">[LICENSE: wording to confirm]</span></p></div></section>
   <!-- Lemon Squeezy overlay checkout: turns .lemonsqueezy-button links into an overlay. Checkout URLs should end in ?embed=1 -->
   <script is:inline src="https://app.lemonsqueezy.com/js/lemon.js" defer></script>
 </Base>

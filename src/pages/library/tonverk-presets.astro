@@ -4,10 +4,10 @@ import data from '../../data/tonverk_presets.json';
 const clean = (n) => n.replace(/^Tonverk Multisample Instrument:\s*/,'');
 ---
 <Base title="Tonverk Presets" path="/library/tonverk-presets/" description="Multisample instruments for the Elektron Tonverk: bass, keys, mallets and percussion.">
-  <p class="eyebrow"><a href="/library/">Library</a></p><h1>Tonverk presets</h1>
-  <p class="lede">Multisample instruments for the Elektron Tonverk. Each one opens on Gumroad.</p>
+  <h1>Tonverk presets</h1>
+  <p class="intro">Multisample instruments for the Elektron Tonverk. Each one opens on Gumroad.</p>
   {data.map((cat) => cat.subcategories.map((s) => (
     <section aria-label={s.name}><div class="sechead"><h2>{s.name}</h2></div>
-      <ul class="list">{s.items.map((i) => <li><a href={i.url}><h3>{clean(i.name)}</h3></a>{i.description && <p>{i.description}</p>}</li>)}</ul>
+      <ul class="entries">{s.items.map((i) => <li><a href={i.url}><h3>{clean(i.name)}</h3></a>{i.description && <p>{i.description}</p>}</li>)}</ul>
     </section>)))}
 </Base>
