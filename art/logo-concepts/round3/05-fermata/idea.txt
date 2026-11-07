@@ -1,0 +1,1 @@
+A fermata: arc, dot, and line. The hold.
