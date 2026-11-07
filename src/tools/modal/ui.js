@@ -1,5 +1,7 @@
 import { PRESETS, NOTE_BUTTONS, buildPartials, toCsv, fromCsv, noteFrequency, defaultControls, sanitizeControls } from './engine.js';
 import { analyzeSamples, decodeRecording, resampleMono, parseRoot, frequencyToNote } from './analyze.js';
+import { fileSlug } from './recipes.js';
+import { mountStudio } from './studio.js';
 
 export function mount(root) {
   const describeUrl = (root.dataset.describeUrl || '').trim();
@@ -25,6 +27,7 @@ export function mount(root) {
     redo: [],
     gesture: null,
     scale: null,
+    profileName: 'Modal profile',
   };
 
   root.querySelector('[data-presets]').innerHTML = PRESETS.map((preset) => `<option value="${preset.id}">${preset.label}</option>`).join('');
@@ -57,10 +60,10 @@ export function mount(root) {
   const redoButton = root.querySelector('[data-redo]');
   const drawButton = root.querySelector('[data-draw]');
 
-  if (describeUrl) describe.hidden = false;
+  if (describe && describeUrl) describe.hidden = false;
   const licenseField = root.querySelector('[data-license]');
   const licenseInput = root.querySelector('[data-license-key]');
-  if (describeUrl && membershipOn && licenseField) licenseField.hidden = false;
+  if (describe && describeUrl && membershipOn && licenseField) licenseField.hidden = false;
 
   function readControls() {
     state.controls = sanitizeControls({
@@ -275,7 +278,7 @@ export function mount(root) {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = 'zebra3_ai_profile.csv';
+    link.download = fileSlug(state.profileName);
     link.click();
     URL.revokeObjectURL(url);
   });
@@ -361,6 +364,11 @@ export function mount(root) {
       render();
       pushModes();
       showRoot();
+      if (!state.profileName || state.profileName === 'Modal profile') {
+        state.profileName = 'From recording';
+        const nameInput = root.querySelector('[data-name]');
+        if (nameInput) nameInput.value = state.profileName;
+      }
       setAnalyze(`Found ${result.partials.length} partials.${result.usedFallbackDecay ? ' Some decays were too noisy to fit, so those used a typical value.' : ''}`);
     } catch (error) {
       setAnalyze(error.message);
@@ -487,10 +495,68 @@ export function mount(root) {
 
   state.canvas = canvas;
 
+  function applyRecipe(recipe, { hear = false, partials = null, history = true } = {}) {
+    const controls = sanitizeControls(recipe.controls || recipe);
+    fields.preset.value = controls.preset;
+    fields.stiffness.value = String(controls.stiffness);
+    fields.brightness.value = String(controls.brightness);
+    fields.damping.value = String(controls.damping);
+    fields.oddEven.value = String(controls.oddEven);
+    fields.seed.value = String(controls.seed);
+    const exciter = root.querySelector('[data-exciter]');
+    if (recipe.exciter && exciter) exciter.value = recipe.exciter;
+    const hardness = root.querySelector('[data-hardness]');
+    if (recipe.hardness != null && hardness) hardness.value = String(recipe.hardness);
+    const velocity = root.querySelector('[data-velocity]');
+    if (recipe.velocity != null && velocity) velocity.value = String(recipe.velocity);
+    const position = root.querySelector('[data-position]');
+    if (recipe.position != null && position) position.value = String(recipe.position);
+    if (recipe.name) state.profileName = recipe.name;
+    if (history) pushHistory();
+    rebuild();
+    readPlayControls();
+    if (partials?.length) {
+      state.partials = partials.map((partial) => ({ ...partial }));
+      state.custom = true;
+      render();
+      pushModes();
+    }
+    if (hear) {
+      strike(state, true);
+      window.setTimeout(() => strike(state, false), (recipe.exciter || state.exciter) === 'bow' ? 900 : 180);
+    }
+  }
+
+  function profileFromState() {
+    readControls();
+    readPlayControls();
+    const profile = {
+      name: state.profileName || 'Modal profile',
+      controls: state.controls,
+      exciter: state.exciter,
+      hardness: state.hardness,
+      velocity: state.velocity,
+      position: state.position,
+    };
+    if (state.custom) {
+      profile.partials = state.partials.map((partial) => ({
+        ratio: Number(partial.ratio.toFixed(4)),
+        gainDb: Number(partial.gainDb.toFixed(2)),
+        decay: Number(partial.decay.toFixed(3)),
+      }));
+    }
+    return profile;
+  }
+
   readPlayControls();
   rebuild();
   updateHistoryButtons();
   showRoot();
+  mountStudio(root, {
+    applyRecipe,
+    setName(name) { state.profileName = name.trim() || 'Modal profile'; },
+    profileFromState,
+  });
   root.addEventListener('pointerdown', () => primeAudio(state), true);
   root.querySelector('[data-note="A4"]')?.setAttribute('aria-pressed', 'true');
   window.addEventListener('resize', () => draw(canvas, state.partials, state));
