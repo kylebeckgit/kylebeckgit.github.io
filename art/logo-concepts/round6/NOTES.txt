@@ -1,0 +1,23 @@
+What was looked at before drawing
+
+Chase (Chermayeff & Geismar, 1960). Four trapezoids, one square hole. The hole is the mark. One module, repeated. It works on a building and as a stamp because the silhouette is decided before any detail.
+
+Paul Rand. A mark is a picture of an idea, not a picture of the product. The IBM stripes are equal, then opened by eye so the counters survive. Simplicity is what is left after the idea is clear. Stripes, circles, and one weight.
+
+Pentagram construction drawings. The grid starts the drawing. The eye finishes it: a curve overshoots a straight edge, a counter is opened, a diagonal is drawn heavier than it measures. The diagram is allowed to show that correction.
+
+Teenage Engineering. One picture, a lot of margin, no shadow, no second color doing the work. If a caption is required, it is not finished.
+
+Elektron. The wordmark is type. The useful lesson is the machines: a grid you can count, one function in each cell. Their pictograms are literal, and literal is what this round is not.
+
+Native Instruments, Ableton, Warp. These are wordmarks. Warp's real device is a single field of color, not a symbol. Nothing here borrows a monogram.
+
+ECM. The margin is part of the mark. A favicon still has to be big enough to read, so the margin is designed, not leftover.
+
+Raster-Noton / Carsten Nicolai. The form is the phenomenon, not an illustration of it. The 20' to 2000 covers are one figure and a lot of white. Moiré and fine systems die at 16px. Count the events: more than three and it will not survive.
+
+Wolff Olins. Test the silhouette huge and at 16px before keeping it. The London 2012 mark failed by being several ideas. One move.
+
+Rules used after that
+
+One idea. One weight logic. Strong negative space. No letter silhouette (N, K, B, H, U, C, D, S, V, X, L were thrown out when they appeared). No repeat signs, play arrows, knobs, faders, cables, or a sine trapped in a circle. No instrument drawings. If the shape only works once you explain it, it is out. The sound is the reason for the shape. The shape has to hold up before you know that.
