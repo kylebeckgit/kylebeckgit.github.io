@@ -5,14 +5,15 @@
 //   z  decay time, rising up-right. Long decays leave the comb.
 //
 // Each slice is three lines. A vertical front in the ink color. An accent
-// line beside that bar: every bar inside the comb has a near-vertical accent
-// a short depth behind it. Only the two longest decays leave the comb, the
-// fundamental sagging to about the fourth crest and then rising straight,
-// the octave running parallel just below it. On the floor, a heavy front
-// rail and a parallel back rail a short depth behind it run the full width.
-// The left-hand rungs continue up-right along depth and cross a few more
-// rails parallel to the front, so the hatch sits under the bars. Stroke
-// width tracks the view. A wide blurred pass sits under the sharp strokes.
+// line beside that bar: the left-hand bars keep a bright accent in the mesh,
+// and the right-hand accent sits on its bar so the pair is one stroke. Only
+// the two longest decays leave the comb. The fundamental follows the traced
+// Zebra centerline: a shallow sag along the crests, then a long rise that
+// bows and ends just past the rail. The octave runs under it for about 40%
+// of that arc. On the floor, a front rail and a close back rail run the full
+// width. Left-hand rungs climb through bars 1 to 6 and cross rails parallel
+// to the front. Stroke width tracks the view. A blurred pass sits under the
+// sharp strokes.
 // Yaw turns frequency and decay around the vertical, so the fronts stay
 // vertical. Pitch only changes how steeply decay rises.
 //
@@ -26,21 +27,25 @@ export const MORPH_MS = 260;
 // Knobs the String 16 picture is tuned with. paintModalView may override
 // them for a comparison pass; the defaults are what the page draws.
 const TUNE = {
+  // Lightness stays at this mix of --fg and --muted. panelCool then pulls
+  // the red/blue gap in, so the grey is less warm at the same luminance.
   panelMix: 0.34,
-  tailGlow: 0.52,
-  octaveGlow: 0.5,
-  tailSharp: 0.9,
-  octaveSharp: 0.74,
-  fillet: 22,
-  filletStep: 0.08,
-  bow: 0.006,
-  leftSharp: 0.82,
-  leftWidth: 0.66,
-  leftGlow: 0.68,
-  rightSharp: 0.7,
-  accentZ: 0.008,
-  rungZ: 1.5,
-  hatchAlpha: 0.78,
+  panelCool: 0.55,
+  tailGlow: 0.40,
+  octaveGlow: 0.30,
+  tailSharp: 0.88,
+  octaveSharp: 0.56,
+  // Tip sits just past the right end of the front rail.
+  tailReach: 1.04,
+  leftSharp: 0.96,
+  leftWidth: 0.9,
+  leftGlow: 0.84,
+  // Right accent is a tint in the stroke, not a second edge.
+  rightSharp: 0.14,
+  accentZ: 0,
+  accentZLeft: 0.05,
+  rungZ: 2.05,
+  hatchAlpha: 0.66,
 };
 let activeTune = null;
 function tune() {
@@ -67,9 +72,9 @@ export const PLANE = {
   // Back rail, close enough that the glow fuses it with the front into
   // one heavy ribbon.
   ribbonZ: 0.04,
-  // Floor hatch under bars 1 to about 6. Deep enough to cross, short
-  // enough to stay in the lower left.
-  latticeZ: [0.42, 0.74, 1.05],
+  // Floor hatch under bars 1 to about 6. Evenly spaced, and tall enough
+  // that the crossings run up through those bars, not only along the floor.
+  latticeZ: [0.5, 1.0, 1.5, 2.0],
   ratioLo: 0.35,
   ratioHi: 48,
   styles: {
@@ -451,13 +456,41 @@ function airFrame(slices, clock, detune) {
     .filter((slice) => slice && slice.alpha >= 0.08 && slice.height >= 0.02)
     .map((slice) => worldOf(slice, detune))
     .sort((a, b) => a.x - b.x);
+  const span = ordered.length > 1 ? ordered[ordered.length - 1].x - ordered[0].x : PLANE.span;
   return {
     anchorX: head.x,
     anchorY: head.y,
     rankOf: (slice) => rank.get(slice) ?? 0,
     crests: ordered.slice(0, 5),
     railRight: ordered.length ? ordered[ordered.length - 1].x : head.x + PLANE.span,
+    // Bars 1–6. Same cut the floor hatch uses.
+    hatchX: ordered.length ? ordered[0].x + 0.36 * span : head.x,
   };
+}
+
+// Fundamental centerline traced from zebra-crop.png, then smoothed so the
+// descent never kicks upward. t is the fraction of the screen-x run from
+// bar 1's crest to just past the rail. y is (screenY - startY) / that run,
+// with y downward. Saved as zebra-trace.json.
+const TRACE_TAIL = [
+  [0, 0], [0.0312, 0.0367], [0.0625, 0.0692], [0.0938, 0.0971], [0.125, 0.1167],
+  [0.1562, 0.1341], [0.1875, 0.145], [0.2188, 0.1501], [0.25, 0.1473], [0.2812, 0.14],
+  [0.3125, 0.1305], [0.3438, 0.1192], [0.375, 0.1078], [0.4062, 0.0955], [0.4375, 0.0815],
+  [0.4688, 0.064], [0.5, 0.0439], [0.5312, 0.0225], [0.5625, 0.0012], [0.5938, -0.0192],
+  [0.625, -0.0397], [0.6562, -0.0603], [0.6875, -0.082], [0.7188, -0.1037], [0.75, -0.1254],
+  [0.7812, -0.1464], [0.8125, -0.1673], [0.8438, -0.1883], [0.875, -0.2091], [0.9062, -0.2304],
+  [0.9375, -0.2507], [0.9688, -0.2695], [1, -0.2865],
+];
+
+function traceY(t) {
+  const u = clamp(t, 0, 1);
+  const row = TRACE_TAIL;
+  let hi = 1;
+  while (hi < row.length - 1 && row[hi][0] < u) hi += 1;
+  const lo = hi - 1;
+  const span = row[hi][0] - row[lo][0] || 1;
+  const f = (u - row[lo][0]) / span;
+  return row[lo][1] + (row[hi][1] - row[lo][1]) * f;
 }
 
 function fromRestScreen(x, sx, sy) {
@@ -473,63 +506,16 @@ function restScreen(x, y, z) {
   };
 }
 
-// Where this partial must pass so its screen position sits on another crest.
-function onCrest(x, crest) {
-  const target = restScreen(crest.x, crest.y, 0);
-  const z = Math.max(0, (target.sx - x) / 0.78);
-  const y = (-target.sy) - (x * -0.625) - (z * 0.6375);
-  return { x, y, z };
-}
-
-// Starts on bar 1's crest, runs down-right across the next crests, then
-// rises straight to a tip past the right end of the front rail.
+// Bar 1's crest, then the traced Zebra centerline out to just past the rail.
+// The table already holds the sag depth, the broad turn, and the rise bow.
 function tailSpline(x, y0, crests, railRight, steps) {
-  const guides = (crests && crests.length) ? crests : [{ x, y: y0 }];
-  const keys = guides.map((crest, index) => (index === 0 ? { x, y: y0, z: 0 } : onCrest(x, crest)));
   const crest = restScreen(x, y0, 0);
-  const tip = fromRestScreen(x, Math.max(railRight + 0.55, crest.sx + 2.6), crest.sy - (y0 * 0.72));
+  const span = Math.max(0.4, (railRight - crest.sx) * tune().tailReach);
+  const n = Math.max(32, steps);
   const points = [];
-  const sagN = Math.max(8, Math.round(steps * 0.42));
-  for (let i = 0; i <= sagN; i++) {
-    const raw = i / sagN;
-    const eased = 1 - ((1 - raw) ** 2);
-    const t = eased * (keys.length - 1);
-    const index = Math.min(keys.length - 2, Math.floor(t));
-    const u = t - index;
-    const a = keys[index];
-    const b = keys[Math.min(keys.length - 1, index + 1)];
-    const bow = Math.sin(u * Math.PI) * y0 * tune().bow;
-    const sx = restScreen(a.x, a.y, a.z).sx + ((restScreen(b.x, b.y, b.z).sx - restScreen(a.x, a.y, a.z).sx) * u);
-    // Bow downward, so the sag is concave and never kicks up off bar 1.
-    const sy = restScreen(a.x, a.y, a.z).sy + ((restScreen(b.x, b.y, b.z).sy - restScreen(a.x, a.y, a.z).sy) * u) + bow;
-    points.push(fromRestScreen(x, sx, sy));
-  }
-  const prev = points[points.length - 2];
-  const botP = points[points.length - 1];
-  const bot = restScreen(botP.x, botP.y, botP.z);
-  const prevS = restScreen(prev.x, prev.y, prev.z);
-  const arrive = { x: bot.sx - prevS.sx, y: bot.sy - prevS.sy };
-  const riseRad = 32 * Math.PI / 180;
-  const depart = { x: Math.cos(riseRad), y: -Math.sin(riseRad) };
-  const aLen = Math.hypot(arrive.x, arrive.y) || 1;
-  let sx = bot.sx;
-  let sy = bot.sy;
-  const fillet = tune().fillet;
-  const step = y0 * tune().filletStep;
-  for (let i = 1; i <= fillet; i++) {
-    const t = i / fillet;
-    const dx = ((arrive.x / aLen) * (1 - t)) + (depart.x * t);
-    const dy = ((arrive.y / aLen) * (1 - t)) + (depart.y * t);
-    const len = Math.hypot(dx, dy) || 1;
-    sx += (dx / len) * step;
-    sy += (dy / len) * step;
-    points.push(fromRestScreen(x, sx, sy));
-  }
-  const riseN = 31;
-  for (let i = 1; i <= riseN; i++) {
-    sx += depart.x * step;
-    sy += depart.y * step;
-    points.push(fromRestScreen(x, sx, sy));
+  for (let i = 0; i <= n; i++) {
+    const t = i / n;
+    points.push(fromRestScreen(x, crest.sx + t * span, crest.sy + traceY(t) * span));
   }
   return points;
 }
@@ -552,7 +538,10 @@ function tailWorld(slice, world, maxSeconds, air) {
   const seconds = Math.max(0.05, Number(slice?.seconds) || 0.2);
   const shape = drawShape(seconds, maxSeconds || seconds);
   if (!shape.air) {
-    const z = tune().accentZ;
+    // Left accents stand just off the bar so the mesh reads accent-and-cream.
+    // Right accents share the bar's x, so no second edge appears.
+    const left = world.x <= (air?.hatchX ?? world.x);
+    const z = left ? tune().accentZLeft : tune().accentZ;
     const top = world.y;
     return [
       { x: world.x, y: top, z: 0 },
@@ -569,7 +558,7 @@ function tailWorld(slice, world, maxSeconds, air) {
   // its length. Later tails stop sooner.
   const reach = Math.max(0.22, 0.40 - (rank - 1) * 0.08);
   const end = screenArcEnd(full, reach);
-  const tuck = 0.08 + (rank - 1) * 0.035;
+  const tuck = 0.1 + (rank - 1) * 0.04;
   return full.slice(0, end + 1).map((point) => ({ x: point.x, y: point.y - tuck, z: point.z }));
 }
 
@@ -592,14 +581,14 @@ function glow(ctx, points, color, look, alpha) {
 function hatchLimit(placed, detune) {
   const xs = placed.map((item) => worldOf(item.slice, detune).x).sort((a, b) => a - b);
   if (xs.length < 2) return Infinity;
-  return xs[0] + 0.34 * (xs[xs.length - 1] - xs[0]);
+  return xs[0] + 0.36 * (xs[xs.length - 1] - xs[0]);
 }
 
 function drawSlices(ctx, slices, detune, place, camera, look, palette, clock, style, selected, bloom, weight, bulk = 1, alpha = 1, accentAlpha = alpha, hatchAlpha = alpha) {
   const ink = { width: weight * bulk, alpha, halo: 0, haloAlpha: 0 };
   const accent = { width: weight * 0.5 * bulk, alpha: accentAlpha, halo: 0, haloAlpha: 0 };
   const tail = { width: weight * (bloom ? 1.05 : 1), alpha: 1, halo: 0, haloAlpha: 0 };
-  const octave = { width: weight * (bloom ? 0.82 : 0.78), alpha: 1, halo: 0, haloAlpha: 0 };
+  const octave = { width: weight * (bloom ? 0.68 : 0.64), alpha: 1, halo: 0, haloAlpha: 0 };
   const rail = { width: weight * bulk, alpha, halo: 0, haloAlpha: 0 };
   const rung = { width: weight * 0.72 * bulk, alpha: bloom ? hatchAlpha : tune().hatchAlpha, halo: 0, haloAlpha: 0 };
   const air = airFrame(slices, clock, detune);
@@ -732,12 +721,29 @@ function mixHex(a, b, t) {
   return `#${[channel(16), channel(8), channel(0)].map((value) => value.toString(16).padStart(2, '0')).join('')}`;
 }
 
+function coolHex(hex, amount) {
+  const match = /^#([0-9a-f]{6})$/i.exec(String(hex || ''));
+  if (!match || !(amount > 0)) return hex;
+  let r = parseInt(match[1].slice(0, 2), 16);
+  let g = parseInt(match[1].slice(2, 4), 16);
+  let b = parseInt(match[1].slice(4, 6), 16);
+  const before = (0.2126 * r) + (0.7152 * g) + (0.0722 * b);
+  const delta = (r - b) * amount * 0.5;
+  r -= delta;
+  b += delta;
+  const after = (0.2126 * r) + (0.7152 * g) + (0.0722 * b) || 1;
+  const scale = before / after;
+  const channel = (value) => Math.max(0, Math.min(255, Math.round(value * scale))).toString(16).padStart(2, '0');
+  return `#${channel(r)}${channel(g)}${channel(b)}`;
+}
+
 function sitePalette(colors, invert = true) {
   const bg = colors?.bg || '#f2ede3';
   const fg = colors?.ink || colors?.fg || '#1f1d1a';
   // --muted is the site's lighter dark. Zebra's panel is a mid grey, not black.
   const muted = colors?.muted || '#6a655c';
-  const panel = invert ? mixHex(fg, muted, tune().panelMix) : bg;
+  const mixed = mixHex(fg, muted, tune().panelMix);
+  const panel = invert ? coolHex(mixed, tune().panelCool) : bg;
   return {
     panel,
     ink: invert ? bg : fg,
