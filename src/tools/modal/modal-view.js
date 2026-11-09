@@ -1,58 +1,55 @@
-// Oblique prism of a modal profile, matched to the Zebra 3 walkthrough.
+// Straight wedge of the modal face, matched to the Zebra 3 frame at 00:12.
 //
-// Axis reading from the Density and profile segments (Factory Chaotic Bell):
-//   Modes are spaced along a fixed spine. Density changes how many rungs
-//   share that spine: 8 is a sparse wireframe, 256 is a solid sheet, and the
-//   outline stays put.
-//   Level is the crest of each rung, so the outline is the spectrum.
-//   Decay is the depth of the rung. In the recording Absorb, Normalize, and
-//   Decay only nudge that crest; they do not rebuild the prism.
-//   A little of the spacing follows log frequency, so Tune slides the sheet
-//   and a profile with stretched ratios changes the outline.
-// The rungs connect a spine polyline to a crest polyline. The first and last
-// rungs are drawn as end caps, which is the small grid at the tip.
+// The bright face is a triangle, not the spectrum outline. Its left edge is
+// the low-frequency end, its top and bottom edges are straight, and they
+// meet at a sharp tip. Level and decay stay inside that outline: the rungs
+// are faint lines across the face, and they do not move the silhouette.
+// Cyan lines stack along the top edge. The lid is a second pair, parallel
+// to that edge and closed by a short right-angle hook at its far end.
 //
 // WEDGE is the look and the drag limits. Retune numbers here.
 
 export const WEDGE = {
-  // Resting view from the walkthrough frame at 00:12: the bright face runs
-  // down-right at about 45 degrees, and it is about 3.2 times longer than thick.
-  yaw: -1.1,
-  pitch: 0.75,
-  focal: 1.4,
-  perspective: 1.1,
+  // Default camera. The left edge projects vertical and the long axis
+  // runs down-right, with the tip left of the right side of the box.
+  yaw: -1,
+  pitch: 0.35,
+  focal: 7,
+  perspective: 0.25,
   yawMin: -1.7,
   yawMax: 2.25,
   pitchMin: 0.16,
   pitchMax: 1.35,
-  span: 5.4,
-  amp: 1.7,
-  // Depth opens the face for every partial. leftWidth adds more at the low
-  // end, so that side is wider than the tip. decayDepth only nudges it.
-  depth: 1.45,
-  leftWidth: 1.7,
-  decayDepth: 0.35,
-  spine: 0.14,
-  // The cyan wire sits just above the cream face. The lid is a flat plane
-  // over the low partials, closing with a corner partway along the slab.
-  float: 0.1,
-  planeLift: 1.2,
-  planeEnd: 0.46,
-  step: 8,
-  tipSpan: 0.04,
-  tipRise: 0.28,
-  decayLo: 0.05,
-  decayHi: 4.5,
-  marginX: 0.07,
-  marginY: 0.08,
+  span: 7,
+  leftH: 2.5,
+  tipY: 0.2,
+  tipZ: 1,
+  // Empty raw-space around the triangle so the tip sits lower-middle
+  // and the lid has room above the top edge.
+  padRight: 0.48,
+  padBelow: 0.34,
+  padAbove: 0.42,
+  marginX: 0.06,
+  marginY: 0.06,
+  // Cyan stack along the top, then the lid further out. Fractions of the
+  // left-edge length, so they scale with the canvas.
+  stackCount: 4,
+  stackGap: 0.013,
+  stackEnd: 0.97,
+  lidInner: 0.1,
+  lidOuter: 0.24,
+  lidStart: 0.04,
+  lidEnd: 0.55,
+  rungAlpha: 0.16,
+  tipSize: 0.055,
   panel: '#1c1a17',
   line: '#f2ede3',
   wire: '#7ed4cc',
-  wireAlpha: 0.95,
+  wireAlpha: 0.92,
   styles: {
-    eco: { width: 0.75, alpha: 0.9, halo: 0, haloAlpha: 0, solid: false },
-    fast: { width: 1.25, alpha: 0.85, halo: 0, haloAlpha: 0, solid: true },
-    glow: { width: 1.2, alpha: 0.72, halo: 7, haloAlpha: 0.28, solid: true },
+    eco: { width: 0.75, alpha: 0.55, halo: 0, haloAlpha: 0, solid: false },
+    fast: { width: 1.15, alpha: 0.85, halo: 0, haloAlpha: 0, solid: true },
+    glow: { width: 1.15, alpha: 0.72, halo: 6, haloAlpha: 0.28, solid: true },
   },
 };
 
@@ -77,15 +74,14 @@ export function paintModalView(ctx, partials, options) {
   ctx.fillStyle = WEDGE.panel;
   ctx.fillRect(0, 0, width, height);
   ctx.lineCap = 'butt';
-  ctx.lineJoin = 'round';
+  ctx.lineJoin = 'miter';
   const accent = colors?.accent || '#d4421c';
   const smear = Math.max(-1, Math.min(1, detune)) * 7;
-  if (smear) drawSheet(ctx, scene, look, WEDGE.line, selected, smear, 0.45);
-  drawSheet(ctx, scene, look, WEDGE.line, selected, 0, 1);
+  if (smear) drawSheet(ctx, scene, look, selected, smear, 0.45);
+  drawSheet(ctx, scene, look, selected, 0, 1);
   if (selected >= 0 && scene.modes[selected]) {
     const mode = scene.modes[selected];
-    strokeRung(ctx, mode, { width: look.width + 1.3, alpha: 1, halo: 4, haloAlpha: 0.4 }, accent);
-    strokeRung(ctx, { base: mode.wireBase, crest: mode.wireCrest }, { width: look.width + 0.8, alpha: 1, halo: 3, haloAlpha: 0.35 }, accent);
+    strokeRung(ctx, mode, { width: look.width + 1.1, alpha: 1, halo: 3, haloAlpha: 0.35 }, accent);
   }
   return scene.modes.map((mode) => mode.base);
 }
@@ -107,94 +103,49 @@ export function hitPartial(partials, camera, width, height, x, y) {
 
 export function layoutScene(partials, camera, width, height) {
   const view = clampCamera(camera);
-  const placed = placeModes(partials);
-  const samples = [];
-  for (const mode of placed) {
-    samples.push(rawProject(mode.x, 0, mode.z0, view));
-    samples.push(rawProject(mode.x, mode.y, mode.z1, view));
-    if (mode.t <= WEDGE.planeEnd) samples.push(rawProject(mode.x, mode.y + WEDGE.planeLift, mode.z1, view));
-  }
-  if (placed.length) {
-    const last = placed[placed.length - 1];
-    const yMax = Math.max(last.y, WEDGE.amp * WEDGE.tipRise);
-    const xNear = last.x - WEDGE.span * WEDGE.tipSpan;
-    for (const x of [xNear, last.x]) {
-      samples.push(rawProject(x, yMax, last.z1, view));
-      samples.push(rawProject(x, 0, last.z0, view));
-    }
-  }
-  if (!samples.length) samples.push(rawProject(0, 0, 0, view), rawProject(WEDGE.span, WEDGE.amp, WEDGE.depth, view));
-  const fit = fitTransform(samples, width, height);
+  const fit = fitFrame(view, width, height);
   const project = (x, y, z) => fit(rawProject(x, y, z, view));
-  const modes = placed.map((mode) => ({
-    base: project(mode.x, 0, mode.z0),
-    crest: project(mode.x, mode.y, mode.z1),
-    wireBase: project(mode.x, 0, mode.z0),
-    wireCrest: project(mode.x, mode.y, mode.z1),
-    plane: null,
-    cap: project(mode.x, mode.y * 0.5, mode.z1),
-    world: mode,
-    depth: mode.x,
-    amp: mode.amp,
-  }));
-  raiseWire(modes, project);
-  return { modes, project };
-}
-
-// The cyan copy sits a short step off the cream, toward the top plane.
-// The plane itself runs parallel to the spine and closes with a right-angle cap.
-function raiseWire(modes, project) {
-  if (modes.length < 2) return;
-  const origin = project(0, 0, 0);
-  const up = project(0, 1, 0);
-  const unit = Math.hypot(up.x - origin.x, up.y - origin.y) || 1;
-  const lift = unit * WEDGE.planeLift;
-  const floatLift = unit * WEDGE.float;
-  const tail = modes[modes.length - 1].base;
-  const head = modes[0].base;
-  const sx = tail.x - head.x;
-  const sy = tail.y - head.y;
-  const len = Math.hypot(sx, sy) || 1;
-  const px = sy / len;
-  const py = -sx / len;
-  const left = modes[0].crest;
-  for (const mode of modes) {
-    mode.wireBase = { x: mode.base.x + px * floatLift, y: mode.base.y + py * floatLift };
-    mode.wireCrest = { x: mode.crest.x + px * floatLift, y: mode.crest.y + py * floatLift };
-    if (mode.world.t <= WEDGE.planeEnd) {
-      mode.plane = {
-        x: left.x + sx * mode.world.t + px * lift,
-        y: left.y + sy * mode.world.t + py * lift,
-      };
-    }
-  }
-}
-
-function placeModes(partials) {
-  if (!partials.length) return [];
-  const fund = Math.min(...partials.map((partial) => partial.ratio));
-  const top = Math.max(...partials.map((partial) => partial.ratio));
-  const logSpan = Math.log2(top / fund) || 1;
-  const lo = Math.log(WEDGE.decayLo);
-  const hi = Math.log(WEDGE.decayHi);
+  const tl = project(0, WEDGE.leftH, 0);
+  const bl = project(0, 0, 0);
+  const tip = project(WEDGE.span, WEDGE.tipY, WEDGE.tipZ);
   const last = Math.max(1, partials.length - 1);
-  return partials.map((partial, index) => {
-    const indexT = index / last;
-    const logT = Math.log2(Math.max(partial.ratio, 1e-6) / fund) / logSpan;
-    const u = indexT * 0.74 + logT * 0.26;
-    const amp = 10 ** (Math.max(-72, Math.min(0, Number(partial.gainDb) || 0)) / 20);
-    const level = 0.46 + 0.54 * Math.sqrt(amp);
-    const decayT = clamp((Math.log(Math.max(WEDGE.decayLo, Number(partial.decay) || WEDGE.decayLo)) - lo) / (hi - lo), 0.08, 1);
-    const left = 1 - indexT;
+  const modes = partials.map((partial, index) => {
+    const t = index / last;
     return {
-      x: u * WEDGE.span,
-      y: level * WEDGE.amp,
-      z0: WEDGE.spine,
-      z1: WEDGE.depth + left * WEDGE.leftWidth + decayT * WEDGE.decayDepth,
-      t: indexT,
-      amp,
+      base: lerp(bl, tip, t),
+      crest: lerp(tl, tip, t),
+      t,
+      amp: 10 ** (Math.max(-72, Math.min(0, Number(partial.gainDb) || 0)) / 20),
     };
   });
+  return { modes, tl, bl, tip, project };
+}
+
+function fitFrame(camera, width, height) {
+  const home = clampCamera(defaultCamera());
+  const frame = [rawProject(0, WEDGE.leftH, 0, home), rawProject(0, 0, 0, home), rawProject(WEDGE.span, WEDGE.tipY, WEDGE.tipZ, home)];
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  for (const sample of frame) {
+    if (sample.x < minX) minX = sample.x;
+    if (sample.x > maxX) maxX = sample.x;
+    if (sample.y < minY) minY = sample.y;
+    if (sample.y > maxY) maxY = sample.y;
+  }
+  const spanX = Math.max(0.08, maxX - minX);
+  const spanY = Math.max(0.08, maxY - minY);
+  const samples = [
+    rawProject(0, WEDGE.leftH, 0, camera),
+    rawProject(0, 0, 0, camera),
+    rawProject(WEDGE.span, WEDGE.tipY, WEDGE.tipZ, camera),
+    { x: minX, y: maxY + spanY * WEDGE.padAbove },
+    { x: maxX + spanX * WEDGE.padRight, y: minY - spanY * WEDGE.padBelow },
+    { x: minX, y: minY - spanY * WEDGE.padBelow },
+    { x: maxX + spanX * WEDGE.padRight, y: maxY + spanY * WEDGE.padAbove },
+  ];
+  return fitTransform(samples, width, height);
 }
 
 function rawProject(x, y, z, camera) {
@@ -207,7 +158,7 @@ function rawProject(x, y, z, camera) {
   const y2 = y * cp - z1 * sp;
   const z2 = y * sp + z1 * cp;
   const denom = camera.distance + z2 * WEDGE.perspective;
-  const persp = clamp(camera.distance / Math.max(0.55, denom), 0.42, 1.85);
+  const persp = clamp(camera.distance / Math.max(0.25, denom), 0.25, 2.4);
   return { x: x1 * persp, y: y2 * persp, depth: z2 };
 }
 
@@ -235,142 +186,112 @@ function fitTransform(samples, width, height) {
   });
 }
 
-function drawSheet(ctx, scene, look, color, selected, shift, alphaScale) {
-  const modes = scene.modes;
-  if (!modes.length) return;
-  const count = modes.length;
-  const fuse = count >= 64 && look.solid;
-  ctx.strokeStyle = color;
-  ctx.fillStyle = color;
+function drawSheet(ctx, scene, look, selected, shift, alphaScale) {
+  const { modes, tl, bl, tip } = scene;
+  if (!tl || !bl || !tip) return;
+  const fuse = modes.length >= 64 && look.solid;
+  ctx.fillStyle = WEDGE.line;
+  ctx.strokeStyle = WEDGE.line;
   if (fuse) {
-    ctx.globalAlpha = 0.92 * alphaScale;
-    fillFace(ctx, modes, shift);
-    if (look.halo > 0) {
-      ctx.globalAlpha = look.haloAlpha * alphaScale;
-      ctx.lineWidth = look.halo;
-      strokeStepped(ctx, modes.map((mode) => shiftPoint(mode.crest, shift)));
-    }
-  } else {
-    const rungAlpha = Math.min(0.92, look.alpha * alphaScale);
-    if (look.halo > 0) {
-      ctx.globalAlpha = look.haloAlpha * alphaScale;
-      ctx.lineWidth = look.halo;
-      strokeStepped(ctx, modes.map((mode) => shiftPoint(mode.crest, shift)));
-    }
-    ctx.globalAlpha = rungAlpha;
-    ctx.lineWidth = look.width;
-    for (let i = 0; i < modes.length; i++) {
-      if (i === selected) continue;
-      const mode = modes[i];
-      line(ctx, shiftPoint(mode.base, shift), shiftPoint(mode.crest, shift));
-    }
+    ctx.globalAlpha = 0.94 * alphaScale;
+    fillTriangle(ctx, tl, bl, tip, shift);
   }
-  drawWire(ctx, scene, look, shift, alphaScale, selected);
+  ctx.globalAlpha = (fuse ? WEDGE.rungAlpha : Math.min(0.7, look.alpha)) * alphaScale;
+  ctx.lineWidth = fuse ? 1 : look.width;
+  ctx.strokeStyle = fuse ? WEDGE.wire : WEDGE.line;
+  for (let i = 0; i < modes.length; i++) {
+    if (i === selected) continue;
+    const mode = modes[i];
+    line(ctx, shiftPoint(mode.base, shift), shiftPoint(mode.crest, shift));
+  }
+  ctx.strokeStyle = WEDGE.line;
+  ctx.globalAlpha = Math.min(1, 0.95 * alphaScale);
+  ctx.lineWidth = 1.35;
+  strokeEdges(ctx, tl, bl, tip, shift);
+  drawTopWire(ctx, tl, bl, tip, look, shift, alphaScale);
+  drawTip(ctx, tl, bl, tip, shift, alphaScale);
   ctx.globalAlpha = 1;
 }
 
-function drawWire(ctx, scene, look, shift, alphaScale, selected) {
-  const modes = scene.modes;
-  if (modes.length < 2) return;
+function drawTopWire(ctx, tl, bl, tip, look, shift, alphaScale) {
+  const edge = norm(sub(tip, tl));
+  let normal = { x: edge.y, y: -edge.x };
+  const down = sub(bl, tl);
+  if (dot(normal, down) > 0) normal = { x: -normal.x, y: -normal.y };
+  const left = Math.hypot(bl.x - tl.x, bl.y - tl.y) || 1;
+  const gap = left * WEDGE.stackGap;
   ctx.strokeStyle = WEDGE.wire;
-  const stride = Math.max(1, Math.round(modes.length / 18));
+  ctx.lineWidth = 1.15;
+  const end = lerp(tl, tip, WEDGE.stackEnd);
   if (look.halo > 0) {
     ctx.globalAlpha = look.haloAlpha * alphaScale;
     ctx.lineWidth = look.halo;
-    strokeStepped(ctx, modes.map((mode) => shiftPoint(mode.wireCrest, shift)));
-    strokePoly(ctx, lidPoints(modes, shift));
+    strokeOffset(ctx, tl, end, normal, gap * 2, shift);
+    ctx.lineWidth = 1.15;
   }
   ctx.globalAlpha = WEDGE.wireAlpha * alphaScale;
-  ctx.lineWidth = Math.max(1, look.width);
-  for (let i = 0; i < modes.length; i += stride) {
-    if (i === selected) continue;
-    const mode = modes[i];
-    line(ctx, shiftPoint(mode.wireBase, shift), shiftPoint(mode.wireCrest, shift));
+  for (let i = 1; i <= WEDGE.stackCount; i++) strokeOffset(ctx, tl, end, normal, gap * i, shift);
+  const inner = left * WEDGE.lidInner;
+  const outer = left * WEDGE.lidOuter;
+  const near = lerp(tl, tip, WEDGE.lidStart);
+  const far = lerp(tl, tip, WEDGE.lidEnd);
+  const a0 = add(near, scale(normal, inner));
+  const a1 = add(far, scale(normal, inner));
+  const b0 = add(near, scale(normal, outer));
+  const b1 = add(far, scale(normal, outer));
+  if (look.halo > 0) {
+    ctx.globalAlpha = look.haloAlpha * alphaScale;
+    ctx.lineWidth = look.halo;
+    line(ctx, shiftPoint(a0, shift), shiftPoint(a1, shift));
+    line(ctx, shiftPoint(b0, shift), shiftPoint(b1, shift));
+    ctx.lineWidth = 1.15;
   }
-  const last = modes.length - 1;
-  if (last % stride !== 0 && last !== selected) {
-    line(ctx, shiftPoint(modes[last].wireBase, shift), shiftPoint(modes[last].wireCrest, shift));
-  }
-  strokePoly(ctx, modes.map((mode) => shiftPoint(mode.wireBase, shift)));
-  strokeStepped(ctx, modes.map((mode) => shiftPoint(mode.wireCrest, shift)));
-  const lid = lidPoints(modes, shift);
-  if (lid.length > 1) {
-    strokePoly(ctx, lid);
-    const cap = modes.findLast((mode) => mode.plane);
-    line(ctx, shiftPoint(modes[0].wireCrest, shift), lid[0]);
-    line(ctx, shiftPoint(cap.wireCrest, shift), lid[lid.length - 1]);
-  }
+  ctx.globalAlpha = WEDGE.wireAlpha * alphaScale;
+  line(ctx, shiftPoint(a0, shift), shiftPoint(a1, shift));
+  line(ctx, shiftPoint(b0, shift), shiftPoint(b1, shift));
+  line(ctx, shiftPoint(a1, shift), shiftPoint(b1, shift));
+}
+
+function drawTip(ctx, tl, bl, tip, shift, alphaScale) {
+  const back = norm(sub(mid(tl, bl), tip));
+  const side = { x: -back.y, y: back.x };
+  const size = Math.hypot(bl.x - tl.x, bl.y - tl.y) * WEDGE.tipSize;
+  ctx.strokeStyle = WEDGE.wire;
+  ctx.globalAlpha = WEDGE.wireAlpha * alphaScale;
   ctx.lineWidth = 1;
-  strokeTipGrid(ctx, scene, shift);
-}
-
-function lidPoints(modes, shift) {
-  const points = [];
-  for (const mode of modes) {
-    if (!mode.plane) break;
-    points.push(shiftPoint(mode.plane, shift));
+  for (let i = 1; i <= 3; i++) {
+    const d = (size * i) / 3;
+    const p = add(tip, scale(back, d));
+    const half = d * 0.42;
+    line(ctx, shiftPoint(add(p, scale(side, -half)), shift), shiftPoint(add(p, scale(side, half)), shift));
   }
-  return points;
+  for (const s of [-0.28, 0.28]) {
+    const a = add(tip, scale(side, s * size));
+    line(ctx, shiftPoint(a, shift), shiftPoint(add(a, scale(back, size * 0.95)), shift));
+  }
 }
 
-function fillFace(ctx, modes, shift) {
+function fillTriangle(ctx, tl, bl, tip, shift) {
+  const a = shiftPoint(tl, shift);
+  const b = shiftPoint(bl, shift);
+  const c = shiftPoint(tip, shift);
   ctx.beginPath();
-  const first = shiftPoint(modes[0].base, shift);
-  ctx.moveTo(first.x, first.y);
-  for (const mode of modes) {
-    const point = shiftPoint(mode.base, shift);
-    ctx.lineTo(point.x, point.y);
-  }
-  for (let i = modes.length - 1; i >= 0; i--) {
-    const point = shiftPoint(modes[i].crest, shift);
-    ctx.lineTo(point.x, point.y);
-  }
+  ctx.moveTo(a.x, a.y);
+  ctx.lineTo(c.x, c.y);
+  ctx.lineTo(b.x, b.y);
   ctx.closePath();
   ctx.fill();
 }
 
-function strokeStepped(ctx, points) {
-  if (points.length < 2) return;
-  const step = WEDGE.step;
-  ctx.beginPath();
-  let x = points[0].x;
-  let y = points[0].y;
-  ctx.moveTo(x, y);
-  for (let i = 1; i < points.length; i++) {
-    const nx = Math.round(points[i].x / step) * step;
-    const ny = Math.round(points[i].y / step) * step;
-    if (nx === x && ny === y) continue;
-    ctx.lineTo(nx, y);
-    ctx.lineTo(nx, ny);
-    x = nx;
-    y = ny;
-  }
-  ctx.stroke();
+function strokeEdges(ctx, tl, bl, tip, shift) {
+  line(ctx, shiftPoint(tl, shift), shiftPoint(bl, shift));
+  line(ctx, shiftPoint(bl, shift), shiftPoint(tip, shift));
+  line(ctx, shiftPoint(tip, shift), shiftPoint(tl, shift));
 }
 
-function strokeTipGrid(ctx, scene, shift) {
-  const last = scene.modes[scene.modes.length - 1];
-  if (!last?.world) return;
-  const world = last.world;
-  const yMax = Math.max(world.y, WEDGE.amp * WEDGE.tipRise);
-  const xNear = world.x - WEDGE.span * WEDGE.tipSpan;
-  const ySteps = 4;
-  const zSteps = 3;
-  const xs = [xNear, world.x];
-  for (const x of xs) {
-    for (let i = 0; i <= ySteps; i++) {
-      const y = yMax * (i / ySteps);
-      line(ctx, shiftPoint(scene.project(x, y, world.z0), shift), shiftPoint(scene.project(x, y, world.z1), shift));
-    }
-    for (let i = 0; i <= zSteps; i++) {
-      const z = world.z0 + (world.z1 - world.z0) * (i / zSteps);
-      line(ctx, shiftPoint(scene.project(x, 0, z), shift), shiftPoint(scene.project(x, yMax, z), shift));
-    }
-  }
-  for (let i = 0; i <= ySteps; i++) {
-    const y = yMax * (i / ySteps);
-    line(ctx, shiftPoint(scene.project(xNear, y, world.z1), shift), shiftPoint(scene.project(world.x, y, world.z1), shift));
-  }
+function strokeOffset(ctx, a, b, normal, distance, shift) {
+  const o = scale(normal, distance);
+  line(ctx, shiftPoint(add(a, o), shift), shiftPoint(add(b, o), shift));
 }
 
 function strokeRung(ctx, mode, look, color) {
@@ -386,23 +307,6 @@ function strokeRung(ctx, mode, look, color) {
   ctx.globalAlpha = 1;
 }
 
-function strokeCap(ctx, mode, shift) {
-  const mid = shiftPoint(mode.cap, shift);
-  const base = shiftPoint(mode.base, shift);
-  const crest = shiftPoint(mode.crest, shift);
-  line(ctx, base, crest);
-  line(ctx, base, mid);
-  line(ctx, mid, crest);
-}
-
-function strokePoly(ctx, points) {
-  if (points.length < 2) return;
-  ctx.beginPath();
-  ctx.moveTo(points[0].x, points[0].y);
-  for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
-  ctx.stroke();
-}
-
 function line(ctx, a, b) {
   ctx.beginPath();
   ctx.moveTo(a.x, a.y);
@@ -412,6 +316,35 @@ function line(ctx, a, b) {
 
 function shiftPoint(point, shift) {
   return shift ? { x: point.x + shift, y: point.y } : point;
+}
+
+function lerp(a, b, t) {
+  return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+}
+
+function add(a, b) {
+  return { x: a.x + b.x, y: a.y + b.y };
+}
+
+function sub(a, b) {
+  return { x: a.x - b.x, y: a.y - b.y };
+}
+
+function scale(v, k) {
+  return { x: v.x * k, y: v.y * k };
+}
+
+function dot(a, b) {
+  return a.x * b.x + a.y * b.y;
+}
+
+function mid(a, b) {
+  return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+}
+
+function norm(v) {
+  const len = Math.hypot(v.x, v.y) || 1;
+  return { x: v.x / len, y: v.y / len };
 }
 
 function clamp(value, lo, hi) {
