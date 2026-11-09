@@ -750,6 +750,7 @@ function canvasColors() {
   const read = (name, fallback) => style.getPropertyValue(name).trim() || fallback;
   return {
     card: read('--card', '#fbf8f2'),
+    bg: read('--bg', '#f2ede3'),
     line: read('--line', '#d8d0c1'),
     accent: read('--accent', '#d4421c'),
     // Quiet partials follow the text color. --ink stays dark in both schemes.

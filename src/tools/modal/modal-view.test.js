@@ -14,6 +14,7 @@ function stubContext() {
     fillRect() {},
     fillText() {},
     clearRect() {},
+    measureText(text) { return { width: String(text).length * 7 }; },
     lineWidth: 1,
     strokeStyle: '',
     fillStyle: '',
@@ -31,10 +32,36 @@ function partials(count) {
   return out;
 }
 
+test('the scene stays inside the canvas and the modes stay upright', () => {
+  const ctx = stubContext();
+  ctx.measureText = (text) => ({ width: String(text).length * 7 });
+  const list = partials(64);
+  const colors = { card: '#24211d', bg: '#161513', line: '#3a362f', accent: '#d4421c', ink: '#f2ede3', muted: '#c4bdb2', font: 'Figtree' };
+  const points = [];
+  const original = ctx.lineTo;
+  ctx.lineTo = (x, y) => { points.push({ x, y }); original.call(ctx, x, y); };
+  ctx.moveTo = (x, y) => { points.push({ x, y }); };
+  for (const yaw of [-0.8, 0.2, 0.55, 1.4]) {
+    points.length = 0;
+    paintModalView(ctx, list, {
+      width: 900,
+      height: 320,
+      camera: { ...defaultCamera(), yaw, pitch: 0.35 + Math.abs(yaw) * 0.1 },
+      style: 'fast',
+      colors,
+    });
+    assert.ok(points.length > 10);
+    for (const point of points) {
+      assert.ok(point.x >= -1 && point.x <= 901, `x ${point.x} at yaw ${yaw}`);
+      assert.ok(point.y >= -1 && point.y <= 321, `y ${point.y} at yaw ${yaw}`);
+    }
+  }
+});
+
 test('256 partials in the glow style draw at 60 fps', () => {
   const ctx = stubContext();
   const list = partials(256);
-  const colors = { card: '#fbf8f2', line: '#d8d0c1', accent: '#d4421c', ink: '#1a1916', muted: '#6a655c', font: 'Figtree' };
+  const colors = { card: '#fbf8f2', bg: '#f2ede3', line: '#d8d0c1', accent: '#d4421c', ink: '#1a1916', muted: '#6a655c', font: 'Figtree' };
   const start = performance.now();
   for (let frame = 0; frame < 60; frame++) {
     paintModalView(ctx, list, {
