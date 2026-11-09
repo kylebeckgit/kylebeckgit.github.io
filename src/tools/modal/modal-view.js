@@ -1,43 +1,41 @@
-// Fixed-camera wedge of a modal profile.
+// Oblique prism of a modal profile, matched to the Zebra 3 walkthrough.
 //
-// Axis inference from the Zebra 3 reference shots (Factory Chaotic Bell, 64
-// modes, 150% GUI) and the user guide:
-//   Frequency runs along the spine of the wedge. Disperse at 100 spreads the
-//   modes apart along that spine and opens the fan.
-//   Amplitude is where each line sits off the spine, so the outline is the
-//   spectrum.
-//   Relative decay is the length of each line. Absorb at 100 damps the modes,
-//   high ones first, and the sheet collapses into a short ridge.
-// The guide calls the graphic a 3D view of frequency, amplitude, and relative
-// decay. The shots show one fixed steep camera, no floor, and no axis names.
-// Each mode is one line. Stacked, the lines read as a sheet. Eco thins that
-// sheet, fast draws every line, glow blooms it.
+// Axis reading from the Density and profile segments (Factory Chaotic Bell):
+//   Modes are spaced along a fixed spine. Density changes how many rungs
+//   share that spine: 8 is a sparse wireframe, 256 is a solid sheet, and the
+//   outline stays put.
+//   Level is the crest of each rung, so the outline is the spectrum.
+//   Decay is the depth of the rung. In the recording Absorb, Normalize, and
+//   Decay only nudge that crest; they do not rebuild the prism.
+//   A little of the spacing follows log frequency, so Tune slides the sheet
+//   and a profile with stretched ratios changes the outline.
+// The rungs connect a spine polyline to a crest polyline. The first and last
+// rungs are drawn as end caps, which is the small grid at the tip.
 //
-// WEDGE is the whole look. A later recording of a knob can retune these
-// numbers without changing how a mode is placed or stroked.
+// WEDGE is the look and the drag limits. Retune numbers here.
 
 export const WEDGE = {
-  yaw: 0.7,
-  pitch: 0.66,
-  focal: 3.4,
-  perspective: 0.62,
+  yaw: -0.2,
+  pitch: 0.4,
+  focal: 3.8,
+  perspective: 0.42,
+  yawMin: -0.55,
+  yawMax: 2.25,
+  pitchMin: 0.16,
+  pitchMax: 1.22,
   span: 5.4,
-  amp: 1.85,
-  length: 2.8,
-  dirX: 0.08,
-  dirY: -0.12,
-  dirZ: 1,
-  freqOctaves: 5.6,
-  decayLo: 0.04,
-  decayHi: 6,
-  marginX: 0.06,
-  marginY: 0.1,
+  amp: 1.7,
+  depth: 0.72,
+  decayLo: 0.05,
+  decayHi: 4.5,
+  marginX: 0.045,
+  marginY: 0.07,
   panel: '#1c1a17',
   line: '#f2ede3',
   styles: {
-    eco: { stride: 2, width: 0.85, alpha: 0.55, halo: 0, haloAlpha: 0, composite: 'source-over' },
-    fast: { stride: 1, width: 1.05, alpha: 0.72, halo: 0, haloAlpha: 0, composite: 'source-over' },
-    glow: { stride: 1, width: 1.35, alpha: 0.95, halo: 8, haloAlpha: 0.34, composite: 'source-over' },
+    eco: { width: 0.75, alpha: 0.9, halo: 0, haloAlpha: 0 },
+    fast: { width: 1.25, alpha: 0.85, halo: 0, haloAlpha: 0 },
+    glow: { width: 1.2, alpha: 0.72, halo: 7, haloAlpha: 0.28 },
   },
 };
 
@@ -45,39 +43,41 @@ export function defaultCamera() {
   return { yaw: WEDGE.yaw, pitch: WEDGE.pitch, distance: WEDGE.focal };
 }
 
+export function clampCamera(camera) {
+  const base = camera || defaultCamera();
+  return {
+    yaw: clamp(base.yaw, WEDGE.yawMin, WEDGE.yawMax),
+    pitch: clamp(base.pitch, WEDGE.pitchMin, WEDGE.pitchMax),
+    distance: WEDGE.focal,
+  };
+}
+
 export function paintModalView(ctx, partials, options) {
-  const { width, height, style = 'fast', colors, selected = -1 } = options;
+  const { width, height, style = 'fast', colors, selected = -1, camera, detune = 0 } = options;
   const look = WEDGE.styles[style] || WEDGE.styles.fast;
-  const scene = layoutScene(partials, width, height);
+  const scene = layoutScene(partials, camera, width, height);
   ctx.clearRect(0, 0, width, height);
   ctx.fillStyle = WEDGE.panel;
   ctx.fillRect(0, 0, width, height);
   ctx.lineCap = 'butt';
+  ctx.lineJoin = 'round';
   const accent = colors?.accent || '#d4421c';
-  const order = scene.modes
-    .map((mode, index) => ({ mode, index }))
-    .sort((a, b) => b.mode.depth - a.mode.depth);
-  ctx.save();
-  ctx.globalCompositeOperation = look.composite;
-  for (const entry of order) {
-    if (entry.index === selected) continue;
-    if (look.stride > 1 && entry.index % look.stride !== 0) continue;
-    strokeMode(ctx, entry.mode, look, WEDGE.line, false);
-  }
-  ctx.restore();
+  const smear = Math.max(-1, Math.min(1, detune)) * 7;
+  if (smear) drawSheet(ctx, scene, look, WEDGE.line, selected, smear, 0.45);
+  drawSheet(ctx, scene, look, WEDGE.line, selected, 0, 1);
   if (selected >= 0 && scene.modes[selected]) {
-    strokeMode(ctx, scene.modes[selected], { ...look, width: look.width + 1.1, alpha: 1, halo: Math.max(look.halo, 4), haloAlpha: 0.35 }, accent, true);
+    strokeRung(ctx, scene.modes[selected], { width: look.width + 1.3, alpha: 1, halo: 4, haloAlpha: 0.4 }, accent);
   }
-  return scene.modes.map((mode) => mode.a);
+  return scene.modes.map((mode) => mode.base);
 }
 
-export function hitPartial(partials, _camera, width, height, x, y) {
-  const scene = layoutScene(partials, width, height);
+export function hitPartial(partials, camera, width, height, x, y) {
+  const scene = layoutScene(partials, camera, width, height);
   let best = -1;
-  let score = 14;
+  let score = 12;
   for (let i = 0; i < scene.modes.length; i++) {
     const mode = scene.modes[i];
-    const distance = distanceToSegment(x, y, mode.a.x, mode.a.y, mode.b.x, mode.b.y);
+    const distance = distanceToSegment(x, y, mode.base.x, mode.base.y, mode.crest.x, mode.crest.y);
     if (distance < score) {
       score = distance;
       best = i;
@@ -86,75 +86,64 @@ export function hitPartial(partials, _camera, width, height, x, y) {
   return best;
 }
 
-export function layoutScene(partials, width, height) {
+export function layoutScene(partials, camera, width, height) {
+  const view = clampCamera(camera);
   const placed = placeModes(partials);
-  const samples = frameCorners(placed).map((point) => rawProject(point.x, point.y, point.z));
+  const samples = [];
   for (const mode of placed) {
-    samples.push(rawProject(mode.x0, mode.y0, mode.z0));
-    samples.push(rawProject(mode.x1, mode.y1, mode.z1));
+    samples.push(rawProject(mode.x, 0, mode.z0, view));
+    samples.push(rawProject(mode.x, mode.y, mode.z1, view));
   }
+  if (!samples.length) samples.push(rawProject(0, 0, 0, view), rawProject(WEDGE.span, WEDGE.amp, WEDGE.depth, view));
   const fit = fitTransform(samples, width, height);
-  const modes = placed.map((mode) => {
-    const a = fit(rawProject(mode.x0, mode.y0, mode.z0));
-    const b = fit(rawProject(mode.x1, mode.y1, mode.z1));
-    return { a, b, depth: (a.depth + b.depth) / 2, amp: mode.amp };
-  });
-  return { modes, placed };
+  const project = (x, y, z) => fit(rawProject(x, y, z, view));
+  const modes = placed.map((mode) => ({
+    base: project(mode.x, 0, mode.z0),
+    crest: project(mode.x, mode.y, mode.z1),
+    cap: project(mode.x, mode.y * 0.5, mode.z1),
+    depth: mode.x,
+    amp: mode.amp,
+  }));
+  return { modes, project };
 }
 
 function placeModes(partials) {
   if (!partials.length) return [];
   const fund = Math.min(...partials.map((partial) => partial.ratio));
+  const top = Math.max(...partials.map((partial) => partial.ratio));
+  const logSpan = Math.log2(top / fund) || 1;
   const lo = Math.log(WEDGE.decayLo);
   const hi = Math.log(WEDGE.decayHi);
-  return partials.map((partial) => {
-    const oct = Math.log2(Math.max(partial.ratio, 1e-6) / fund);
-    const x = (oct / WEDGE.freqOctaves) * WEDGE.span;
-    const amp = 10 ** (Math.max(-80, Math.min(0, Number(partial.gainDb) || 0)) / 20);
-    const decayT = clamp((Math.log(Math.max(WEDGE.decayLo, Number(partial.decay) || WEDGE.decayLo)) - lo) / (hi - lo), 0, 1.4);
-    const len = Math.max(0.03, decayT) * WEDGE.length;
-    const y = amp * WEDGE.amp;
+  const last = Math.max(1, partials.length - 1);
+  return partials.map((partial, index) => {
+    const indexT = index / last;
+    const logT = Math.log2(Math.max(partial.ratio, 1e-6) / fund) / logSpan;
+    const u = indexT * 0.74 + logT * 0.26;
+    const amp = 10 ** (Math.max(-72, Math.min(0, Number(partial.gainDb) || 0)) / 20);
+    const level = 0.46 + 0.54 * Math.sqrt(amp);
+    const decayT = clamp((Math.log(Math.max(WEDGE.decayLo, Number(partial.decay) || WEDGE.decayLo)) - lo) / (hi - lo), 0.08, 1);
     return {
-      x0: x,
-      y0: y,
-      z0: 0,
-      x1: x + len * WEDGE.dirX,
-      y1: y + len * WEDGE.dirY,
-      z1: len * WEDGE.dirZ,
+      x: u * WEDGE.span,
+      y: level * WEDGE.amp,
+      z0: decayT * WEDGE.depth * 0.18,
+      z1: decayT * WEDGE.depth,
       amp,
     };
   });
 }
 
-function frameCorners(placed) {
-  // A full-level, full-decay mode at either end of the modes actually shown.
-  // The frame stays put when Absorb shortens the lines, and it grows when
-  // Disperse pushes a mode further along the spine.
-  const len = WEDGE.length;
-  const xs = placed.length ? placed.map((mode) => mode.x0) : [0, WEDGE.span];
-  const minX = Math.min(...xs);
-  const maxX = Math.max(minX + WEDGE.span * 0.5, ...xs);
-  const points = [];
-  for (const x of [minX, maxX]) {
-    points.push({ x, y: WEDGE.amp * 0.15, z: 0 });
-    points.push({ x, y: WEDGE.amp, z: 0 });
-    points.push({ x: x + len * WEDGE.dirX, y: WEDGE.amp + len * WEDGE.dirY, z: len * WEDGE.dirZ });
-  }
-  return points;
-}
-
-function rawProject(x, y, z) {
-  const cy = Math.cos(WEDGE.yaw);
-  const sy = Math.sin(WEDGE.yaw);
-  const cp = Math.cos(WEDGE.pitch);
-  const sp = Math.sin(WEDGE.pitch);
+function rawProject(x, y, z, camera) {
+  const cy = Math.cos(camera.yaw);
+  const sy = Math.sin(camera.yaw);
+  const cp = Math.cos(camera.pitch);
+  const sp = Math.sin(camera.pitch);
   const x1 = x * cy + z * sy;
   const z1 = -x * sy + z * cy;
   const y2 = y * cp - z1 * sp;
   const z2 = y * sp + z1 * cp;
-  const denom = WEDGE.focal + z2 * WEDGE.perspective;
-  const persp = clamp(WEDGE.focal / Math.max(0.45, denom), 0.45, 1.65);
-  return { x: x1 * persp, y: y2 * persp, depth: z2, persp };
+  const denom = camera.distance + z2 * WEDGE.perspective;
+  const persp = clamp(camera.distance / Math.max(0.55, denom), 0.42, 1.85);
+  return { x: x1 * persp, y: y2 * persp, depth: z2 };
 }
 
 function fitTransform(samples, width, height) {
@@ -170,33 +159,76 @@ function fitTransform(samples, width, height) {
   }
   const marginX = width * WEDGE.marginX;
   const marginY = height * WEDGE.marginY;
-  const spanX = Math.max(0.05, maxX - minX);
-  const spanY = Math.max(0.05, maxY - minY);
+  const spanX = Math.max(0.08, maxX - minX);
+  const spanY = Math.max(0.08, maxY - minY);
   const zoom = Math.min((width - marginX * 2) / spanX, (height - marginY * 2) / spanY);
   const midX = (minX + maxX) / 2;
   const midY = (minY + maxY) / 2;
   return (sample) => ({
     x: width / 2 + (sample.x - midX) * zoom,
     y: height / 2 - (sample.y - midY) * zoom,
-    depth: sample.depth,
-    persp: sample.persp,
   });
 }
 
-function strokeMode(ctx, mode, look, color, accent) {
-  const persp = Math.max(mode.a.persp || 1, mode.b.persp || 1);
-  const weight = accent ? 1 : 0.28 + 0.72 * Math.sqrt(Math.max(0, Math.min(1, mode.amp)));
+function drawSheet(ctx, scene, look, color, selected, shift, alphaScale) {
+  const modes = scene.modes;
+  if (!modes.length) return;
+  const count = modes.length;
+  const rungAlpha = Math.min(0.92, look.alpha * alphaScale * Math.sqrt(28 / count));
   if (look.halo > 0) {
-    ctx.globalAlpha = look.haloAlpha * weight;
     ctx.strokeStyle = color;
-    ctx.lineWidth = Math.min(look.halo, 5);
-    line(ctx, mode.a, mode.b);
+    ctx.globalAlpha = look.haloAlpha * alphaScale;
+    ctx.lineWidth = look.halo;
+    strokePoly(ctx, modes.map((mode) => shiftPoint(mode.crest, shift)));
+    strokePoly(ctx, modes.map((mode) => shiftPoint(mode.base, shift)));
   }
-  ctx.globalAlpha = look.alpha * weight;
   ctx.strokeStyle = color;
-  ctx.lineWidth = look.width * (0.8 + 0.35 * clamp(persp, 0.45, 1.65));
-  line(ctx, mode.a, mode.b);
+  ctx.globalAlpha = Math.min(0.95, rungAlpha * 1.4);
+  ctx.lineWidth = look.width + 0.4;
+  strokePoly(ctx, modes.map((mode) => shiftPoint(mode.base, shift)));
+  strokePoly(ctx, modes.map((mode) => shiftPoint(mode.crest, shift)));
+  ctx.lineWidth = look.width;
+  ctx.globalAlpha = rungAlpha;
+  for (let i = 0; i < modes.length; i++) {
+    if (i === selected) continue;
+    const mode = modes[i];
+    line(ctx, shiftPoint(mode.base, shift), shiftPoint(mode.crest, shift));
+  }
+  ctx.globalAlpha = Math.min(0.95, rungAlpha * 1.6);
+  ctx.lineWidth = look.width + 0.2;
+  strokeCap(ctx, modes[0], shift);
+  strokeCap(ctx, modes[modes.length - 1], shift);
   ctx.globalAlpha = 1;
+}
+
+function strokeRung(ctx, mode, look, color) {
+  ctx.strokeStyle = color;
+  if (look.halo) {
+    ctx.globalAlpha = look.haloAlpha;
+    ctx.lineWidth = look.halo;
+    line(ctx, mode.base, mode.crest);
+  }
+  ctx.globalAlpha = look.alpha;
+  ctx.lineWidth = look.width;
+  line(ctx, mode.base, mode.crest);
+  ctx.globalAlpha = 1;
+}
+
+function strokeCap(ctx, mode, shift) {
+  const mid = shiftPoint(mode.cap, shift);
+  const base = shiftPoint(mode.base, shift);
+  const crest = shiftPoint(mode.crest, shift);
+  line(ctx, base, crest);
+  line(ctx, base, mid);
+  line(ctx, mid, crest);
+}
+
+function strokePoly(ctx, points) {
+  if (points.length < 2) return;
+  ctx.beginPath();
+  ctx.moveTo(points[0].x, points[0].y);
+  for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
+  ctx.stroke();
 }
 
 function line(ctx, a, b) {
@@ -204,6 +236,10 @@ function line(ctx, a, b) {
   ctx.moveTo(a.x, a.y);
   ctx.lineTo(b.x, b.y);
   ctx.stroke();
+}
+
+function shiftPoint(point, shift) {
+  return shift ? { x: point.x + shift, y: point.y } : point;
 }
 
 function clamp(value, lo, hi) {

@@ -1,7 +1,7 @@
 import { PRESETS, NOTE_BUTTONS, buildPartials, toCsv, fromCsv, noteFrequency, defaultControls, sanitizeControls } from './engine.js';
 import { analyzeSamples, decodeRecording, resampleMono, parseRoot, frequencyToNote } from './analyze.js';
 import { renderPreview, scaleToPeak } from './resonator.js';
-import { hitPartial, paintModalView } from './modal-view.js';
+import { clampCamera, defaultCamera, hitPartial, paintModalView } from './modal-view.js';
 import { shapePartials } from './shape.js';
 import { fileSlug } from './recipes.js';
 import { mountStudio } from './studio.js';
@@ -36,6 +36,11 @@ export function mount(root) {
     drawStyle: 'fast',
     selectedPartial: -1,
     profilePartials: null,
+    camera: defaultCamera(),
+    detune: 0,
+    drawPartials: null,
+    easing: false,
+    easeFrame: 0,
   };
 
   root.querySelector('[data-presets]').innerHTML = PRESETS.map((preset) => `<option value="${preset.id}">${preset.label}</option>`).join('');
@@ -113,6 +118,9 @@ export function mount(root) {
       absorb: Number(absorb.value) / 100,
       disperse: Number(root.querySelector('[data-disperse]').value) / 100,
       decay: Number(root.querySelector('[data-modal-decay]').value) / 100,
+      decayKf: Number(root.querySelector('[data-decay-kf]')?.value || 0) / 100,
+      normalize: Number(root.querySelector('[data-normalize]')?.value || 0) / 100,
+      tune: Number(root.querySelector('[data-tune]')?.value || 0),
       density: Number(root.querySelector('[data-density]').value),
     };
   }
@@ -120,8 +128,56 @@ export function mount(root) {
   function publishShape() {
     const shape = readShape();
     if (!shape || !state.profilePartials) return;
-    const identity = shape.absorb === 0 && shape.disperse === 0 && shape.decay === 0 && shape.density >= state.profilePartials.length;
+    const identity = shape.absorb === 0 && shape.disperse === 0 && shape.decay === 0
+      && shape.decayKf === 0 && shape.normalize === 0 && shape.tune === 0
+      && shape.density === state.profilePartials.length;
     state.partials = identity ? state.profilePartials : shapePartials(state.profilePartials, shape);
+    beginEase();
+  }
+
+  function beginEase() {
+    state.easing = true;
+    if (!state.easeFrame) state.easeFrame = requestAnimationFrame(tickEase);
+  }
+
+  function tickEase() {
+    state.easeFrame = 0;
+    let moving = easeList();
+    if (state.cameraGoal) {
+      state.camera.yaw += (state.cameraGoal.yaw - state.camera.yaw) * 0.22;
+      state.camera.pitch += (state.cameraGoal.pitch - state.camera.pitch) * 0.22;
+      if (Math.abs(state.cameraGoal.yaw - state.camera.yaw) < 0.004
+        && Math.abs(state.cameraGoal.pitch - state.camera.pitch) < 0.004) {
+        state.camera = { ...state.cameraGoal, distance: state.camera.distance };
+        state.cameraGoal = null;
+      } else {
+        moving = true;
+      }
+    }
+    draw(canvas, state.drawPartials || state.partials, state);
+    if (moving) state.easeFrame = requestAnimationFrame(tickEase);
+    else state.easing = false;
+  }
+
+  function easeList() {
+    const goal = state.partials;
+    if (!goal?.length) return false;
+    if (!state.drawPartials || state.drawPartials.length !== goal.length) {
+      state.drawPartials = goal.map((partial) => ({ ratio: partial.ratio, gainDb: partial.gainDb, decay: partial.decay }));
+      return false;
+    }
+    let moving = false;
+    for (let i = 0; i < goal.length; i++) {
+      const drawn = state.drawPartials[i];
+      const target = goal[i];
+      for (const key of ['ratio', 'gainDb', 'decay']) {
+        const delta = target[key] - drawn[key];
+        if (Math.abs(delta) > (key === 'ratio' ? 0.004 : 0.03)) moving = true;
+        drawn[key] += delta * 0.28;
+      }
+    }
+    if (!moving) state.drawPartials = goal;
+    return moving;
   }
 
   function adopt(partials, custom) {
@@ -177,7 +233,7 @@ export function mount(root) {
   }
 
   function render() {
-    draw(canvas, state.partials, state);
+    draw(canvas, state.drawPartials || state.partials, state);
     tableBody.innerHTML = state.partials.map((partial, index) => `
       <tr class="${index === state.selectedPartial ? 'is-selected' : ''}">
         <th scope="row"><button type="button" class="partial-index" data-make-root="${index}" aria-label="Make partial ${index + 1} the root">${index + 1}</button></th>
@@ -288,7 +344,14 @@ export function mount(root) {
     canvas.setPointerCapture?.(event.pointerId);
     const point = canvasPoint(canvas, event);
     if (canvas.dataset.view === 'zebra') {
-      state.gesture = { pick: true, x: point.x, y: point.y };
+      state.gesture = {
+        orbit: true,
+        x: point.x,
+        y: point.y,
+        yaw: state.camera.yaw,
+        pitch: state.camera.pitch,
+        moved: false,
+      };
       return;
     }
     state.gesture = {
@@ -304,7 +367,19 @@ export function mount(root) {
   canvas.addEventListener('pointermove', (event) => {
     if (!state.gesture) return;
     const point = canvasPoint(canvas, event);
-    if (state.gesture.pick) return;
+    if (state.gesture.orbit) {
+      const dx = point.x - state.gesture.x;
+      const dy = point.y - state.gesture.y;
+      if (!state.gesture.moved && Math.hypot(dx, dy) < 3) return;
+      state.gesture.moved = true;
+      state.cameraGoal = null;
+      state.camera = clampCamera({
+        yaw: state.gesture.yaw - dx * 0.0065,
+        pitch: state.gesture.pitch + dy * 0.0045,
+      });
+      draw(canvas, state.drawPartials || state.partials, state);
+      return;
+    }
     const travel = Math.hypot(point.x - state.gesture.x, point.y - state.gesture.y);
     if (!state.gesture.moved && travel < 5) return;
     if (!state.gesture.moved) {
@@ -317,10 +392,19 @@ export function mount(root) {
     state.gesture.lastY = point.y;
   });
   canvas.addEventListener('pointerup', (event) => {
-    if (state.gesture?.pick) {
-      const point = canvasPoint(canvas, event);
-      state.selectedPartial = hitPartial(state.partials, null, canvas.clientWidth, canvas.clientHeight, point.x, point.y);
-      render();
+    if (state.gesture?.orbit) {
+      if (!state.gesture.moved) {
+        const point = canvasPoint(canvas, event);
+        state.selectedPartial = hitPartial(
+          state.drawPartials || state.partials,
+          state.camera,
+          canvas.clientWidth,
+          canvas.clientHeight,
+          point.x,
+          point.y,
+        );
+        render();
+      }
       state.gesture = null;
       return;
     }
@@ -331,6 +415,11 @@ export function mount(root) {
     state.gesture = null;
   });
   canvas.addEventListener('pointercancel', () => { state.gesture = null; });
+  canvas.addEventListener('dblclick', () => {
+    if (canvas.dataset.view !== 'zebra') return;
+    state.cameraGoal = defaultCamera();
+    beginEase();
+  });
   const styleSelect = root.querySelector('[data-draw-style]');
   if (styleSelect) {
     state.drawStyle = styleSelect.value || 'fast';
@@ -339,16 +428,24 @@ export function mount(root) {
       draw(canvas, state.partials, state);
     });
   }
-  for (const name of ['absorb', 'disperse', 'modal-decay', 'density']) {
+  for (const name of ['absorb', 'disperse', 'modal-decay', 'density', 'tune', 'normalize', 'decay-kf']) {
     const slider = root.querySelector(`[data-${name}]`);
     if (!slider) continue;
     slider.addEventListener('input', () => {
-      const outName = name === 'modal-decay' ? 'modal-decay' : name;
-      const out = root.querySelector(`[data-${outName}-out]`);
+      const out = root.querySelector(`[data-${name}-out]`);
       if (out) out.textContent = slider.value;
       publishShape();
       render();
       pushModes();
+    });
+  }
+  const detune = root.querySelector('[data-detune]');
+  if (detune) {
+    detune.addEventListener('input', () => {
+      const out = root.querySelector('[data-detune-out]');
+      if (out) out.textContent = detune.value;
+      state.detune = Number(detune.value) / 100;
+      draw(canvas, state.drawPartials || state.partials, state);
     });
   }
   tableBody.addEventListener('focusin', (event) => {
@@ -845,9 +942,11 @@ function drawZebra(canvas, partials, state) {
   paintModalView(ctx, partials, {
     width,
     height,
+    camera: state.camera,
     style: state.drawStyle || 'fast',
     colors,
     selected: state.selectedPartial,
+    detune: state.detune || 0,
   });
 }
 
