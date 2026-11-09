@@ -1,5 +1,6 @@
 import { PRESETS, NOTE_BUTTONS, buildPartials, toCsv, fromCsv, noteFrequency, defaultControls, sanitizeControls } from './engine.js';
 import { analyzeSamples, decodeRecording, resampleMono, parseRoot, frequencyToNote } from './analyze.js';
+import { renderPreview, scaleToPeak } from './resonator.js';
 import { fileSlug } from './recipes.js';
 import { mountStudio } from './studio.js';
 
@@ -528,27 +529,20 @@ export function mount(root) {
       render();
       pushModes();
     }
-    if (hear) autoHear(recipe);
+    if (hear) {
+      try {
+        playHeard(state, recipe);
+        setPlayError(root, '');
+      } catch (error) {
+        setPlayError(root, error.message || 'Playback failed.');
+      }
+    }
   }
 
   function cancelAutoHear() {
     state.autoHearToken += 1;
     window.clearTimeout(state.autoHearTimer);
     state.autoHearTimer = 0;
-  }
-
-  async function autoHear(recipe) {
-    const token = ++state.autoHearToken;
-    window.clearTimeout(state.autoHearTimer);
-    state.autoHearTimer = 0;
-    await strike(state, true);
-    if (token !== state.autoHearToken || state.userHolding || !state.holdingNote) return;
-    const ms = (recipe.exciter || state.exciter) === 'bow' ? 900 : 180;
-    state.autoHearTimer = window.setTimeout(() => {
-      state.autoHearTimer = 0;
-      if (token !== state.autoHearToken || state.userHolding) return;
-      strike(state, false, 'auto');
-    }, ms);
   }
 
   function profileFromState() {
@@ -667,8 +661,7 @@ function nearestPartial(partials, x, scale, locked) {
   return best <= 18 ? index : -1;
 }
 
-function layout(partials, width, height) {
-  const pad = 16;
+function layout(partials, width, height, pad = 16) {
   const min = Math.min(...partials.map((partial) => partial.ratio));
   const max = Math.max(...partials.map((partial) => partial.ratio));
   const logMin = Math.log(Math.max(min, 1e-6));
@@ -704,11 +697,111 @@ function canvasColors() {
     line: read('--line', '#d8d0c1'),
     accent: read('--accent', '#d4421c'),
     // Quiet partials follow the text color. --ink stays dark in both schemes.
+    muted: read('--muted', '#6a655c'),
     ink: read('--fg', '#1f1d1a'),
   };
 }
 
+function setPlayError(root, message) {
+  const el = root?.querySelector?.('[data-play-error]');
+  if (el) el.textContent = message || '';
+}
+
+function playHeard(state, recipe) {
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  if (!AudioCtx) throw new Error('This browser cannot play audio.');
+  if (!state.audio) state.audio = new AudioCtx();
+  const ctx = state.audio;
+  // Safari stays silent unless a buffer is started in this gesture, before any await.
+  const unlock = ctx.createBuffer(1, 1, ctx.sampleRate);
+  const unlockSource = ctx.createBufferSource();
+  unlockSource.buffer = unlock;
+  unlockSource.connect(ctx.destination);
+  unlockSource.start();
+  const resumed = ctx.resume();
+  const exciter = recipe.exciter || state.exciter;
+  const seconds = exciter === 'bow' ? 1.1 : 1.6;
+  const samples = renderPreview(state.partials, {
+    fundamental: noteFrequency(state.note),
+    velocity: state.velocity,
+    position: state.position,
+    exciter,
+    hardness: state.hardness,
+    file: state.file,
+    sampleRate: ctx.sampleRate,
+    seconds,
+    releaseAt: exciter === 'bow' ? Math.floor(ctx.sampleRate * 0.85) : undefined,
+  });
+  const heard = scaleToPeak(samples, 0.45);
+  try { state.hearSource?.stop(); } catch { /* already stopped */ }
+  const buffer = ctx.createBuffer(1, heard.length, ctx.sampleRate);
+  if (buffer.copyToChannel) buffer.copyToChannel(heard, 0);
+  else buffer.getChannelData(0).set(heard);
+  const source = ctx.createBufferSource();
+  source.buffer = buffer;
+  source.connect(ctx.destination);
+  source.start();
+  state.hearSource = source;
+  const root = state.canvas?.closest('#modal-app');
+  resumed.then(() => {
+    if (ctx.state !== 'running') setPlayError(root, 'The browser blocked audio. Click Hear again.');
+  }).catch(() => setPlayError(root, 'The browser blocked audio. Click Hear again.'));
+}
+
+function drawZebra(canvas, partials, state, frozen) {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const width = canvas.clientWidth || 640;
+  const height = canvas.clientHeight || 220;
+  canvas.width = Math.round(width * dpr);
+  canvas.height = Math.round(height * dpr);
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const colors = canvasColors();
+  ctx.fillStyle = colors.card;
+  ctx.fillRect(0, 0, width, height);
+  const scale = frozen || layout(partials, width, height, 36);
+  if (!frozen) state.scale = scale;
+  const font = getComputedStyle(document.body).fontFamily;
+  ctx.font = `500 12px ${font}`;
+  ctx.fillStyle = colors.muted;
+  ctx.textBaseline = 'top';
+  ctx.fillText('Level', 8, 8);
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillText('Ratio', width - 52, height - 8);
+  ctx.fillText('Decay', width - 58, 18);
+  const floor = height - scale.pad;
+  ctx.strokeStyle = colors.line;
+  ctx.beginPath();
+  ctx.moveTo(scale.pad, floor);
+  ctx.lineTo(width - scale.pad, floor);
+  ctx.stroke();
+  if (!partials.length) return;
+  for (const partial of partials) {
+    const x = ratioToX(partial.ratio, scale);
+    const top = floor - ((Math.max(-80, Math.min(0, partial.gainDb)) + 80) / 80) * (height - scale.pad * 2);
+    const depth = Math.max(0, Math.min(1, partial.decay / 4)) * 36;
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = colors.ink;
+    ctx.globalAlpha = 0.45;
+    ctx.beginPath();
+    ctx.moveTo(x, top);
+    ctx.lineTo(x + depth, top - depth * 0.65);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = partial.gainDb > -18 ? colors.accent : colors.ink;
+    ctx.beginPath();
+    ctx.moveTo(x, floor);
+    ctx.lineTo(x, top);
+    ctx.stroke();
+    ctx.lineWidth = 1;
+  }
+}
+
 function draw(canvas, partials, state, frozen) {
+  if (canvas.dataset.view === 'zebra') {
+    drawZebra(canvas, partials, state, frozen);
+    return;
+  }
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   const width = canvas.clientWidth || 640;
   const height = canvas.clientHeight || 220;
@@ -839,6 +932,8 @@ async function strike(state, down, source = 'user') {
 
 function silence(state) {
   state.node?.port.postMessage({ type: 'stop' });
+  try { state.hearSource?.stop(); } catch { /* already stopped */ }
+  state.hearSource = null;
   silenceFallback(state);
 }
 

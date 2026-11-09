@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { buildPartials } from './engine.js';
+import { renderPreview, peakStats, scaleToPeak } from './resonator.js';
 import { describePrompt, fileSlug, readRecipe } from './recipes.js';
 import { rememberedIndex } from './studio.js';
 
@@ -35,6 +36,26 @@ test('refining keeps the object and moves one physical control', () => {
   assert.ok(shorter.controls.damping > bowl.controls.damping);
   assert.equal(gamelan.controls.preset, 'bell');
   assert.ok(gamelan.controls.stiffness > 0.4);
+});
+
+test('a mallet strike is quiet until it is scaled to a listenable level', () => {
+  const recipe = describePrompt('glass bowl struck softly')[0];
+  const partials = buildPartials(recipe.controls);
+  const samples = renderPreview(partials, {
+    fundamental: 440,
+    velocity: recipe.velocity,
+    position: recipe.position,
+    exciter: recipe.exciter,
+    hardness: recipe.hardness,
+    sampleRate: 48000,
+    seconds: 0.8,
+  });
+  const raw = peakStats(samples);
+  assert.ok(raw.peak > 1e-5);
+  const heard = scaleToPeak(samples, 0.45);
+  const stats = peakStats(heard);
+  assert.ok(stats.peak > 0.4 && stats.peak < 0.5);
+  assert.ok(stats.rms > 0.01);
 });
 
 test('step back restores the variation that was selected', () => {

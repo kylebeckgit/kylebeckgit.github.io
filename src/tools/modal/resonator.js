@@ -157,6 +157,21 @@ export function renderPreview(partials, options) {
   return out;
 }
 
+export function scaleToPeak(samples, target = 0.45) {
+  let peak = 0;
+  for (let i = 0; i < samples.length; i++) {
+    const value = samples[i];
+    if (!Number.isFinite(value)) throw new Error('Playback produced an invalid sample.');
+    const abs = Math.abs(value);
+    if (abs > peak) peak = abs;
+  }
+  if (!(peak > 1e-5)) throw new Error('Playback produced silence.');
+  const out = new Float32Array(samples.length);
+  const gain = target / peak;
+  for (let i = 0; i < samples.length; i++) out[i] = samples[i] * gain;
+  return out;
+}
+
 export function peakStats(samples) {
   let peak = 0;
   let sum = 0;

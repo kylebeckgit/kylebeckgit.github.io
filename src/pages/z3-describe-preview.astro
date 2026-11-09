@@ -35,9 +35,10 @@ import Base from '../layouts/Base.astro';
     </section>
 
     <section class="listen">
-      <h2>Listen</h2>
-      <canvas aria-label="Partial spectrum"></canvas>
-      <p class="note">Drag a partial up or down for gain. Shift-drag it sideways for ratio. Draw paints a gain curve. Undo and redo cover those edits.</p>
+      <h2>Partials</h2>
+      <canvas data-view="zebra" aria-label="Modal partials. Ratio runs left to right, level is the height, and the slant is relative decay."></canvas>
+      <p class="note">Ratio runs from low on the left to high on the right. Level is the height. The slant is relative decay, longer when the mode rings longer. Drag a mode up or down for level. Shift-drag it sideways for ratio.</p>
+      <p class="note" data-play-error></p>
       <div class="listen-controls">
         <label>Exciter
           <select data-exciter>
@@ -54,14 +55,14 @@ import Base from '../layouts/Base.astro';
         <label>Velocity <span data-velocity-out>0.80</span>
           <input data-velocity type="range" min="0" max="1" step="0.01" value="0.8">
         </label>
-        <label>Strike position <span data-position-out>0.18</span>
+        <label>Position <span data-position-out>0.18</span>
           <input data-position type="range" min="0.02" max="0.98" step="0.01" value="0.18">
         </label>
         <label data-file-field hidden>Exciter file
           <input data-exciter-file type="file" accept=".wav,.mp3,.aiff,.aif,audio/*">
         </label>
       </div>
-      <p class="note">The preview approximates Zebra 3's modal resonator and is not verified against it. Strike position uses a string-like mode shape, which is only an approximation. Hold a key for the bow.</p>
+      <p class="note">This approximates Zebra 3's modal resonator and is not the plugin. In Zebra, Position is 0 at the center and 100 at the edge. This slider is not that scale. Hold a key for the bow.</p>
       <div class="row">
         <button type="button" class="btn" data-draw aria-pressed="false">Draw</button>
         <button type="button" class="btn" data-undo disabled>Undo</button>
@@ -112,7 +113,7 @@ import Base from '../layouts/Base.astro';
       </form>
       <div class="partial-scroll">
         <table class="partials">
-          <thead><tr><th scope="col">#</th><th scope="col">Ratio</th><th scope="col">Gain dB</th><th scope="col">Decay</th></tr></thead>
+          <thead><tr><th scope="col">#</th><th scope="col">Ratio</th><th scope="col">Level dB</th><th scope="col">Decay</th></tr></thead>
           <tbody data-partials></tbody>
         </table>
       </div>
