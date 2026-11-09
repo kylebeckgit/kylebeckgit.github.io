@@ -52,10 +52,7 @@ export function malletTable(sampleRate, hardness) {
 export function createVoice(partials, options, sampleRate) {
   const velocity = Math.min(1, Math.max(0, Number(options.velocity) || 0));
   const position = Number(options.position);
-  // flat: Hear follows GainDB. Strike position and the mallet both comb the
-  // spectrum, so a measurement of the first 20 ms would not match the CSV.
-  const flat = options.flat === true;
-  const exciter = flat ? 'click' : (options.exciter || 'click');
+  const exciter = options.exciter || 'click';
   const continuous = exciter === 'bow' || exciter === 'file';
   const modes = [];
   let ampSum = 0;
@@ -63,7 +60,7 @@ export function createVoice(partials, options, sampleRate) {
     const partial = partials[index];
     const freq = options.fundamental * partial.ratio;
     if (!(freq >= 20) || freq > sampleRate * 0.45 || partial.gainDb < -90) continue;
-    const amp = 10 ** (partial.gainDb / 20) * (flat ? 1 : strikeWeight(index, position)) * (flat ? 1 : velocity);
+    const amp = 10 ** (partial.gainDb / 20) * strikeWeight(index, position) * velocity;
     if (!(amp > 0)) continue;
     ampSum += amp;
     const coeff = modeCoeffs(freq, partial.decay, sampleRate);
@@ -72,16 +69,7 @@ export function createVoice(partials, options, sampleRate) {
     // back by the pole radius and keeps following GainDB.
     const sine = Math.max(1e-4, Math.sin((2 * Math.PI * freq) / sampleRate));
     const radius = continuous ? Math.sqrt(Math.max(1 - coeff.R * coeff.R, 1e-8)) : 1;
-    modes.push({
-      a1: coeff.a1,
-      a2: coeff.a2,
-      feed: amp * sine * radius,
-      y1: 0,
-      y2: 0,
-      freq,
-      t60: partial.decay,
-      glide: Boolean(options.glide) && partial.ratio < (options.glide.maxRatio ?? 6),
-    });
+    modes.push({ a1: coeff.a1, a2: coeff.a2, feed: amp * sine * radius, y1: 0, y2: 0 });
   }
   const bowCutoff = 3200;
   return {
@@ -99,19 +87,7 @@ export function createVoice(partials, options, sampleRate) {
     filePos: 0,
     mallet: exciter === 'mallet' ? malletTable(sampleRate, options.hardness) : null,
     holding: true,
-    impulse: !flat && options.impulse ? 1 : 0,
-    linear: flat,
-    glide: options.glide || null,
-    n: 0,
   };
-}
-
-function fadeInPlace(samples, sampleRate, seconds) {
-  const length = Math.max(2, Math.round(sampleRate * seconds));
-  const span = Math.min(length, samples.length) - 1;
-  for (let i = 0; i < length && i < samples.length; i++) {
-    samples[i] *= 0.5 - 0.5 * Math.cos((Math.PI * i) / span);
-  }
 }
 
 export function nextExciter(state) {
@@ -153,25 +129,7 @@ export function nextExciter(state) {
 }
 
 export function processSample(state) {
-  if (state.glide) {
-    const t = state.n / state.sampleRate;
-    const u = Math.min(1, t / state.glide.seconds);
-    if (u < 1) {
-      const bend = 2 ** ((state.glide.cents * u) / 1200);
-      for (const mode of state.modes) {
-        if (!mode.glide) continue;
-        const coeff = modeCoeffs(mode.freq * bend, mode.t60, state.sampleRate);
-        mode.a1 = coeff.a1;
-        mode.a2 = coeff.a2;
-      }
-    }
-    state.n += 1;
-  }
-  let input = nextExciter(state);
-  if (state.impulse) {
-    input += state.impulse;
-    state.impulse = 0;
-  }
+  const input = nextExciter(state);
   let sum = 0;
   const modes = state.modes;
   for (let i = 0; i < modes.length; i++) {
@@ -181,94 +139,13 @@ export function processSample(state) {
     mode.y1 = Math.abs(y) < 1e-20 ? 0 : y;
     sum += mode.y1;
   }
-  if (state.linear) return sum * state.norm;
   const shaped = Math.tanh(sum * state.norm);
   return shaped > 0.99 ? 0.99 : shaped < -0.99 ? -0.99 : shaped;
-}
-
-function lsMagnitude(samples, freq, sampleRate) {
-  const n = Math.min(samples.length, Math.round(sampleRate * 0.02));
-  const w = (2 * Math.PI * freq) / sampleRate;
-  let s00 = 0;
-  let s01 = 0;
-  let s11 = 0;
-  let b0 = 0;
-  let b1 = 0;
-  for (let i = 0; i < n; i++) {
-    const c = Math.cos(w * i);
-    const s = Math.sin(w * i);
-    const y = samples[i];
-    s00 += c * c;
-    s11 += s * s;
-    s01 += c * s;
-    b0 += y * c;
-    b1 += y * s;
-  }
-  const det = s00 * s11 - s01 * s01 || 1e-18;
-  const a = (b0 * s11 - b1 * s01) / det;
-  const b = (s00 * b1 - s01 * b0) / det;
-  return Math.hypot(a, b);
-}
-
-function renderFlat(partials, options, sampleRate, seconds) {
-  const state = createVoice(partials, { ...options, flat: true }, sampleRate);
-  const length = Math.max(8, Math.floor(sampleRate * seconds));
-  const out = new Float32Array(length);
-  for (let i = 0; i < length; i++) out[i] = processSample(state);
-  // 4 ms cosine rise. The impulse still excites every partial; the rise
-  // only keeps the first sample from stepping.
-  fadeInPlace(out, sampleRate, options.fadeIn || 0.004);
-  return out;
-}
-
-function gainsForHear(partials, options, sampleRate) {
-  const scales = partials.map(() => 1);
-  const active = partials.map((partial) => {
-    const freq = options.fundamental * partial.ratio;
-    return partial.gainDb > -70 && freq >= 20 && freq < sampleRate * 0.45;
-  });
-  for (let pass = 0; pass < 12; pass++) {
-    const shaped = partials.map((partial, index) => ({
-      ...partial,
-      gainDb: partial.gainDb + 20 * Math.log10(scales[index]),
-    }));
-    const chunk = renderFlat(shaped, options, sampleRate, 0.02);
-    const mags = partials.map((partial, index) => (
-      active[index] ? lsMagnitude(chunk, options.fundamental * partial.ratio, sampleRate) : 0
-    ));
-    let loud = 0;
-    let wantLoud = 0;
-    for (let i = 0; i < partials.length; i++) {
-      if (!active[i]) continue;
-      if (mags[i] > loud) loud = mags[i];
-      const want = 10 ** (partials[i].gainDb / 20);
-      if (want > wantLoud) wantLoud = want;
-    }
-    if (!(loud > 0) || !(wantLoud > 0)) break;
-    let worst = 0;
-    for (let i = 0; i < partials.length; i++) {
-      if (!active[i] || !(mags[i] > 1e-12)) continue;
-      const want = (10 ** (partials[i].gainDb / 20)) / wantLoud;
-      const got = mags[i] / loud;
-      const err = Math.abs(20 * Math.log10(got / want));
-      if (err > worst) worst = err;
-      scales[i] = Math.min(80, Math.max(0.02, scales[i] * (want / got)));
-    }
-    if (worst < 0.4) break;
-  }
-  return partials.map((partial, index) => ({
-    ...partial,
-    gainDb: partial.gainDb + 20 * Math.log10(scales[index]),
-  }));
 }
 
 export function renderPreview(partials, options) {
   const sampleRate = options.sampleRate || 44100;
   const seconds = options.seconds || 3;
-  if (options.matchGains) {
-    const shaped = gainsForHear(partials, options, sampleRate);
-    return renderFlat(shaped, options, sampleRate, seconds);
-  }
   const length = Math.floor(sampleRate * seconds);
   const state = createVoice(partials, options, sampleRate);
   const releaseAt = Math.floor(sampleRate * (options.releaseAt ?? seconds));
@@ -277,21 +154,6 @@ export function renderPreview(partials, options) {
     if (i === releaseAt) state.holding = false;
     out[i] = processSample(state);
   }
-  return out;
-}
-
-export function scaleToPeak(samples, target = 0.45) {
-  let peak = 0;
-  for (let i = 0; i < samples.length; i++) {
-    const value = samples[i];
-    if (!Number.isFinite(value)) throw new Error('Playback produced an invalid sample.');
-    const abs = Math.abs(value);
-    if (abs > peak) peak = abs;
-  }
-  if (!(peak > 1e-5)) throw new Error('Playback produced silence.');
-  const out = new Float32Array(samples.length);
-  const gain = target / peak;
-  for (let i = 0; i < samples.length; i++) out[i] = samples[i] * gain;
   return out;
 }
 

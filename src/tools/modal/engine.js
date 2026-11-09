@@ -21,28 +21,6 @@ const BAR_BETA = [4.730040744862704, 7.853204624095838, 10.995607838001671, 14.1
 // Minor-third bell, relative to the prime (Fletcher & Rossing): hum, prime, tierce, quint, nominal.
 const BELL_NAMED = [0.5, 1, 1.2, 1.5, 2, 2.5, 3, 4];
 
-// Strike levels in dB relative to the nominal. A tuned bell's nominal leads,
-// the tierce is the next strongest musical partial, and the hum sits well down
-// at the attack even though it rings the longest (Rossing, Acoustics of Bells).
-const BELL_STRIKE_DB = [ -18, -9, -5, -12, 0, -7, -9, -14 ];
-
-// Singing bowl (n,0) modes. Inácio, Henrique & Antunes, Acta Acustica united
-// with Acustica 92 (2006), Table I, Bowl 1 (180 mm): 1, 2.8, 5.2, 8.1, 11.6,
-// 15.6, 19.9 for (2,0) through (8,0). Glass bowls use the same series.
-const BOWL_RATIOS = [1, 2.8, 5.2, 8.1, 11.6, 15.6, 19.9];
-
-// Japanese bonsho, not a Western minor-third bell. Low modes are the Muromachi
-// bell in Nishiguchi & Takasawa, J. Acoust. Soc. Jpn. 53 (1997) Table 1,
-// divided by the (4,0) mode at 137.89 Hz. The upper partials are Obata &
-// Tesima's series as quoted by Rossing, J. Acoust. Soc. Jpn. (E) 10 (1989):
-// 247, 624, 850, 1100, 1380, 1640, 2050 Hz, kept only above the body modes.
-const BONSHO_RATIOS = [1, 2.207, 2.906, 2.998, 3.308, 3.331, 4.068, 5.587, 6.64, 8.3, 9.45, 10.7];
-
-// Mug. Bossart, Fleury & Apffel, arXiv:2501.01180 (2025): the handle splits the
-// rim mode into 2800 and 2940 Hz, a ratio of 1.05. The modes above that follow
-// the wine-glass series 2.32, 4.25, 6.63, 9.38.
-const CUP_RATIOS = [1, 1.05, 2.32, 4.25, 6.63, 9.38];
-
 function barBeta(n) {
   if (n <= BAR_BETA.length) return BAR_BETA[n - 1];
   return ((2 * n + 1) * Math.PI) / 2;
@@ -95,92 +73,7 @@ function membraneAlphas() {
   return membraneZeros;
 }
 
-function bellStrikeDb(ratio) {
-  let best = 0;
-  let bestDist = Infinity;
-  for (let i = 0; i < BELL_NAMED.length; i++) {
-    const dist = Math.abs(Math.log(ratio / BELL_NAMED[i]));
-    if (dist < bestDist) {
-      bestDist = dist;
-      best = i;
-    }
-  }
-  if (bestDist < 0.045) return BELL_STRIKE_DB[best];
-  const octaves = Math.log2(Math.max(ratio, 1e-6) / 2);
-  return -6 * Math.max(octaves, 0) - 8;
-}
-
-function marimbaRatios() {
-  // Undercut bar, tuned near 1:4:10. Bork, Applied Acoustics 46 (1995);
-  // Rossing, Science of Percussion Instruments (1997). Higher modes stay on
-  // the free-free bar once they sit above that tuned third.
-  const b1 = barBeta(1);
-  const free = Array.from({ length: 12 }, (_, i) => (barBeta(i + 1) / b1) ** 2);
-  const tuned = [1, 4, 10];
-  for (const ratio of free) if (ratio > 10.5) tuned.push(ratio);
-  return tuned;
-}
-
-function gongRatios() {
-  // Rossing, Percussive Notes (Fall 1982): axisymmetric modes of a Japanese
-  // tamtam at 39, 162, 195, 318, 854, 879 and 1000 Hz, plus the radial family
-  // f = 29 m^1.17 Hz from the same article. Legge & Fletcher, J. Acoust. Soc.
-  // Am. 86 (1989): the high cluster grows satellite peaks a few percent away.
-  const axis = [39, 162, 195, 318, 854, 879, 1000].map((freq) => freq / 39);
-  const radial = [];
-  for (let m = 3; m <= 14; m++) radial.push((29 * m ** 1.17) / 39);
-  const cluster = [];
-  for (const ratio of axis) {
-    if (ratio < 15) continue;
-    cluster.push(ratio * 0.975, ratio, ratio * 1.028);
-  }
-  const all = [...axis, ...radial, ...cluster].sort((a, b) => a - b);
-  const out = [];
-  for (const ratio of all) {
-    if (out.length && Math.abs(ratio - out[out.length - 1]) / out[out.length - 1] < 0.008) continue;
-    out.push(ratio);
-  }
-  return out;
-}
-
-function shellRatios() {
-  // Donnell thin-shell frequencies for a short can (L/R = 1.7, h/R = 0.012,
-  // ν = 0.29). Leissa, Vibration of Shells (NASA SP-288); the ring-frequency
-  // picture is Cremer, Heckl & Ungar, Structure-Borne Sound.
-  const nu = 0.29;
-  const hOverR = 0.012;
-  const lengthOverR = 1.7;
-  const beta2 = (hOverR * hOverR) / 12;
-  const modes = [];
-  for (let m = 1; m <= 4; m++) {
-    const lambda = (m * Math.PI) / lengthOverR;
-    for (let n = 2; n <= 9; n++) {
-      const k2 = lambda * lambda + n * n;
-      const membrane = ((1 - nu * nu) * lambda ** 4) / (k2 * k2);
-      const bending = beta2 * k2 * k2;
-      modes.push(Math.sqrt(membrane + bending));
-    }
-  }
-  modes.sort((a, b) => a - b);
-  const fund = modes[0];
-  const ratios = [];
-  for (const value of modes) {
-    const ratio = value / fund;
-    if (ratios.length && ratio - ratios[ratios.length - 1] < 0.02) continue;
-    ratios.push(ratio);
-    if (ratios.length === 20) break;
-  }
-  return ratios;
-}
-
-function baseRatios(preset, voice) {
-  if (voice === 'glass') return BOWL_RATIOS.slice();
-  if (voice === 'gong') return gongRatios();
-  if (voice === 'bonsho') return BONSHO_RATIOS.slice();
-  if (voice === 'marimba') return marimbaRatios();
-  if (voice === 'cup') return CUP_RATIOS.slice();
-  if (voice === 'shell') return shellRatios();
-  if (voice === 'neutral') return [1, 2, 3, 4, 5, 6, 7, 8];
+function baseRatios(preset) {
   if (preset === 'string' || preset === 'open-pipe') {
     return Array.from({ length: PARTIALS }, (_, i) => i + 1);
   }
@@ -252,9 +145,6 @@ export function sanitizeControls(input) {
     return Number.isFinite(n) ? clamp(n, lo, hi) : fallback;
   };
   const seedNum = Number(input?.seed);
-  const countNum = Number(input?.count);
-  const voices = new Set(['glass', 'gong', 'bonsho', 'marimba', 'cup', 'shell', 'neutral']);
-  const voice = voices.has(input?.voice) ? input.voice : '';
   return {
     preset,
     stiffness: num(input?.stiffness, 0, 1, base.stiffness),
@@ -262,14 +152,12 @@ export function sanitizeControls(input) {
     damping: num(input?.damping, 0, 1, base.damping),
     oddEven: num(input?.oddEven, -1, 1, base.oddEven),
     seed: Number.isFinite(seedNum) ? Math.trunc(clamp(seedNum, 0, 1_000_000_000)) : 0,
-    voice,
-    count: Number.isFinite(countNum) && countNum > 0 ? Math.round(clamp(countNum, 1, PARTIALS)) : PARTIALS,
   };
 }
 
 export function buildPartials(rawControls) {
   const controls = sanitizeControls(rawControls);
-  let ratios = baseRatios(controls.preset, controls.voice).slice(0, controls.count).map((ratio, index) => {
+  let ratios = baseRatios(controls.preset).map((ratio, index) => {
     const n = index + 1;
     const b = controls.stiffness * 0.0005;
     return ratio * Math.sqrt(1 + b * n * n);
@@ -294,48 +182,6 @@ export function buildPartials(rawControls) {
       decay: clamp(decay, 0.05, 30),
     };
   });
-  if (controls.preset === 'bell' && !controls.voice) {
-    partials.forEach((partial, index) => {
-      const octaves = Math.log2(Math.max(partial.ratio, 1e-6) / min);
-      partial.gainDb = bellStrikeDb(partial.ratio) + controls.brightness * 4 * octaves;
-      partial.gainDb += controls.oddEven * (index % 2 === 0 ? 6 : -6);
-    });
-  }
-  if (controls.voice === 'gong') {
-    // The delayed shimmer sits on the high cluster, not the fundamental.
-    for (const partial of partials) {
-      const dist = Math.abs(Math.log2(partial.ratio / 22.5));
-      partial.gainDb = partial.ratio > 12 ? -4.5 * dist : -11 - 2.5 * Math.abs(Math.log2(partial.ratio));
-    }
-  }
-  if (controls.voice === 'bonsho' || controls.voice === 'glass' || controls.voice === 'gong' || controls.voice === 'marimba' || controls.voice === 'cup' || controls.voice === 'shell' || controls.voice === 'neutral') {
-    const fund = {
-      bonsho: 14,
-      glass: 9,
-      gong: 12,
-      marimba: 2.4,
-      cup: 2.2,
-      shell: 1.8,
-      neutral: 1.35,
-    }[controls.voice];
-    const slope = controls.voice === 'marimba' || controls.voice === 'cup' || controls.voice === 'shell' ? 0.85 : 0.42;
-    const scale = 1.2 - controls.damping;
-    for (const partial of partials) {
-      const rise = Math.max(partial.ratio - 1, 0) ** 0.85;
-      partial.decay = clamp((fund * scale) / (1 + slope * rise), 0.08, 30);
-    }
-  }
-  if (controls.preset === 'open-pipe') {
-    const fund = partials[0].ratio || 1;
-    for (const partial of partials) {
-      const harm = partial.ratio / fund;
-      const octaves = Math.log2(Math.max(harm, 1));
-      if (harm < 1.5) partial.gainDb -= 3;
-      else if (harm < 6.5) partial.gainDb += 3.5;
-      partial.gainDb += octaves * 2.4;
-      partial.decay = clamp(partial.decay * (1 + 0.5 * Math.min(octaves, 4)), 0.05, 30);
-    }
-  }
   if (controls.seed > 0) {
     const rand = mulberry32(controls.seed + 17);
     for (const partial of partials) partial.gainDb += (rand() - 0.5) * 4;
@@ -343,63 +189,6 @@ export function buildPartials(rawControls) {
   const peak = Math.max(...partials.map((partial) => partial.gainDb));
   for (const partial of partials) partial.gainDb = clamp(partial.gainDb - peak, -96, 0);
   return partials;
-}
-
-function dropCloseTwins(partials, minCents = 55) {
-  // A 20 ms fit cannot separate modes a few dozen cents apart, and a quieter
-  // twin still leaks into the louder one's level. Keep the lower frequency.
-  if (!partials.length) return partials;
-  const kept = [partials[0]];
-  for (let i = 1; i < partials.length; i++) {
-    const cents = 1200 * Math.log2(partials[i].ratio / kept[kept.length - 1].ratio);
-    if (cents < minCents) continue;
-    kept.push(partials[i]);
-  }
-  return kept;
-}
-
-export function previewPartials(rawControls) {
-  const controls = sanitizeControls(rawControls);
-  const partials = buildPartials(controls);
-  // A plucked string rings for seconds. Fletcher & Rossing, The Physics of
-  // Musical Instruments: partials stay harmonic, and internal friction plus
-  // air damping take the upper ones first. Rubber is left on the short curve.
-  let tuned = partials;
-  if (controls.preset === 'string' && controls.voice !== 'neutral' && controls.damping < 0.7) {
-    const fundRatio = partials[0]?.ratio || 1;
-    const fundSeconds = 11 * (1 - 0.62 * controls.damping);
-    tuned = partials.map((partial) => {
-      const harm = Math.max(1, partial.ratio / fundRatio);
-      return { ...partial, decay: clamp(fundSeconds / harm ** 0.85, 0.08, 30) };
-    });
-  }
-  if (controls.voice === 'shell') {
-    // The raw Donnell list has modes about 90–100 cents apart. A search that
-    // wide locks onto the neighbor, about −90 to −100 cents, even though the
-    // resonator is playing the listed frequency. Keep only modes a 20 ms fit
-    // can assign, still on the shell formula.
-    return dropCloseTwins(tuned, 110);
-  }
-  if (controls.preset === 'membrane' || controls.voice === 'bonsho' || controls.voice === 'glass' || controls.voice === 'gong') {
-    return dropCloseTwins(tuned);
-  }
-  return tuned;
-}
-
-// If stiffness moved the partial nearest ratio 1, move the note with it.
-// Then ratio × fundamental is the frequency the resonator plays.
-export function alignReference(partials, fundamental) {
-  if (!partials.length) return { partials, fundamental };
-  let ref = partials[0];
-  for (const partial of partials) {
-    if (Math.abs(Math.log(partial.ratio)) < Math.abs(Math.log(ref.ratio))) ref = partial;
-  }
-  if (!(ref.ratio > 0) || Math.abs(ref.ratio - 1) <= 1e-4) return { partials, fundamental };
-  const scale = ref.ratio;
-  return {
-    fundamental: fundamental * scale,
-    partials: partials.map((partial) => ({ ...partial, ratio: partial.ratio / scale })),
-  };
 }
 
 export function toCsv(partials) {

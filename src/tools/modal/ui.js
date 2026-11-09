@@ -1,8 +1,5 @@
-import { PRESETS, NOTE_BUTTONS, buildPartials, previewPartials, toCsv, fromCsv, noteFrequency, defaultControls, sanitizeControls, alignReference } from './engine.js';
+import { PRESETS, NOTE_BUTTONS, buildPartials, toCsv, fromCsv, noteFrequency, defaultControls, sanitizeControls } from './engine.js';
 import { analyzeSamples, decodeRecording, resampleMono, parseRoot, frequencyToNote } from './analyze.js';
-import { renderPreview, scaleToPeak } from './resonator.js';
-import { clampCamera, defaultCamera, hitPartial, paintModalView } from './modal-view.js';
-import { shapePartials } from './shape.js';
 import { fileSlug } from './recipes.js';
 import { mountStudio } from './studio.js';
 
@@ -33,14 +30,6 @@ export function mount(root) {
     userHolding: false,
     autoHearToken: 0,
     autoHearTimer: 0,
-    drawStyle: 'fast',
-    selectedPartial: -1,
-    profilePartials: null,
-    camera: defaultCamera(),
-    detune: 0,
-    drawPartials: null,
-    easing: false,
-    easeFrame: 0,
   };
 
   root.querySelector('[data-presets]').innerHTML = PRESETS.map((preset) => `<option value="${preset.id}">${preset.label}</option>`).join('');
@@ -79,20 +68,14 @@ export function mount(root) {
   if (describe && describeUrl && membershipOn && licenseField) licenseField.hidden = false;
 
   function readControls() {
-    const carried = state.carried;
-    const preset = fields.preset.value;
-    const keep = carried && carried.preset === preset;
     state.controls = sanitizeControls({
-      preset,
+      preset: fields.preset.value,
       stiffness: fields.stiffness.value,
       brightness: fields.brightness.value,
       damping: fields.damping.value,
       oddEven: fields.oddEven.value,
       seed: fields.seed.value,
-      voice: keep ? carried.voice : '',
-      count: keep ? carried.count : 64,
     });
-    state.carried = keep ? { preset, voice: state.controls.voice, count: state.controls.count } : null;
     readouts.stiffness.textContent = state.controls.stiffness.toFixed(2);
     readouts.brightness.textContent = state.controls.brightness.toFixed(2);
     readouts.damping.textContent = state.controls.damping.toFixed(2);
@@ -113,92 +96,7 @@ export function mount(root) {
   }
 
   function snapshot() {
-    const list = state.profilePartials || state.partials;
-    return list.map((partial) => ({ ratio: partial.ratio, gainDb: partial.gainDb, decay: partial.decay }));
-  }
-
-  function readShape() {
-    const absorb = root.querySelector('[data-absorb]');
-    if (!absorb) return null;
-    return {
-      absorb: Number(absorb.value) / 100,
-      disperse: Number(root.querySelector('[data-disperse]').value) / 100,
-      decay: Number(root.querySelector('[data-modal-decay]').value) / 100,
-      decayKf: Number(root.querySelector('[data-decay-kf]')?.value || 0) / 100,
-      normalize: Number(root.querySelector('[data-normalize]')?.value || 0) / 100,
-      tune: Number(root.querySelector('[data-tune]')?.value || 0),
-      density: Number(root.querySelector('[data-density]').value),
-    };
-  }
-
-  function publishShape() {
-    const shape = readShape();
-    if (!shape || !state.profilePartials) return;
-    const identity = shape.absorb === 0 && shape.disperse === 0 && shape.decay === 0
-      && shape.decayKf === 0 && shape.normalize === 0 && shape.tune === 0
-      && shape.density === state.profilePartials.length;
-    state.partials = identity ? state.profilePartials : shapePartials(state.profilePartials, shape);
-    beginEase();
-  }
-
-  function beginEase() {
-    state.easing = true;
-    if (!state.easeFrame) state.easeFrame = requestAnimationFrame(tickEase);
-  }
-
-  function tickEase() {
-    state.easeFrame = 0;
-    let moving = easeList();
-    if (state.cameraGoal) {
-      state.camera.yaw += (state.cameraGoal.yaw - state.camera.yaw) * 0.22;
-      state.camera.pitch += (state.cameraGoal.pitch - state.camera.pitch) * 0.22;
-      if (Math.abs(state.cameraGoal.yaw - state.camera.yaw) < 0.004
-        && Math.abs(state.cameraGoal.pitch - state.camera.pitch) < 0.004) {
-        state.camera = { ...state.cameraGoal, distance: state.camera.distance };
-        state.cameraGoal = null;
-      } else {
-        moving = true;
-      }
-    }
-    draw(canvas, state.drawPartials || state.partials, state);
-    if (moving) state.easeFrame = requestAnimationFrame(tickEase);
-    else state.easing = false;
-  }
-
-  function easeList() {
-    const goal = state.partials;
-    if (!goal?.length) return false;
-    if (!state.drawPartials || state.drawPartials.length !== goal.length) {
-      state.drawPartials = goal.map((partial) => ({ ratio: partial.ratio, gainDb: partial.gainDb, decay: partial.decay }));
-      return false;
-    }
-    let moving = false;
-    for (let i = 0; i < goal.length; i++) {
-      const drawn = state.drawPartials[i];
-      const target = goal[i];
-      for (const key of ['ratio', 'gainDb', 'decay']) {
-        const delta = target[key] - drawn[key];
-        if (Math.abs(delta) > (key === 'ratio' ? 0.004 : 0.03)) moving = true;
-        drawn[key] += delta * 0.28;
-      }
-    }
-    if (!moving) state.drawPartials = goal;
-    return moving;
-  }
-
-  function adopt(partials, custom) {
-    const aligned = root.querySelector('[data-absorb]')
-      ? alignReference(partials, noteFrequency(state.note))
-      : { partials, fundamental: noteFrequency(state.note) };
-    state.hearFundamental = aligned.fundamental;
-    const copy = aligned.partials.map((partial) => ({ ratio: partial.ratio, gainDb: partial.gainDb, decay: partial.decay }));
-    if (root.querySelector('[data-absorb]')) {
-      state.profilePartials = capAudible(copy);
-      publishShape();
-    } else {
-      state.partials = copy;
-    }
-    if (custom != null) state.custom = custom;
+    return state.partials.map((partial) => ({ ...partial }));
   }
 
   function pushHistory() {
@@ -209,7 +107,8 @@ export function mount(root) {
   }
 
   function restore(partials) {
-    adopt(partials, true);
+    state.partials = partials.map((partial) => ({ ...partial }));
+    state.custom = true;
     render();
     pushModes();
   }
@@ -237,16 +136,16 @@ export function mount(root) {
 
   function rebuild() {
     readControls();
-    const build = root.querySelector('[data-absorb]') ? previewPartials : buildPartials;
-    adopt(build(state.controls), false);
+    state.partials = buildPartials(state.controls);
+    state.custom = false;
     render();
     pushModes();
   }
 
   function render() {
-    draw(canvas, state.drawPartials || state.partials, state);
+    draw(canvas, state.partials, state);
     tableBody.innerHTML = state.partials.map((partial, index) => `
-      <tr class="${index === state.selectedPartial ? 'is-selected' : ''}">
+      <tr>
         <th scope="row"><button type="button" class="partial-index" data-make-root="${index}" aria-label="Make partial ${index + 1} the root">${index + 1}</button></th>
         <td><input type="number" step="0.0001" min="0.0001" data-index="${index}" data-field="ratio" value="${partial.ratio.toFixed(4)}" aria-label="Partial ${index + 1} ratio"></td>
         <td><input type="number" step="0.01" data-index="${index}" data-field="gainDb" value="${partial.gainDb.toFixed(2)}" aria-label="Partial ${index + 1} gain"></td>
@@ -304,15 +203,9 @@ export function mount(root) {
       state.beforeEdit = null;
       updateHistoryButtons();
     }
-    const shown = state.partials[index];
-    const source = shown?.sourceIndex != null && state.profilePartials
-      ? state.profilePartials[shown.sourceIndex]
-      : shown;
-    if (!source) return;
-    source[field] = value;
+    state.partials[index][field] = value;
     state.custom = true;
-    if (state.profilePartials && state.partials !== state.profilePartials) publishShape();
-    render();
+    draw(canvas, state.partials, state);
     pushModes();
   });
 
@@ -354,17 +247,6 @@ export function mount(root) {
   canvas.addEventListener('pointerdown', (event) => {
     canvas.setPointerCapture?.(event.pointerId);
     const point = canvasPoint(canvas, event);
-    if (canvas.dataset.view === 'zebra') {
-      state.gesture = {
-        orbit: true,
-        x: point.x,
-        y: point.y,
-        yaw: state.camera.yaw,
-        pitch: state.camera.pitch,
-        moved: false,
-      };
-      return;
-    }
     state.gesture = {
       shift: event.shiftKey,
       x: point.x,
@@ -378,19 +260,6 @@ export function mount(root) {
   canvas.addEventListener('pointermove', (event) => {
     if (!state.gesture) return;
     const point = canvasPoint(canvas, event);
-    if (state.gesture.orbit) {
-      const dx = point.x - state.gesture.x;
-      const dy = point.y - state.gesture.y;
-      if (!state.gesture.moved && Math.hypot(dx, dy) < 3) return;
-      state.gesture.moved = true;
-      state.cameraGoal = null;
-      state.camera = clampCamera({
-        yaw: state.gesture.yaw - dx * 0.0065,
-        pitch: state.gesture.pitch + dy * 0.0045,
-      });
-      draw(canvas, state.drawPartials || state.partials, state);
-      return;
-    }
     const travel = Math.hypot(point.x - state.gesture.x, point.y - state.gesture.y);
     if (!state.gesture.moved && travel < 5) return;
     if (!state.gesture.moved) {
@@ -402,23 +271,7 @@ export function mount(root) {
     state.gesture.lastX = point.x;
     state.gesture.lastY = point.y;
   });
-  canvas.addEventListener('pointerup', (event) => {
-    if (state.gesture?.orbit) {
-      if (!state.gesture.moved) {
-        const point = canvasPoint(canvas, event);
-        state.selectedPartial = hitPartial(
-          state.drawPartials || state.partials,
-          state.camera,
-          canvas.clientWidth,
-          canvas.clientHeight,
-          point.x,
-          point.y,
-        );
-        render();
-      }
-      state.gesture = null;
-      return;
-    }
+  canvas.addEventListener('pointerup', () => {
     if (state.gesture && !state.gesture.moved && !state.drawMode) {
       const index = nearestPartial(state.partials, state.gesture.x, state.gesture.scale || state.scale);
       if (index >= 0) makeRoot(index);
@@ -426,48 +279,6 @@ export function mount(root) {
     state.gesture = null;
   });
   canvas.addEventListener('pointercancel', () => { state.gesture = null; });
-  canvas.addEventListener('dblclick', () => {
-    if (canvas.dataset.view !== 'zebra') return;
-    state.cameraGoal = defaultCamera();
-    beginEase();
-  });
-  const styleSelect = root.querySelector('[data-draw-style]');
-  if (styleSelect) {
-    state.drawStyle = styleSelect.value || 'fast';
-    styleSelect.addEventListener('change', () => {
-      state.drawStyle = styleSelect.value;
-      draw(canvas, state.partials, state);
-    });
-  }
-  for (const name of ['absorb', 'disperse', 'modal-decay', 'density', 'tune', 'normalize', 'decay-kf']) {
-    const slider = root.querySelector(`[data-${name}]`);
-    if (!slider) continue;
-    slider.addEventListener('input', () => {
-      const out = root.querySelector(`[data-${name}-out]`);
-      if (out) out.textContent = slider.value;
-      publishShape();
-      render();
-      pushModes();
-    });
-  }
-  const detune = root.querySelector('[data-detune]');
-  if (detune) {
-    detune.addEventListener('input', () => {
-      const out = root.querySelector('[data-detune-out]');
-      if (out) out.textContent = detune.value;
-      state.detune = Number(detune.value) / 100;
-      draw(canvas, state.drawPartials || state.partials, state);
-    });
-  }
-  tableBody.addEventListener('focusin', (event) => {
-    if (canvas.dataset.view !== 'zebra') return;
-    const input = event.target.closest?.('[data-index]');
-    if (!input) return;
-    state.selectedPartial = Number(input.dataset.index);
-    draw(canvas, state.partials, state);
-    for (const row of tableBody.querySelectorAll('tr')) row.classList.remove('is-selected');
-    input.closest('tr')?.classList.add('is-selected');
-  });
 
   root.querySelector('[data-export]').addEventListener('click', () => {
     const blob = new Blob([toCsv(state.partials)], { type: 'text/csv' });
@@ -486,7 +297,8 @@ export function mount(root) {
     try {
       const partials = fromCsv(await file.text());
       pushHistory();
-      adopt(partials, true);
+      state.partials = partials;
+      state.custom = true;
       render();
       pushModes();
       setAnalyze('');
@@ -551,7 +363,8 @@ export function mount(root) {
         maxPartials,
       });
       pushHistory();
-      adopt(result.partials, true);
+      state.partials = result.partials;
+      state.custom = true;
       state.rootHz = result.fundamental;
       state.rootConfidence = result.confidence;
       state.rootManual = result.confidence === 'set';
@@ -656,9 +469,7 @@ export function mount(root) {
       const factor = nextHz / state.rootHz;
       if (Math.abs(factor - 1) > 1e-6) {
         pushHistory();
-        const list = state.profilePartials || state.partials;
-        for (const partial of list) partial.ratio = Math.min(64, Math.max(0.02, partial.ratio / factor));
-        if (state.profilePartials && state.partials !== state.profilePartials) publishShape();
+        for (const partial of state.partials) partial.ratio = Math.min(64, Math.max(0.02, partial.ratio / factor));
         state.custom = true;
         render();
         pushModes();
@@ -672,16 +483,12 @@ export function mount(root) {
   }
 
   function makeRoot(index) {
-    const shown = state.partials[index];
-    const ratio = shown?.sourceIndex != null && state.profilePartials
-      ? state.profilePartials[shown.sourceIndex].ratio
-      : shown?.ratio;
+    const ratio = state.partials[index]?.ratio;
     if (!(ratio > 0)) return;
     if (state.rootHz > 0) retargetRoot(state.rootHz * ratio);
     else {
       pushHistory();
-      for (const partial of (state.profilePartials || state.partials)) partial.ratio /= ratio;
-      if (state.profilePartials && state.partials !== state.profilePartials) publishShape();
+      for (const partial of state.partials) partial.ratio /= ratio;
       state.custom = true;
       render();
       pushModes();
@@ -697,7 +504,6 @@ export function mount(root) {
 
   function applyRecipe(recipe, { hear = false, partials = null, history = true } = {}) {
     const controls = sanitizeControls(recipe.controls || recipe);
-    state.carried = { preset: controls.preset, voice: controls.voice, count: controls.count };
     fields.preset.value = controls.preset;
     fields.stiffness.value = String(controls.stiffness);
     fields.brightness.value = String(controls.brightness);
@@ -717,24 +523,32 @@ export function mount(root) {
     rebuild();
     readPlayControls();
     if (partials?.length) {
-      adopt(partials, true);
+      state.partials = partials.map((partial) => ({ ...partial }));
+      state.custom = true;
       render();
       pushModes();
     }
-    if (hear) {
-      try {
-        playHeard(state, recipe);
-        setPlayError(root, '');
-      } catch (error) {
-        setPlayError(root, error.message || 'Playback failed.');
-      }
-    }
+    if (hear) autoHear(recipe);
   }
 
   function cancelAutoHear() {
     state.autoHearToken += 1;
     window.clearTimeout(state.autoHearTimer);
     state.autoHearTimer = 0;
+  }
+
+  async function autoHear(recipe) {
+    const token = ++state.autoHearToken;
+    window.clearTimeout(state.autoHearTimer);
+    state.autoHearTimer = 0;
+    await strike(state, true);
+    if (token !== state.autoHearToken || state.userHolding || !state.holdingNote) return;
+    const ms = (recipe.exciter || state.exciter) === 'bow' ? 900 : 180;
+    state.autoHearTimer = window.setTimeout(() => {
+      state.autoHearTimer = 0;
+      if (token !== state.autoHearToken || state.userHolding) return;
+      strike(state, false, 'auto');
+    }, ms);
   }
 
   function profileFromState() {
@@ -853,7 +667,8 @@ function nearestPartial(partials, x, scale, locked) {
   return best <= 18 ? index : -1;
 }
 
-function layout(partials, width, height, pad = 16) {
+function layout(partials, width, height) {
+  const pad = 16;
   const min = Math.min(...partials.map((partial) => partial.ratio));
   const max = Math.max(...partials.map((partial) => partial.ratio));
   const logMin = Math.log(Math.max(min, 1e-6));
@@ -886,106 +701,14 @@ function canvasColors() {
   const read = (name, fallback) => style.getPropertyValue(name).trim() || fallback;
   return {
     card: read('--card', '#fbf8f2'),
-    bg: read('--bg', '#f2ede3'),
     line: read('--line', '#d8d0c1'),
     accent: read('--accent', '#d4421c'),
     // Quiet partials follow the text color. --ink stays dark in both schemes.
-    muted: read('--muted', '#6a655c'),
     ink: read('--fg', '#1f1d1a'),
   };
 }
 
-function setPlayError(root, message) {
-  const el = root?.querySelector?.('[data-play-error]');
-  if (el) el.textContent = message || '';
-}
-
-function capAudible(partials) {
-  // Drop partials above ratio 48 instead of folding them under a neighbor.
-  // Folding made the list unsorted and pulled real string and bar modes off
-  // their textbook ratios. What remains is still positive, sorted, and audible
-  // at A4.
-  const limit = 48;
-  const kept = partials
-    .filter((partial) => partial.ratio > 0 && partial.ratio <= limit)
-    .sort((a, b) => a.ratio - b.ratio);
-  if (kept.length) return kept;
-  const lowest = [...partials].sort((a, b) => a.ratio - b.ratio)[0];
-  return lowest ? [{ ...lowest, ratio: Math.min(lowest.ratio, limit) }] : [];
-}
-
-function playHeard(state, recipe) {
-  const AudioCtx = window.AudioContext || window.webkitAudioContext;
-  if (!AudioCtx) throw new Error('This browser cannot play audio.');
-  if (!state.audio) state.audio = new AudioCtx();
-  const ctx = state.audio;
-  // Safari stays silent unless a buffer is started in this gesture, before any await.
-  const unlock = ctx.createBuffer(1, 1, ctx.sampleRate);
-  const unlockSource = ctx.createBufferSource();
-  unlockSource.buffer = unlock;
-  unlockSource.connect(ctx.destination);
-  unlockSource.start();
-  const resumed = ctx.resume();
-  const exciter = recipe.exciter || state.exciter;
-  const zebra = state.canvas?.dataset.view === 'zebra';
-  const seconds = zebra ? 4 : (exciter === 'bow' ? 1.1 : 1.6);
-  const fundamental = state.hearFundamental || noteFrequency(state.note);
-  const samples = renderPreview(state.partials, {
-    fundamental,
-    velocity: state.velocity,
-    position: state.position,
-    exciter,
-    hardness: state.hardness,
-    file: state.file,
-    sampleRate: ctx.sampleRate,
-    seconds,
-    impulse: false,
-    matchGains: zebra,
-    glide: zebra && state.controls?.voice === 'gong' ? { cents: 35, seconds: 0.45, maxRatio: 6 } : undefined,
-    releaseAt: exciter === 'bow' ? Math.floor(ctx.sampleRate * 0.85) : undefined,
-  });
-  const heard = scaleToPeak(samples, 0.45);
-  try { state.hearSource?.stop(); } catch { /* already stopped */ }
-  const buffer = ctx.createBuffer(1, heard.length, ctx.sampleRate);
-  if (buffer.copyToChannel) buffer.copyToChannel(heard, 0);
-  else buffer.getChannelData(0).set(heard);
-  const source = ctx.createBufferSource();
-  source.buffer = buffer;
-  source.connect(ctx.destination);
-  source.start();
-  state.hearSource = source;
-  const root = state.canvas?.closest('#modal-app');
-  resumed.then(() => {
-    if (ctx.state !== 'running') setPlayError(root, 'The browser blocked audio. Click Hear again.');
-  }).catch(() => setPlayError(root, 'The browser blocked audio. Click Hear again.'));
-}
-
-function drawZebra(canvas, partials, state) {
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  const width = canvas.clientWidth || 640;
-  const height = canvas.clientHeight || 220;
-  canvas.width = Math.round(width * dpr);
-  canvas.height = Math.round(height * dpr);
-  const ctx = canvas.getContext('2d');
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  const colors = canvasColors();
-  colors.font = getComputedStyle(document.body).fontFamily;
-  paintModalView(ctx, partials, {
-    width,
-    height,
-    camera: state.camera,
-    style: state.drawStyle || 'fast',
-    colors,
-    selected: state.selectedPartial,
-    detune: state.detune || 0,
-  });
-}
-
 function draw(canvas, partials, state, frozen) {
-  if (canvas.dataset.view === 'zebra') {
-    drawZebra(canvas, partials, state, frozen);
-    return;
-  }
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   const width = canvas.clientWidth || 640;
   const height = canvas.clientHeight || 220;
@@ -1116,8 +839,6 @@ async function strike(state, down, source = 'user') {
 
 function silence(state) {
   state.node?.port.postMessage({ type: 'stop' });
-  try { state.hearSource?.stop(); } catch { /* already stopped */ }
-  state.hearSource = null;
   silenceFallback(state);
 }
 

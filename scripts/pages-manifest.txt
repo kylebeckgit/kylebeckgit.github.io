@@ -10,10 +10,10 @@ assets/images/icon-512.png
 assets/images/mark-on-dark.svg
 assets/images/og.png
 astro/about.ok-P9InA.css
-astro/ui.Dvt86Eiv.js
+astro/ui.BeTtwVek.js
 astro/z3-describe-preview.C_8PVeCl.css
-astro/z3-describe-preview.astro_astro_type_script_index_0_lang.DdCyMD7O.js
-astro/z3-webgpu.astro_astro_type_script_index_0_lang.DdCyMD7O.js
+astro/z3-describe-preview.astro_astro_type_script_index_0_lang.Jrufzhpw.js
+astro/z3-webgpu.astro_astro_type_script_index_0_lang.Dmw-K1mO.js
 astro/z3-webgpu.kj1TRWLu.css
 contact/index.html
 favicon.ico
