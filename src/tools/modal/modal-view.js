@@ -15,27 +15,29 @@
 // WEDGE is the look and the drag limits. Retune numbers here.
 
 export const WEDGE = {
-  yaw: -0.2,
-  pitch: 0.4,
-  focal: 3.8,
-  perspective: 0.42,
-  yawMin: -0.55,
+  // Resting view from the walkthrough frame at 00:12: the bright face runs
+  // down-right at about 45 degrees, and it is about 3.2 times longer than thick.
+  yaw: -1.1,
+  pitch: 0.75,
+  focal: 1.4,
+  perspective: 1.1,
+  yawMin: -1.7,
   yawMax: 2.25,
   pitchMin: 0.16,
-  pitchMax: 1.22,
+  pitchMax: 1.35,
   span: 5.4,
   amp: 1.7,
   depth: 0.72,
   decayLo: 0.05,
   decayHi: 4.5,
-  marginX: 0.045,
-  marginY: 0.07,
+  marginX: 0.07,
+  marginY: 0.08,
   panel: '#1c1a17',
   line: '#f2ede3',
   styles: {
-    eco: { width: 0.75, alpha: 0.9, halo: 0, haloAlpha: 0 },
-    fast: { width: 1.25, alpha: 0.85, halo: 0, haloAlpha: 0 },
-    glow: { width: 1.2, alpha: 0.72, halo: 7, haloAlpha: 0.28 },
+    eco: { width: 0.75, alpha: 0.9, halo: 0, haloAlpha: 0, solid: false },
+    fast: { width: 1.25, alpha: 0.85, halo: 0, haloAlpha: 0, solid: true },
+    glow: { width: 1.2, alpha: 0.72, halo: 7, haloAlpha: 0.28, solid: true },
   },
 };
 
@@ -94,6 +96,15 @@ export function layoutScene(partials, camera, width, height) {
     samples.push(rawProject(mode.x, 0, mode.z0, view));
     samples.push(rawProject(mode.x, mode.y, mode.z1, view));
   }
+  if (placed.length) {
+    const last = placed[placed.length - 1];
+    const yMax = Math.max(last.y, WEDGE.amp * 0.42);
+    const xNear = last.x - WEDGE.span * 0.055;
+    for (const x of [xNear, last.x]) {
+      samples.push(rawProject(x, yMax, last.z1, view));
+      samples.push(rawProject(x, 0, last.z0, view));
+    }
+  }
   if (!samples.length) samples.push(rawProject(0, 0, 0, view), rawProject(WEDGE.span, WEDGE.amp, WEDGE.depth, view));
   const fit = fitTransform(samples, width, height);
   const project = (x, y, z) => fit(rawProject(x, y, z, view));
@@ -101,6 +112,7 @@ export function layoutScene(partials, camera, width, height) {
     base: project(mode.x, 0, mode.z0),
     crest: project(mode.x, mode.y, mode.z1),
     cap: project(mode.x, mode.y * 0.5, mode.z1),
+    world: mode,
     depth: mode.x,
     amp: mode.amp,
   }));
@@ -174,31 +186,100 @@ function drawSheet(ctx, scene, look, color, selected, shift, alphaScale) {
   const modes = scene.modes;
   if (!modes.length) return;
   const count = modes.length;
-  const rungAlpha = Math.min(0.92, look.alpha * alphaScale * Math.sqrt(28 / count));
-  if (look.halo > 0) {
-    ctx.strokeStyle = color;
-    ctx.globalAlpha = look.haloAlpha * alphaScale;
-    ctx.lineWidth = look.halo;
-    strokePoly(ctx, modes.map((mode) => shiftPoint(mode.crest, shift)));
-    strokePoly(ctx, modes.map((mode) => shiftPoint(mode.base, shift)));
+  const fuse = count >= 64 && look.solid;
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  if (fuse) {
+    ctx.globalAlpha = 0.92 * alphaScale;
+    fillFace(ctx, modes, shift);
+    if (look.halo > 0) {
+      ctx.globalAlpha = look.haloAlpha * alphaScale;
+      ctx.lineWidth = look.halo;
+      strokeStepped(ctx, modes.map((mode) => shiftPoint(mode.crest, shift)));
+    }
+  } else {
+    const rungAlpha = Math.min(0.92, look.alpha * alphaScale);
+    if (look.halo > 0) {
+      ctx.globalAlpha = look.haloAlpha * alphaScale;
+      ctx.lineWidth = look.halo;
+      strokeStepped(ctx, modes.map((mode) => shiftPoint(mode.crest, shift)));
+    }
+    ctx.globalAlpha = rungAlpha;
+    ctx.lineWidth = look.width;
+    for (let i = 0; i < modes.length; i++) {
+      if (i === selected) continue;
+      const mode = modes[i];
+      line(ctx, shiftPoint(mode.base, shift), shiftPoint(mode.crest, shift));
+    }
   }
   ctx.strokeStyle = color;
-  ctx.globalAlpha = Math.min(0.95, rungAlpha * 1.4);
-  ctx.lineWidth = look.width + 0.4;
+  ctx.globalAlpha = Math.min(1, 0.95 * alphaScale);
+  ctx.lineWidth = fuse ? 1.35 : look.width + 0.35;
   strokePoly(ctx, modes.map((mode) => shiftPoint(mode.base, shift)));
-  strokePoly(ctx, modes.map((mode) => shiftPoint(mode.crest, shift)));
-  ctx.lineWidth = look.width;
-  ctx.globalAlpha = rungAlpha;
-  for (let i = 0; i < modes.length; i++) {
-    if (i === selected) continue;
-    const mode = modes[i];
-    line(ctx, shiftPoint(mode.base, shift), shiftPoint(mode.crest, shift));
-  }
-  ctx.globalAlpha = Math.min(0.95, rungAlpha * 1.6);
-  ctx.lineWidth = look.width + 0.2;
-  strokeCap(ctx, modes[0], shift);
-  strokeCap(ctx, modes[modes.length - 1], shift);
+  strokeStepped(ctx, modes.map((mode) => shiftPoint(mode.crest, shift)));
+  ctx.lineWidth = 1;
+  strokeTipGrid(ctx, scene, shift);
   ctx.globalAlpha = 1;
+}
+
+function fillFace(ctx, modes, shift) {
+  ctx.beginPath();
+  const first = shiftPoint(modes[0].base, shift);
+  ctx.moveTo(first.x, first.y);
+  for (const mode of modes) {
+    const point = shiftPoint(mode.base, shift);
+    ctx.lineTo(point.x, point.y);
+  }
+  for (let i = modes.length - 1; i >= 0; i--) {
+    const point = shiftPoint(modes[i].crest, shift);
+    ctx.lineTo(point.x, point.y);
+  }
+  ctx.closePath();
+  ctx.fill();
+}
+
+function strokeStepped(ctx, points) {
+  if (points.length < 2) return;
+  const step = 8;
+  ctx.beginPath();
+  let x = points[0].x;
+  let y = points[0].y;
+  ctx.moveTo(x, y);
+  for (let i = 1; i < points.length; i++) {
+    const nx = Math.round(points[i].x / step) * step;
+    const ny = Math.round(points[i].y / step) * step;
+    if (nx === x && ny === y) continue;
+    ctx.lineTo(nx, y);
+    ctx.lineTo(nx, ny);
+    x = nx;
+    y = ny;
+  }
+  ctx.stroke();
+}
+
+function strokeTipGrid(ctx, scene, shift) {
+  const last = scene.modes[scene.modes.length - 1];
+  if (!last?.world) return;
+  const world = last.world;
+  const yMax = Math.max(world.y, WEDGE.amp * 0.42);
+  const xNear = world.x - WEDGE.span * 0.055;
+  const ySteps = 4;
+  const zSteps = 3;
+  const xs = [xNear, world.x];
+  for (const x of xs) {
+    for (let i = 0; i <= ySteps; i++) {
+      const y = yMax * (i / ySteps);
+      line(ctx, shiftPoint(scene.project(x, y, world.z0), shift), shiftPoint(scene.project(x, y, world.z1), shift));
+    }
+    for (let i = 0; i <= zSteps; i++) {
+      const z = world.z0 + (world.z1 - world.z0) * (i / zSteps);
+      line(ctx, shiftPoint(scene.project(x, 0, z), shift), shiftPoint(scene.project(x, yMax, z), shift));
+    }
+  }
+  for (let i = 0; i <= ySteps; i++) {
+    const y = yMax * (i / ySteps);
+    line(ctx, shiftPoint(scene.project(xNear, y, world.z1), shift), shiftPoint(scene.project(world.x, y, world.z1), shift));
+  }
 }
 
 function strokeRung(ctx, mode, look, color) {
