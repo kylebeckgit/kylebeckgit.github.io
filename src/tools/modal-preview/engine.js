@@ -370,7 +370,13 @@ export function previewPartials(rawControls) {
     const fundSeconds = 11 * (1 - 0.62 * controls.damping);
     tuned = partials.map((partial) => {
       const harm = Math.max(1, partial.ratio / fundRatio);
-      return { ...partial, decay: clamp(fundSeconds / harm ** 0.85, 0.08, 30) };
+      // String.csv rolls off about 1/n. That is −20 dB per decade, not the
+      // steeper default tilt, which drew the second partial as a cliff.
+      return {
+        ...partial,
+        gainDb: clamp(-20 * Math.log10(harm), -96, 0),
+        decay: clamp(fundSeconds / harm ** 0.85, 0.08, 30),
+      };
     });
   }
   if (controls.voice === 'shell') {

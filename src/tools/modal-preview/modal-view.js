@@ -26,15 +26,15 @@ export const PLANE = {
   focal: 9.5,
   pitchMin: 0.5,
   pitchMax: 0.95,
-  span: 4.2,
-  height: 2.7,
-  depth: 3.4,
+  span: 2.6,
+  height: 2.8,
+  depth: 4.6,
   ratioLo: 0.35,
   ratioHi: 48,
   styles: {
     eco: { width: 1.15, alpha: 0.95, halo: 0, haloAlpha: 0 },
-    fast: { width: 1.2, alpha: 1, halo: 6, haloAlpha: 0.38 },
-    glow: { width: 1.35, alpha: 1, halo: 9, haloAlpha: 0.5 },
+    fast: { width: 1.05, alpha: 0.92, halo: 3.2, haloAlpha: 0.22 },
+    glow: { width: 1.15, alpha: 1, halo: 5.5, haloAlpha: 0.4 },
   },
 };
 
@@ -79,8 +79,8 @@ export function frequencyT(ratio) {
 
 export function levelHeight(gainDb) {
   const number = Number(gainDb);
-  const db = clamp(Number.isFinite(number) ? number : -60, -60, 0);
-  return (db + 60) / 60;
+  const db = clamp(Number.isFinite(number) ? number : -60, -80, 0);
+  return Math.pow(10, db / 20);
 }
 
 export function decayDepth(decay) {
@@ -152,11 +152,13 @@ export function measureFit(slices, camera, width, height, detune = 0) {
   for (const slice of list) {
     if (!slice || (slice.alpha < 0.04 && slice.height < 0.02 && slice.depth < 0.02)) continue;
     const world = worldOf(slice, detune);
-    for (const point of [
-      screenOf(view, world.x, 0, 0),
-      screenOf(view, world.x, world.y, 0),
-      screenOf(view, world.x, 0, world.z),
-    ]) {
+    const samples = [
+      { x: world.x, y: 0, z: 0 },
+      { x: world.x, y: 0, z: world.z },
+      ...tailWorld(world),
+    ];
+    for (const sample of samples) {
+      const point = screenOf(view, sample.x, sample.y, sample.z);
       if (point.x < minX) minX = point.x;
       if (point.x > maxX) maxX = point.x;
       if (point.y < minY) minY = point.y;
@@ -279,17 +281,35 @@ function drawFloor(ctx, slices, detune, place, camera, palette) {
     if (world.x > maxX) maxX = world.x;
   }
   ctx.globalCompositeOperation = 'source-over';
-  ctx.strokeStyle = palette.ink;
-  ctx.globalAlpha = 0.22;
+  ctx.strokeStyle = palette.wire;
+  ctx.globalAlpha = 0.35;
   ctx.lineWidth = 1;
   line(ctx, place(camera, minX, 0, 0), place(camera, maxX, 0, 0));
-  ctx.globalAlpha = 0.1;
-  const reach = PLANE.depth * 0.22;
-  for (let i = 1; i <= 2; i++) {
-    const z = (reach * i) / 2;
-    line(ctx, place(camera, minX, 0, z), place(camera, maxX, 0, z));
-  }
   ctx.globalAlpha = 1;
+}
+
+function tailWorld(world) {
+  const steps = 8;
+  const points = [];
+  for (let i = 0; i <= steps; i++) {
+    const u = i / steps;
+    // Exponential level over the decay time. The oblique time axis lifts
+    // the start of the curve; the fall bends it back toward the floor.
+    const env = Math.exp(-0.72 * u);
+    points.push({ x: world.x, y: world.y * env, z: world.z * u });
+  }
+  return points;
+}
+
+function strokePath(ctx, points, color, width, alpha) {
+  if (points.length < 2) return;
+  ctx.beginPath();
+  ctx.moveTo(points[0].x, points[0].y);
+  for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = width;
+  ctx.globalAlpha = alpha;
+  ctx.stroke();
 }
 
 function strokeTriangle(ctx, slice, detune, place, camera, look, palette, style, alphaScale) {
@@ -297,29 +317,15 @@ function strokeTriangle(ctx, slice, detune, place, camera, look, palette, style,
   const tri = projectSlice(slice, detune, place, camera);
   const fade = slice.alpha * alphaScale;
   const topsOnly = style === 'eco';
+  const parts = topsOnly ? [tri.curve] : [tri.curve, [tri.foot, tri.crest], [tri.foot, tri.floor]];
   if (look.halo > 0) {
     ctx.save();
     ctx.globalCompositeOperation = palette.bloom;
-    ctx.strokeStyle = palette.wire;
-    ctx.globalAlpha = look.haloAlpha * fade;
-    ctx.lineWidth = look.halo;
-    line(ctx, tri.crest, tri.back);
+    for (const part of parts) strokePath(ctx, part, palette.wire, look.halo, look.haloAlpha * fade);
     ctx.restore();
   }
   ctx.globalCompositeOperation = 'source-over';
-  ctx.strokeStyle = palette.wire;
-  ctx.lineWidth = look.width;
-  ctx.globalAlpha = look.alpha * fade;
-  line(ctx, tri.crest, tri.back);
-  if (!topsOnly) {
-    ctx.strokeStyle = palette.ink;
-    ctx.globalAlpha = 0.9 * fade;
-    ctx.lineWidth = 1.05;
-    line(ctx, tri.foot, tri.crest);
-    ctx.globalAlpha = 0.55 * fade;
-    ctx.lineWidth = 1;
-    line(ctx, tri.foot, tri.back);
-  }
+  for (const part of parts) strokePath(ctx, part, palette.wire, look.width, look.alpha * fade);
 }
 
 export function layoutTriangles(slices, camera, width, height, detune = 0) {
@@ -331,10 +337,13 @@ export function layoutTriangles(slices, camera, width, height, detune = 0) {
 
 function projectSlice(slice, detune, place, camera) {
   const world = worldOf(slice, detune);
+  const curve = tailWorld(world).map((point) => place(camera, point.x, point.y, point.z));
   return {
     foot: place(camera, world.x, 0, 0),
     crest: place(camera, world.x, world.y, 0),
-    back: place(camera, world.x, 0, world.z),
+    back: curve[curve.length - 1],
+    floor: place(camera, world.x, 0, world.z),
+    curve,
   };
 }
 
@@ -362,10 +371,12 @@ function rawProject(x, y, z, camera) {
   const z1 = -x * sy + z * cy;
   // Tuned so a full-height bar and a full-length tail meet at about 30 degrees
   // up-right, and the tail is a little longer than the bar.
-  const tailRise = camera.pitch * 2.8;
+  // Frequency falls at about 38 degrees. Decay rises; the curve then
+  // bends as the level falls, so the chord of a full tail is near 30 degrees.
+  const tailRise = camera.pitch * 2.02;
   return {
-    x: x1 + z1,
-    y: y * 1.15 - x1 * 0.29 + z1 * tailRise,
+    x: x1 * 0.72 + z1 * 1.15,
+    y: y * 1.55 - x1 * 0.62 + z1 * tailRise,
     depth: z1,
   };
 }

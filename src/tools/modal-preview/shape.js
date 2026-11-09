@@ -45,6 +45,11 @@ export function shapePartials(partials, shape = {}) {
 
 function resample(items, density) {
   if (density === items.length) return items;
+  // Fewer modes keeps the lowest partials, the way Zebra's density list does.
+  // Spreading 16 slots across all 64 made the second bar a high, quiet harmonic.
+  if (density < items.length) {
+    return items.slice(0, density).map((item) => ({ ...item }));
+  }
   const last = Math.max(1, items.length - 1);
   const out = [];
   for (let i = 0; i < density; i++) {

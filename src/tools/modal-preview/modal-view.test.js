@@ -84,7 +84,7 @@ test('the resting wedge is a dense comb with short up-right tails', () => {
   const fund = 8.6;
   for (let i = 0; i < 16; i++) {
     const harm = i + 1;
-    list.push({ ratio: harm, gainDb: Math.max(-36, -i * 2.1), decay: fund / harm ** 0.85 });
+    list.push({ ratio: harm, gainDb: -20 * Math.log10(harm), decay: fund / harm ** 0.85 });
   }
   const tris = layoutTriangles(list.map((partial) => sliceFromPartial(partial)), defaultCamera(), 800, 520, 0);
   const first = tris[0];
@@ -96,10 +96,14 @@ test('the resting wedge is a dense comb with short up-right tails', () => {
   const freqDeg = Math.atan2(last.foot.y - first.foot.y, last.foot.x - first.foot.x) * 180 / Math.PI;
   assert.ok(Math.abs(first.foot.x - first.crest.x) < 0.75);
   assert.ok(first.crest.y < first.foot.y);
-  assert.ok(tail / bar > 1 && tail / bar < 1.5, `tail/bar ${tail / bar}`);
-  assert.ok(run < bar, `run/bar ${run / bar}`);
-  assert.ok(tailDeg > 24 && tailDeg < 38, `tail ${tailDeg}`);
-  assert.ok(freqDeg > 8 && freqDeg < 24, `freq ${freqDeg}`);
+  assert.ok(tail / bar > 0.85 && tail / bar < 1.6, `tail/bar ${tail / bar}`);
+  assert.ok(run < bar * 0.85, `run/bar ${run / bar}`);
+  assert.ok(tailDeg > 24 && tailDeg < 40, `tail ${tailDeg}`);
+  assert.ok(freqDeg > 32 && freqDeg < 48, `freq ${freqDeg}`);
+  const second = tris[1];
+  const h1 = Math.abs(first.foot.y - first.crest.y);
+  const h2 = Math.abs(second.foot.y - second.crest.y);
+  assert.ok(h2 / h1 > 0.42 && h2 / h1 < 0.62, `second/first ${h2 / h1}`);
 });
 
 test('the triangles stay inside the canvas at the resting angle and a full turn', () => {
@@ -187,7 +191,7 @@ test('density keeps the outline while absorb only nudges the highs', () => {
 
   const sparse = shapePartials(list, { density: 8 });
   assert.equal(sparse.length, 8);
-  assert.ok(sparse[7].ratio > list[12].ratio);
+  assert.ok(Math.abs(sparse[7].ratio - list[7].ratio) < 1e-6);
 
   const dense = shapePartials(list, { density: 32 });
   assert.equal(dense.length, 32);
