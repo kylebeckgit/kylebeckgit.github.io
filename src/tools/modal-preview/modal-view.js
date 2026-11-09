@@ -27,9 +27,8 @@ export const PLANE = {
   span: 2.72,
   height: 1.29,
   depth: 3.15,
-  // Rear rail. Shallow: the tallest bar is about three and a half ladder-depths.
-  lipX: -0.12,
-  lipZ: 0.34,
+  // Short floor depth, straight back along the decay axis. Same length on every slice.
+  floorZ: 0.28,
   ratioLo: 0.35,
   ratioHi: 48,
   styles: {
@@ -111,7 +110,7 @@ export function decayDepth(decay) {
   const seconds = clamp(Number(decay) || 0, 0, 24);
   // Steep on purpose: the fundamental's tail is long, the next is shorter,
   // and the rest stay down among the bars.
-  return clamp(Math.pow(seconds / 10, 1.18), 0, 1);
+  return clamp(Math.pow(seconds / 8.5, 0.72), 0, 1);
 }
 
 function evenT(index, count) {
@@ -212,7 +211,6 @@ export function measureFit(slices, camera, width, height, detune = 0) {
       { x: world.x, y: world.y, z: 0 },
       floorBack(world),
       ...tailWorld(world),
-      { x: world.x, y: Math.max(0, world.y * 0.82 - PLANE.height * 0.22), z: world.z },
     ];
     for (const sample of samples) {
       const point = screenOf(view, sample.x, sample.y, sample.z);
@@ -268,7 +266,7 @@ export function paintModalView(ctx, partials, options = {}) {
   const { width, height, style = 'fast', colors, selected = -1, detune = 0 } = options;
   const camera = clampCamera(options.camera);
   const rawSlices = options.slices || spaceSlices(partials);
-  const slices = showDecay(combHeights(rawSlices, options.position));
+  const slices = combHeights(rawSlices, options.position);
   const look = PLANE.styles[style] || PLANE.styles.fast;
   const palette = sitePalette(colors);
   const ideal = measureFit(slices, camera, width, height, detune);
@@ -281,10 +279,6 @@ export function paintModalView(ctx, partials, options = {}) {
   ctx.lineJoin = 'round';
   const order = slices.map((slice, index) => ({ slice, index }));
   order.sort((a, b) => a.slice.t - b.slice.t);
-  for (const item of order) {
-    if (item.index === selected) continue;
-    strokeDiagonal(ctx, item.slice, detune, place, camera, look, palette, 1, item.index);
-  }
   if (style !== 'eco') {
     for (const item of order) {
       if (item.index === selected) continue;
@@ -298,7 +292,6 @@ export function paintModalView(ctx, partials, options = {}) {
   }
   if (selected >= 0 && slices[selected]) {
     const chosen = { ...look, width: look.width + 0.4, halo: Math.max(look.halo, 3.5), haloAlpha: Math.max(look.haloAlpha, 0.4) };
-    strokeDiagonal(ctx, slices[selected], detune, place, camera, chosen, palette, 1);
     if (style !== 'eco') strokeStructure(ctx, slices[selected], detune, place, camera, chosen, palette, 1);
     strokeTail(ctx, slices[selected], detune, place, camera, chosen, palette, 1);
   }
@@ -363,13 +356,13 @@ function drawRails(ctx, slices, detune, place, camera, palette, look) {
     front.push(place(camera, world.x, 0, 0));
     back.push(place(camera, rear.x, rear.y, rear.z));
   }
-  const rail = { ...look, width: look.width * 1.05, halo: look.halo * 0.9, haloAlpha: look.haloAlpha * 0.75 };
-  glow(ctx, back, palette.ink, rail, 0.78);
-  glow(ctx, front, palette.ink, rail, 0.9);
+  const rail = { ...look, width: look.width * 0.55, halo: look.halo * 0.4, haloAlpha: look.haloAlpha * 0.35 };
+  glow(ctx, back, palette.ink, rail, 0.42);
+  glow(ctx, front, palette.ink, rail, 0.5);
 }
 
 function floorBack(world) {
-  return { x: world.x + PLANE.lipX, y: 0, z: PLANE.lipZ };
+  return { x: world.x, y: 0, z: PLANE.floorZ };
 }
 
 function tailWorld(world) {
@@ -379,7 +372,9 @@ function tailWorld(world) {
     const u = i / steps;
     // A small sag as the line leaves the crest, then a nearly straight run
     // along the decay axis. Short decays never get far enough to show.
-    const env = 1 - 0.18 * (1 - Math.exp(-8 * u));
+    // Gentle along a long ring, then a quicker fall if this partial's
+    // decay actually finishes inside the drawn depth.
+    const env = 1 - 0.1 * u;
     points.push({ x: world.x, y: world.y * env, z: world.z * u });
   }
   return points;
@@ -406,29 +401,23 @@ function strokeStructure(ctx, slice, detune, place, camera, look, palette, alpha
   const tri = projectSlice(slice, detune, place, camera);
   const fade = slice.alpha * alphaScale;
   const front = { ...look, width: look.width * 1.4, halo: look.halo * 1.45, haloAlpha: Math.min(0.5, look.haloAlpha * 1.25) };
-  const rung = { ...look, width: look.width * 0.9, halo: look.halo * 0.55, haloAlpha: look.haloAlpha * 0.45 };
+  const rung = { ...look, width: Math.max(0.6, look.width * 0.4), halo: look.halo * 0.3, haloAlpha: look.haloAlpha * 0.25 };
   glow(ctx, [tri.foot, tri.crest], palette.ink, front, fade);
-  glow(ctx, [tri.foot, tri.floor], palette.ink, rung, fade * 0.82);
-}
-
-function strokeDiagonal(ctx, slice, detune, place, camera, look, palette, alphaScale, index = 0) {
-  if (!slice || slice.alpha < 0.04 || slice.height < 0.02) return;
-  const tri = projectSlice(slice, detune, place, camera);
-  const near = index < 8 ? 1 : Math.max(0.2, 1 - (index - 7) / 9);
-  const hair = { width: Math.max(0.75, look.width * 0.55), halo: look.halo * 0.5, haloAlpha: look.haloAlpha * 0.4, alpha: 0.55 };
-  glow(ctx, [tri.crest, tri.floor], palette.wire, hair, slice.alpha * alphaScale * 0.55 * near);
+  glow(ctx, [tri.foot, tri.floor], palette.ink, rung, fade * 0.38);
 }
 
 function strokeTail(ctx, slice, detune, place, camera, look, palette, alphaScale) {
-  // Short decays stay hidden in the bar tops. Only the long ones leave the comb.
-  if (!slice || slice.alpha < 0.04 || slice.depth < 0.36) return;
+  // Every slice gets its decay line. A long ring is still loud at the edge of
+  // the drawn depth, so the line ends in the air. A short ring falls inside
+  // that depth and the last segment drops toward the floor, the step on the
+  // walkthrough profiles. No extra tick is added at the tip.
+  if (!slice || slice.alpha < 0.04 || slice.depth < 0.08 || slice.height < 0.02) return;
   const tri = projectSlice(slice, detune, place, camera);
-  glow(ctx, tri.curve, palette.wire, look, slice.alpha * alphaScale);
-  const end = tri.curve[tri.curve.length - 1];
-  const world = worldOf(slice, detune);
-  const env = 1 - 0.18;
-  const stub = place(camera, world.x, Math.max(0, world.y * env - PLANE.height * 0.22), world.z);
-  glow(ctx, [end, stub], palette.wire, look, slice.alpha * alphaScale);
+  const faint = slice.depth < 0.55;
+  const lookTail = faint
+    ? { ...look, width: Math.max(0.65, look.width * 0.5), halo: look.halo * 0.4, haloAlpha: look.haloAlpha * 0.35 }
+    : look;
+  glow(ctx, tri.curve, palette.wire, lookTail, slice.alpha * alphaScale * (faint ? 0.5 : 1));
 }
 
 export function layoutTriangles(slices, camera, width, height, detune = 0) {

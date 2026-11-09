@@ -97,7 +97,7 @@ test('the resting wedge is a dense comb with short up-right tails', () => {
   assert.ok(Math.abs(first.foot.x - first.crest.x) < 0.75);
   assert.ok(first.crest.y < first.foot.y);
   const rise = first.crest.y - first.back.y;
-  assert.ok(rise / bar > 1.0 && rise / bar < 1.45, `rise/bar ${rise / bar}`);
+  assert.ok(rise / bar > 1.0 && rise / bar < 1.6, `rise/bar ${rise / bar}`);
   assert.ok(tail / bar > 1.5 && tail / bar < 2.8, `tail/bar ${tail / bar}`);
   assert.ok(run / bar > 2.2 && run / bar < 2.9, `run/bar ${run / bar}`);
   assert.ok(tailDeg > 30 && tailDeg < 42, `tail ${tailDeg}`);
