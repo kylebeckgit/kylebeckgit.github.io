@@ -261,6 +261,7 @@ export function mount(root) {
   for (const name of ['exciter', 'hardness', 'velocity', 'position', 'threshold']) {
     root.querySelector(`[data-${name}]`)?.addEventListener('input', () => {
       readPlayControls();
+      if (name === 'position') draw(canvas, state.partials, state);
       if (state.node) pushModes();
     });
   }
@@ -980,7 +981,7 @@ function drawZebra(canvas, partials, state) {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   const colors = canvasColors();
   colors.font = getComputedStyle(document.body).fontFamily;
-  paintModalView(ctx, partials, {
+    paintModalView(ctx, partials, {
     width,
     height,
     camera: state.camera,
@@ -988,6 +989,7 @@ function drawZebra(canvas, partials, state) {
     colors,
     selected: state.selectedPartial,
     detune: state.detune || 0,
+    position: state.position,
     now: performance.now(),
     fitMotion: state.fit,
     slices: state.slicesReady ? sampleSlices(state.slices, performance.now()) : undefined,

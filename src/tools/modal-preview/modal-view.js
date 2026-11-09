@@ -2,10 +2,11 @@
 //
 //   x  frequency, evenly spaced, falling down-right at about 32 degrees
 //   y  level, screen-vertical, on a compressed dB scale
-//   z  decay time, rising up-right. Only the long decays leave the comb.
+//   z  decay time, rising up-right. Long decays leave the comb.
 //
-// The floor has a short second rail. Its offset is up-left at the resting
-// angle: a little thickness into the screen, not the long decay axis.
+// Each slice is a triangle. The front is vertical. A short rung runs up-left
+// to a second floor rail. The accent hypotenuse closes that triangle, so the
+// diagonals cross the comb. Position combs the displayed levels.
 // Yaw turns frequency and decay around the vertical, so the fronts stay
 // vertical. Pitch only changes how steeply decay rises.
 //
@@ -23,18 +24,18 @@ export const PLANE = {
   focal: 9.5,
   pitchMin: 0.35,
   pitchMax: 0.85,
-  span: 4.24,
+  span: 2.72,
   height: 1,
-  depth: 5.05,
-  // Short floor thickness. At yaw 0 this lands up-left of each foot.
-  lipX: -0.2,
-  lipZ: 0.035,
+  depth: 4.6,
+  // Rear rail. At yaw 0 the rung lands up-left of the foot and stays parallel.
+  lipX: -0.22,
+  lipZ: 0.64,
   ratioLo: 0.35,
   ratioHi: 48,
   styles: {
-    eco: { width: 1.05, alpha: 0.95, halo: 2.4, haloAlpha: 0.16 },
-    fast: { width: 1.05, alpha: 0.92, halo: 6, haloAlpha: 0.22 },
-    glow: { width: 1.1, alpha: 1, halo: 7.5, haloAlpha: 0.28 },
+    eco: { width: 1.7, alpha: 0.95, halo: 5, haloAlpha: 0.28 },
+    fast: { width: 2.15, alpha: 1, halo: 8, haloAlpha: 0.34 },
+    glow: { width: 2.4, alpha: 1, halo: 12, haloAlpha: 0.46 },
   },
 };
 
@@ -62,12 +63,32 @@ export function frameMotion({ partials, camera, time = 0 }) {
 }
 
 export function sliceFromPartial(partial, alpha = 1) {
+  const gainDb = Number(partial?.gainDb);
   return {
     t: frequencyT(partial?.ratio),
+    gainDb: Number.isFinite(gainDb) ? gainDb : 0,
     height: levelHeight(partial?.gainDb),
     depth: decayDepth(partial?.decay),
     alpha,
   };
+}
+
+// A plucked string's Position puts nodes on some partials. Apply that in
+// amplitude, then draw the result on the same compressed scale.
+export function combHeights(slices, position) {
+  const pos = Number(position);
+  if (!Number.isFinite(pos) || pos <= 0.02) return slices;
+  const placed = Math.min(0.98, Math.max(0.02, pos));
+  const amps = slices.map((slice, index) => {
+    const db = Number.isFinite(slice?.gainDb) ? slice.gainDb : -60;
+    const weight = Math.abs(Math.sin(Math.PI * (index + 1) * placed));
+    return Math.pow(10, db / 20) * (0.08 + 0.92 * weight);
+  });
+  const peak = Math.max(1e-6, ...amps);
+  return slices.map((slice, index) => ({
+    ...slice,
+    height: levelHeight(20 * Math.log10(Math.max(amps[index] / peak, 1e-6))),
+  }));
 }
 
 export function frequencyT(ratio) {
@@ -221,7 +242,8 @@ export function followFit(motion, ideal, now) {
 export function paintModalView(ctx, partials, options = {}) {
   const { width, height, style = 'fast', colors, selected = -1, detune = 0 } = options;
   const camera = clampCamera(options.camera);
-  const slices = options.slices || spaceSlices(partials);
+  const rawSlices = options.slices || spaceSlices(partials);
+  const slices = combHeights(rawSlices, options.position);
   const look = PLANE.styles[style] || PLANE.styles.fast;
   const palette = sitePalette(colors);
   const ideal = measureFit(slices, camera, width, height, detune);
@@ -235,19 +257,21 @@ export function paintModalView(ctx, partials, options = {}) {
   const order = slices.map((slice, index) => ({ slice, index }));
   order.sort((a, b) => a.slice.t - b.slice.t);
   if (style !== 'eco') {
-    drawRails(ctx, order.map((item) => item.slice), detune, place, camera, palette, look);
     for (const item of order) {
       if (item.index === selected) continue;
       strokeStructure(ctx, item.slice, detune, place, camera, look, palette, 1);
     }
+    drawRails(ctx, order.map((item) => item.slice), detune, place, camera, palette, look);
   }
   for (const item of order) {
     if (item.index === selected) continue;
+    strokeDiagonal(ctx, item.slice, detune, place, camera, look, palette, 1);
     strokeTail(ctx, item.slice, detune, place, camera, look, palette, 1);
   }
   if (selected >= 0 && slices[selected]) {
-    const chosen = { ...look, width: look.width + 0.6, halo: Math.max(look.halo, 3.5), haloAlpha: Math.max(look.haloAlpha, 0.28) };
+    const chosen = { ...look, width: look.width + 0.6, halo: Math.max(look.halo, 4), haloAlpha: Math.max(look.haloAlpha, 0.4) };
     if (style !== 'eco') strokeStructure(ctx, slices[selected], detune, place, camera, chosen, palette, 1);
+    strokeDiagonal(ctx, slices[selected], detune, place, camera, chosen, palette, 1);
     strokeTail(ctx, slices[selected], detune, place, camera, chosen, palette, 1);
   }
   ctx.globalAlpha = 1;
@@ -306,8 +330,8 @@ function drawRails(ctx, slices, detune, place, camera, palette, look) {
     front.push(place(camera, world.x, 0, 0));
     back.push(place(camera, rear.x, rear.y, rear.z));
   }
-  strokePath(ctx, back, palette.ink, look.width, 0.55);
-  strokePath(ctx, front, palette.ink, look.width, 0.85);
+  glow(ctx, back, palette.ink, look, 0.9);
+  glow(ctx, front, palette.ink, look, 1);
 }
 
 function floorBack(world) {
@@ -321,7 +345,7 @@ function tailWorld(world) {
     const u = i / steps;
     // A small sag as the line leaves the crest, then a nearly straight run
     // along the decay axis. Short decays never get far enough to show.
-    const env = 1 - 0.14 * (1 - Math.exp(-6 * u));
+    const env = 1 - 0.34 * (1 - Math.exp(-9 * u));
     points.push({ x: world.x, y: world.y * env, z: world.z * u });
   }
   return points;
@@ -348,7 +372,13 @@ function strokeStructure(ctx, slice, detune, place, camera, look, palette, alpha
   const tri = projectSlice(slice, detune, place, camera);
   const fade = slice.alpha * alphaScale;
   glow(ctx, [tri.foot, tri.crest], palette.ink, look, fade);
-  glow(ctx, [tri.foot, tri.floor], palette.ink, { ...look, haloAlpha: look.haloAlpha * 0.7 }, fade * 0.85);
+  glow(ctx, [tri.foot, tri.floor], palette.ink, look, fade * 0.95);
+}
+
+function strokeDiagonal(ctx, slice, detune, place, camera, look, palette, alphaScale) {
+  if (!slice || slice.alpha < 0.04 || slice.height < 0.02) return;
+  const tri = projectSlice(slice, detune, place, camera);
+  glow(ctx, [tri.crest, tri.floor], palette.wire, look, slice.alpha * alphaScale);
 }
 
 function strokeTail(ctx, slice, detune, place, camera, look, palette, alphaScale) {
@@ -435,6 +465,7 @@ function lerpSlice(from, to, eased) {
   const b = to || { t: a.t, height: 0, depth: 0, alpha: 0 };
   return {
     t: a.t + (b.t - a.t) * eased,
+    gainDb: (a.gainDb || 0) + ((b.gainDb || 0) - (a.gainDb || 0)) * eased,
     height: a.height + (b.height - a.height) * eased,
     depth: a.depth + (b.depth - a.depth) * eased,
     alpha: a.alpha + (b.alpha - a.alpha) * eased,
