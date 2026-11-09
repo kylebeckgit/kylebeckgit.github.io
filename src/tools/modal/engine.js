@@ -240,6 +240,15 @@ export function buildPartials(rawControls) {
   }
   const peak = Math.max(...partials.map((partial) => partial.gainDb));
   for (const partial of partials) partial.gainDb = clamp(partial.gainDb - peak, -96, 0);
+  if (controls.preset === 'membrane') {
+    // (2,2) at 3.50 and (0,3) at 3.60 are both real zeros, 48 cents apart.
+    // A 20 ms fit hears them as one peak on the higher mode. Keep both in the
+    // file and sit the higher one down so the listed partial is the one that rings.
+    for (let i = 1; i < partials.length; i++) {
+      const cents = 1200 * Math.log2(partials[i].ratio / partials[i - 1].ratio);
+      if (cents < 55) partials[i].gainDb = clamp(partials[i].gainDb - 12, -96, 0);
+    }
+  }
   return partials;
 }
 

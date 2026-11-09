@@ -95,6 +95,14 @@ export function createVoice(partials, options, sampleRate) {
   };
 }
 
+function fadeInPlace(samples, sampleRate, seconds) {
+  const length = Math.max(2, Math.round(sampleRate * seconds));
+  const span = Math.min(length, samples.length) - 1;
+  for (let i = 0; i < length && i < samples.length; i++) {
+    samples[i] *= 0.5 - 0.5 * Math.cos((Math.PI * i) / span);
+  }
+}
+
 export function nextExciter(state) {
   if (!state.holding && (state.exciter === 'bow' || state.exciter === 'file')) return 0;
   if (state.exciter === 'click') {
@@ -182,6 +190,9 @@ function renderFlat(partials, options, sampleRate, seconds) {
   const length = Math.max(8, Math.floor(sampleRate * seconds));
   const out = new Float32Array(length);
   for (let i = 0; i < length; i++) out[i] = processSample(state);
+  // 1.5 ms cosine rise. The impulse still excites every partial; the rise
+  // only keeps the first sample from stepping.
+  fadeInPlace(out, sampleRate, options.fadeIn || 0.0015);
   return out;
 }
 
@@ -191,7 +202,7 @@ function gainsForHear(partials, options, sampleRate) {
     const freq = options.fundamental * partial.ratio;
     return partial.gainDb > -70 && freq >= 20 && freq < sampleRate * 0.45;
   });
-  for (let pass = 0; pass < 8; pass++) {
+  for (let pass = 0; pass < 12; pass++) {
     const shaped = partials.map((partial, index) => ({
       ...partial,
       gainDb: partial.gainDb + 20 * Math.log10(scales[index]),
@@ -216,7 +227,7 @@ function gainsForHear(partials, options, sampleRate) {
       const got = mags[i] / loud;
       const err = Math.abs(20 * Math.log10(got / want));
       if (err > worst) worst = err;
-      scales[i] = Math.min(12, Math.max(0.04, scales[i] * (want / got)));
+      scales[i] = Math.min(80, Math.max(0.02, scales[i] * (want / got)));
     }
     if (worst < 0.4) break;
   }

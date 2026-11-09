@@ -13,7 +13,7 @@ const FAMILIES = [
   { test: /clarinett?|closed pipe/, preset: 'closed-pipe', stiffness: 0.02, brightness: -0.05, damping: 0.42, oddEven: 0.85, exciter: 'burst', hardness: 0.4 },
   { test: /flute|shakuhachi|panpipe|open pipe/, preset: 'open-pipe', stiffness: 0.02, brightness: 0.1, damping: 0.48, oddEven: 0.1, exciter: 'burst', hardness: 0.35 },
   { test: /drum|membrane|skin|djembe|log|trommel|tambou?r|tamburo/, preset: 'membrane', stiffness: 0.08, brightness: -0.25, damping: 0.72, oddEven: 0, exciter: 'mallet', hardness: 0.6 },
-  { test: /gong|cymbal|tam-?tam/, preset: 'plate', voice: 'gong', count: 40, stiffness: 0.12, brightness: 0.02, damping: 0.16, oddEven: 0, exciter: 'mallet', hardness: 0.7 },
+  { test: /gong|cymbal|tam-?tam/, preset: 'plate', voice: 'gong', count: 40, stiffness: 0, brightness: 0.02, damping: 0.16, oddEven: 0, exciter: 'mallet', hardness: 0.7 },
   { test: /glass bowl|crystal bowl|crystal|verre|vidrio|\bglas\b|\bglass\b/, preset: 'plate', voice: 'glass', count: 6, stiffness: 0.02, brightness: -0.08, damping: 0.08, oddEven: 0, exciter: 'mallet', hardness: 0.25 },
   { test: /bell|chime|singing bowl|glocke|cloche|campana|鐘/, preset: 'bell', stiffness: 0.04, brightness: 0, damping: 0.2, oddEven: 0, exciter: 'mallet', hardness: 0.42 },
   { test: /stahlplatte|\bplatte\b|blech|\bplate\b|\bsteel\b/, preset: 'plate', voice: '', count: 64, stiffness: 0.05, brightness: 0.48, damping: 0.3, oddEven: 0, exciter: 'mallet', hardness: 0.72 },
