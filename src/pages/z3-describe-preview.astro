@@ -35,10 +35,18 @@ import Base from '../layouts/Base.astro';
     </section>
 
     <section class="listen">
-      <h2>Listen</h2>
-      <canvas aria-label="Partial spectrum"></canvas>
-      <p class="note">Drag a partial up or down for gain. Shift-drag it sideways for ratio. Draw paints a gain curve. Undo and redo cover those edits.</p>
+      <h2>Partials</h2>
+      <canvas data-view="zebra" aria-label="Modal partials. Drag to rotate. Click a mode to highlight it."></canvas>
+      <p class="note">The lines are the modes, joined along the spine. Level is the crest and decay is the depth. Drag to rotate. Double-click to reset the angle. Click a line, or a row in the list, to highlight it.</p>
+      <p class="note" data-play-error></p>
       <div class="listen-controls">
+        <label>Drawing
+          <select data-draw-style>
+            <option value="eco">Eco</option>
+            <option value="fast" selected>Fast</option>
+            <option value="glow">Glow</option>
+          </select>
+        </label>
         <label>Exciter
           <select data-exciter>
             <option value="click">Click</option>
@@ -54,14 +62,38 @@ import Base from '../layouts/Base.astro';
         <label>Velocity <span data-velocity-out>0.80</span>
           <input data-velocity type="range" min="0" max="1" step="0.01" value="0.8">
         </label>
-        <label>Strike position <span data-position-out>0.18</span>
+        <label>Position <span data-position-out>0.18</span>
           <input data-position type="range" min="0.02" max="0.98" step="0.01" value="0.18">
+        </label>
+        <label>Density <span data-density-out>64</span>
+          <input data-density type="range" min="8" max="256" step="1" value="64">
+        </label>
+        <label>Tune <span data-tune-out>0</span>
+          <input data-tune type="range" min="-48" max="48" step="1" value="0">
+        </label>
+        <label>Detune <span data-detune-out>0</span>
+          <input data-detune type="range" min="-100" max="100" step="1" value="0">
+        </label>
+        <label>Decay <span data-modal-decay-out>0</span>
+          <input data-modal-decay type="range" min="-100" max="100" step="1" value="0">
+        </label>
+        <label>Decay KF <span data-decay-kf-out>0</span>
+          <input data-decay-kf type="range" min="-100" max="100" step="1" value="0">
+        </label>
+        <label>Absorb <span data-absorb-out>0</span>
+          <input data-absorb type="range" min="-100" max="100" step="1" value="0">
+        </label>
+        <label>Disperse <span data-disperse-out>0</span>
+          <input data-disperse type="range" min="-100" max="100" step="1" value="0">
+        </label>
+        <label>Normalize <span data-normalize-out>0</span>
+          <input data-normalize type="range" min="-100" max="100" step="1" value="0">
         </label>
         <label data-file-field hidden>Exciter file
           <input data-exciter-file type="file" accept=".wav,.mp3,.aiff,.aif,audio/*">
         </label>
       </div>
-      <p class="note">The preview approximates Zebra 3's modal resonator and is not verified against it. Strike position uses a string-like mode shape, which is only an approximation. Hold a key for the bow.</p>
+      <p class="note">Density resamples the same spectrum, from a sparse wireframe up to a filled sheet. Tune shifts every ratio. Detune draws a second sheet and does not change the file. Absorb, Normalize, Decay, and Decay KF nudge level and decay, the way they barely move the graphic in Zebra. Disperse stretches the octaves. Those edits, Detune aside, are what Hear plays and Export writes. This is not the plugin. Position is still this page's strike position. Hold a key for the bow.</p>
       <div class="row">
         <button type="button" class="btn" data-draw aria-pressed="false">Draw</button>
         <button type="button" class="btn" data-undo disabled>Undo</button>
@@ -112,7 +144,7 @@ import Base from '../layouts/Base.astro';
       </form>
       <div class="partial-scroll">
         <table class="partials">
-          <thead><tr><th scope="col">#</th><th scope="col">Ratio</th><th scope="col">Gain dB</th><th scope="col">Decay</th></tr></thead>
+          <thead><tr><th scope="col">#</th><th scope="col">Ratio</th><th scope="col">Level dB</th><th scope="col">Decay</th></tr></thead>
           <tbody data-partials></tbody>
         </table>
       </div>
@@ -185,7 +217,18 @@ import Base from '../layouts/Base.astro';
   :global(.var-card h3) { font-size: 1.15rem; }
   :global(.var-card p) { margin: 0; color: var(--muted); font-size: .95rem; }
   :global(.var-card .btn) { margin-top: auto; align-self: flex-start; }
-  canvas { width: 100%; height: 240px; display: block; background: var(--card); border: 1px solid var(--line); border-radius: 4px; touch-action: none; cursor: ns-resize; }
+  canvas { width: 100%; height: 240px; display: block; background: var(--card); border: 1px solid var(--line); border-radius: 4px; touch-action: none; }
+  canvas[data-view="zebra"] {
+    cursor: grab;
+    width: min(100%, 520px);
+    height: auto;
+    aspect-ratio: 1.24;
+    margin-inline: auto;
+    background: var(--bg);
+    border-color: var(--line);
+  }
+  canvas[data-view="zebra"]:active { cursor: grabbing; }
+  :global(tr.is-selected) { background: color-mix(in srgb, var(--accent) 12%, transparent); }
   canvas.is-drawing { cursor: crosshair; }
   .listen-controls { display: grid; gap: 1rem; margin-top: 1rem; }
   @media (min-width: 700px) { .listen-controls { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
@@ -222,6 +265,6 @@ import Base from '../layouts/Base.astro';
 </style>
 
 <script>
-  import { mount } from '../tools/modal/ui.js';
+  import { mount } from '../tools/modal-preview/ui.js';
   mount(document.getElementById('modal-app'));
 </script>
