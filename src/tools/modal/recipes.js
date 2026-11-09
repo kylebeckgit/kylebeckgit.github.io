@@ -8,15 +8,17 @@ const FAMILIES = [
   { test: /rubber/, preset: 'string', stiffness: 0.01, brightness: -0.4, damping: 0.82, oddEven: 0, exciter: 'click', hardness: 0.3 },
   { test: /mug|ceramic|porcelain|\bcup\b/, preset: 'bell', stiffness: 0.2, brightness: -0.05, damping: 0.4, oddEven: 0, exciter: 'mallet', hardness: 0.45 },
   { test: /\bcan\b|\btin\b/, preset: 'plate', stiffness: 0.12, brightness: 0.15, damping: 0.55, oddEven: 0, exciter: 'mallet', hardness: 0.7 },
-  { test: /tube|aluminium|aluminum/, preset: 'open-pipe', stiffness: 0.04, brightness: 0.18, damping: 0.22, oddEven: 0, exciter: 'mallet', hardness: 0.55 },
+  { test: /tube|aluminium|aluminum|röhre|\brohr\b|tuyau|\btubo\b/, preset: 'open-pipe', stiffness: 0.04, brightness: 0.18, damping: 0.22, oddEven: 0, exciter: 'mallet', hardness: 0.55 },
   { test: /gamelan|bonang|gender|gangsa/, preset: 'bell', stiffness: 0.62, brightness: 0.12, damping: 0.3, oddEven: 0.05, exciter: 'mallet', hardness: 0.45 },
   { test: /clarinett?|closed pipe/, preset: 'closed-pipe', stiffness: 0.02, brightness: -0.05, damping: 0.42, oddEven: 0.85, exciter: 'burst', hardness: 0.4 },
   { test: /flute|shakuhachi|panpipe|open pipe/, preset: 'open-pipe', stiffness: 0.02, brightness: 0.1, damping: 0.48, oddEven: 0.1, exciter: 'burst', hardness: 0.35 },
-  { test: /drum|membrane|skin|djembe|log/, preset: 'membrane', stiffness: 0.08, brightness: -0.25, damping: 0.72, oddEven: 0, exciter: 'mallet', hardness: 0.6 },
-  { test: /bell|chime|singing bowl/, preset: 'bell', stiffness: 0.38, brightness: 0.32, damping: 0.22, oddEven: 0, exciter: 'mallet', hardness: 0.4 },
-  { test: /bowl|glass|crystal|gong|cymbal|plate/, preset: 'plate', stiffness: 0.2, brightness: 0.38, damping: 0.2, oddEven: 0, exciter: 'mallet', hardness: 0.4 },
+  { test: /drum|membrane|skin|djembe|log|trommel|tambou?r|tamburo/, preset: 'membrane', stiffness: 0.08, brightness: -0.25, damping: 0.72, oddEven: 0, exciter: 'mallet', hardness: 0.6 },
+  { test: /gong|cymbal|tam-?tam/, preset: 'plate', voice: 'gong', count: 40, stiffness: 0.12, brightness: 0.02, damping: 0.16, oddEven: 0, exciter: 'mallet', hardness: 0.7 },
+  { test: /glass bowl|crystal bowl|crystal|verre|vidrio|\bglas\b|\bglass\b/, preset: 'plate', voice: 'glass', count: 6, stiffness: 0.02, brightness: -0.08, damping: 0.08, oddEven: 0, exciter: 'mallet', hardness: 0.25 },
+  { test: /bell|chime|singing bowl|glocke|cloche|campana|鐘/, preset: 'bell', stiffness: 0.04, brightness: 0, damping: 0.2, oddEven: 0, exciter: 'mallet', hardness: 0.42 },
+  { test: /stahlplatte|\bplatte\b|blech|\bplate\b|\bsteel\b/, preset: 'plate', voice: '', count: 64, stiffness: 0.05, brightness: 0.48, damping: 0.3, oddEven: 0, exciter: 'mallet', hardness: 0.72 },
   { test: /marimba|xylophone|vibraphone|rosewood|wood bar|\bbar\b/, preset: 'bar', stiffness: 0.18, brightness: -0.12, damping: 0.46, oddEven: 0, exciter: 'mallet', hardness: 0.55 },
-  { test: /piano|guitar|harp|string|pluck/, preset: 'string', stiffness: 0.04, brightness: 0.05, damping: 0.4, oddEven: 0, exciter: 'click', hardness: 0.5 },
+  { test: /piano|guitar|harp|string|pluck|saite|cuerda|\bcorde\b/, preset: 'string', stiffness: 0.04, brightness: 0.05, damping: 0.4, oddEven: 0, exciter: 'click', hardness: 0.5 },
 ];
 
 const OBJECT_NAMES = [
@@ -27,8 +29,10 @@ const OBJECT_NAMES = [
   [/xylophone/, 'Xylophone'],
   [/rosewood/, 'Rosewood bar'],
   [/prayer bell|temple bell/, 'Prayer bell'],
+  [/glocke|鐘|cloche|campana/, 'Bell'],
   [/bell/, 'Bell'],
   [/gong/, 'Gong'],
+  [/stahlplatte|\bplatte\b/, 'Plate'],
   [/cymbal/, 'Cymbal'],
   [/drum/, 'Drum'],
   [/flute/, 'Flute'],
@@ -119,6 +123,8 @@ function applyFamily(recipe, family) {
   recipe.controls.brightness = family.brightness;
   recipe.controls.damping = family.damping;
   recipe.controls.oddEven = family.oddEven;
+  recipe.controls.voice = family.voice || '';
+  recipe.controls.count = family.count || 64;
   recipe.exciter = family.exciter;
   recipe.hardness = family.hardness;
   recipe.recognized = true;
@@ -158,6 +164,23 @@ function applyWords(recipe, text, refine) {
   if (/nylon/.test(text)) {
     controls.brightness -= 0.16;
     controls.damping += 0.14;
+  }
+  if (/holz|madera|\bbois\b|legno/.test(text)) {
+    controls.brightness -= 0.16;
+    controls.damping += 0.12;
+    if (!recipe.recognized) {
+      controls.preset = 'bar';
+      recipe.recognized = true;
+    }
+  }
+  if (/metall|\bmetal\b|acier|acero|ottone|messing|bronze|brass/.test(text)) controls.damping -= 0.06;
+  if (/kleine|klein|\bsmall\b|tiny|小さな/.test(text)) {
+    controls.damping += 0.1;
+    controls.brightness += 0.06;
+  }
+  if (/寺|temple/.test(text) && controls.preset === 'bell') {
+    controls.brightness -= 0.1;
+    controls.damping -= 0.05;
   }
   if (/\bbow(?:ed|ing)?\b/.test(text)) recipe.exciter = 'bow';
   else if (/pluck|picked/.test(text)) recipe.exciter = 'click';
@@ -248,6 +271,8 @@ function blendControls(from, to, amount) {
     damping: mix('damping'),
     oddEven: mix('oddEven'),
     seed: to.seed,
+    voice: to.voice,
+    count: to.count,
   });
 }
 

@@ -5,11 +5,11 @@ import { renderPreview, peakStats, scaleToPeak } from './resonator.js';
 import { describePrompt, fileSlug, readRecipe } from './recipes.js';
 import { rememberedIndex } from './studio.js';
 
-test('a glass bowl becomes four different plate variations', () => {
+test('a glass bowl becomes four sparse glass variations', () => {
   const prompt = 'glass bowl struck softly, slightly detuned, long shimmer';
   const variations = describePrompt(prompt);
   assert.equal(variations.length, 4);
-  assert.equal(variations[0].controls.preset, 'plate');
+  assert.equal(variations[0].controls.voice, 'glass');
   assert.equal(variations[0].exciter, 'mallet');
   assert.ok(variations[0].hardness < 0.4);
   assert.ok(variations[0].controls.seed > 0);
@@ -19,7 +19,7 @@ test('a glass bowl becomes four different plate variations', () => {
   const signatures = new Set(variations.map((variation) => JSON.stringify(variation.controls)));
   assert.equal(signatures.size, 4);
   for (const variation of variations) {
-    assert.equal(buildPartials(variation.controls).length, 64);
+    assert.equal(buildPartials(variation.controls).length, 6);
   }
 });
 

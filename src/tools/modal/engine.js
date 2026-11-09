@@ -21,6 +21,14 @@ const BAR_BETA = [4.730040744862704, 7.853204624095838, 10.995607838001671, 14.1
 // Minor-third bell, relative to the prime (Fletcher & Rossing): hum, prime, tierce, quint, nominal.
 const BELL_NAMED = [0.5, 1, 1.2, 1.5, 2, 2.5, 3, 4];
 
+// Strike levels in dB relative to the nominal. A tuned bell's nominal leads,
+// the tierce is the next strongest musical partial, and the hum sits well down
+// at the attack even though it rings the longest (Rossing, Acoustics of Bells).
+const BELL_STRIKE_DB = [ -18, -9, -5, -12, 0, -7, -9, -14 ];
+
+// Flexural modes of a bowl, relative to the (2,0) singing mode. Sparse on purpose.
+const GLASS_RATIOS = [1, 2.32, 4.21, 6.58, 9.41, 12.7];
+
 function barBeta(n) {
   if (n <= BAR_BETA.length) return BAR_BETA[n - 1];
   return ((2 * n + 1) * Math.PI) / 2;
@@ -73,7 +81,23 @@ function membraneAlphas() {
   return membraneZeros;
 }
 
-function baseRatios(preset) {
+function bellStrikeDb(ratio) {
+  let best = 0;
+  let bestDist = Infinity;
+  for (let i = 0; i < BELL_NAMED.length; i++) {
+    const dist = Math.abs(Math.log(ratio / BELL_NAMED[i]));
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = i;
+    }
+  }
+  if (bestDist < 0.045) return BELL_STRIKE_DB[best];
+  const octaves = Math.log2(Math.max(ratio, 1e-6) / 2);
+  return -6 * Math.max(octaves, 0) - 8;
+}
+
+function baseRatios(preset, voice) {
+  if (voice === 'glass') return GLASS_RATIOS.slice();
   if (preset === 'string' || preset === 'open-pipe') {
     return Array.from({ length: PARTIALS }, (_, i) => i + 1);
   }
@@ -145,6 +169,8 @@ export function sanitizeControls(input) {
     return Number.isFinite(n) ? clamp(n, lo, hi) : fallback;
   };
   const seedNum = Number(input?.seed);
+  const countNum = Number(input?.count);
+  const voice = input?.voice === 'glass' || input?.voice === 'gong' ? input.voice : '';
   return {
     preset,
     stiffness: num(input?.stiffness, 0, 1, base.stiffness),
@@ -152,12 +178,14 @@ export function sanitizeControls(input) {
     damping: num(input?.damping, 0, 1, base.damping),
     oddEven: num(input?.oddEven, -1, 1, base.oddEven),
     seed: Number.isFinite(seedNum) ? Math.trunc(clamp(seedNum, 0, 1_000_000_000)) : 0,
+    voice,
+    count: Number.isFinite(countNum) && countNum > 0 ? Math.round(clamp(countNum, 1, PARTIALS)) : PARTIALS,
   };
 }
 
 export function buildPartials(rawControls) {
   const controls = sanitizeControls(rawControls);
-  let ratios = baseRatios(controls.preset).map((ratio, index) => {
+  let ratios = baseRatios(controls.preset, controls.voice).slice(0, controls.count).map((ratio, index) => {
     const n = index + 1;
     const b = controls.stiffness * 0.0005;
     return ratio * Math.sqrt(1 + b * n * n);
@@ -182,6 +210,30 @@ export function buildPartials(rawControls) {
       decay: clamp(decay, 0.05, 30),
     };
   });
+  if (controls.preset === 'bell') {
+    partials.forEach((partial, index) => {
+      const octaves = Math.log2(Math.max(partial.ratio, 1e-6) / min);
+      partial.gainDb = bellStrikeDb(partial.ratio) + controls.brightness * 4 * octaves;
+      partial.gainDb += controls.oddEven * (index % 2 === 0 ? 6 : -6);
+    });
+  }
+  if (controls.voice === 'gong') {
+    for (const partial of partials) {
+      const toward = Math.abs(Math.log2(partial.ratio / 2.7));
+      partial.gainDb = partial.ratio >= 1.8 && partial.ratio <= 4.2 ? -5 * toward : -9 - 4 * toward;
+    }
+  }
+  if (controls.preset === 'open-pipe') {
+    const fund = partials[0].ratio || 1;
+    for (const partial of partials) {
+      const harm = partial.ratio / fund;
+      const octaves = Math.log2(Math.max(harm, 1));
+      if (harm < 1.5) partial.gainDb -= 3;
+      else if (harm < 6.5) partial.gainDb += 3.5;
+      partial.gainDb += octaves * 2.4;
+      partial.decay = clamp(partial.decay * (1 + 0.5 * Math.min(octaves, 4)), 0.05, 30);
+    }
+  }
   if (controls.seed > 0) {
     const rand = mulberry32(controls.seed + 17);
     for (const partial of partials) partial.gainDb += (rand() - 0.5) * 4;

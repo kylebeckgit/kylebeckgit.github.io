@@ -79,14 +79,20 @@ export function mount(root) {
   if (describe && describeUrl && membershipOn && licenseField) licenseField.hidden = false;
 
   function readControls() {
+    const carried = state.carried;
+    const preset = fields.preset.value;
+    const keep = carried && carried.preset === preset;
     state.controls = sanitizeControls({
-      preset: fields.preset.value,
+      preset,
       stiffness: fields.stiffness.value,
       brightness: fields.brightness.value,
       damping: fields.damping.value,
       oddEven: fields.oddEven.value,
       seed: fields.seed.value,
+      voice: keep ? carried.voice : '',
+      count: keep ? carried.count : 64,
     });
+    state.carried = keep ? { preset, voice: state.controls.voice, count: state.controls.count } : null;
     readouts.stiffness.textContent = state.controls.stiffness.toFixed(2);
     readouts.brightness.textContent = state.controls.brightness.toFixed(2);
     readouts.damping.textContent = state.controls.damping.toFixed(2);
@@ -686,6 +692,7 @@ export function mount(root) {
 
   function applyRecipe(recipe, { hear = false, partials = null, history = true } = {}) {
     const controls = sanitizeControls(recipe.controls || recipe);
+    state.carried = { preset: controls.preset, voice: controls.voice, count: controls.count };
     fields.preset.value = controls.preset;
     fields.stiffness.value = String(controls.stiffness);
     fields.brightness.value = String(controls.brightness);
@@ -902,25 +909,6 @@ function capAudible(partials) {
   return lowest ? [{ ...lowest, ratio: Math.min(lowest.ratio, limit) }] : [];
 }
 
-function heardPartials(partials, fundamental, sampleRate) {
-  const ceiling = sampleRate * 0.45;
-  if (!(fundamental > 0) || !(ceiling > fundamental) || !partials.length) return partials;
-  let top = 0;
-  for (const partial of partials) {
-    const freq = fundamental * partial.ratio;
-    if (freq > top) top = freq;
-  }
-  if (!(top > ceiling)) return partials;
-  const span = Math.log2(top / ceiling);
-  return partials.map((partial) => {
-    const freq = fundamental * partial.ratio;
-    if (!(freq > ceiling)) return partial;
-    const t = Math.log2(freq / ceiling) / span;
-    const heard = ceiling * 2 ** (-0.05 + 0.05 * t);
-    return { ...partial, ratio: heard / fundamental, gainDb: Math.max(partial.gainDb, -18) };
-  });
-}
-
 function playHeard(state, recipe) {
   const AudioCtx = window.AudioContext || window.webkitAudioContext;
   if (!AudioCtx) throw new Error('This browser cannot play audio.');
@@ -934,12 +922,10 @@ function playHeard(state, recipe) {
   unlockSource.start();
   const resumed = ctx.resume();
   const exciter = recipe.exciter || state.exciter;
-  const seconds = exciter === 'bow' ? 1.1 : 1.6;
+  const zebra = state.canvas?.dataset.view === 'zebra';
+  const seconds = zebra ? 4 : (exciter === 'bow' ? 1.1 : 1.6);
   const fundamental = noteFrequency(state.note);
-  const heardList = state.canvas?.dataset.view === 'zebra'
-    ? heardPartials(state.partials, fundamental, ctx.sampleRate)
-    : state.partials;
-  const samples = renderPreview(heardList, {
+  const samples = renderPreview(state.partials, {
     fundamental,
     velocity: state.velocity,
     position: state.position,
@@ -948,7 +934,8 @@ function playHeard(state, recipe) {
     file: state.file,
     sampleRate: ctx.sampleRate,
     seconds,
-    impulse: state.canvas?.dataset.view === 'zebra',
+    impulse: false,
+    matchGains: zebra,
     releaseAt: exciter === 'bow' ? Math.floor(ctx.sampleRate * 0.85) : undefined,
   });
   const heard = scaleToPeak(samples, 0.45);
