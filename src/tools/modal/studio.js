@@ -94,7 +94,7 @@ export function mountStudio(root, api) {
   askButton?.addEventListener('click', () => {
     const prompt = askText.value.trim();
     if (!prompt) {
-      setStatus('Describe the object and how it is played.');
+      setStatus('Try describing an object.');
       return;
     }
     turns.length = 0;

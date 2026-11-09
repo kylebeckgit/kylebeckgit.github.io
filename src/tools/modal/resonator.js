@@ -192,7 +192,7 @@ function renderFlat(partials, options, sampleRate, seconds) {
   for (let i = 0; i < length; i++) out[i] = processSample(state);
   // 1.5 ms cosine rise. The impulse still excites every partial; the rise
   // only keeps the first sample from stepping.
-  fadeInPlace(out, sampleRate, options.fadeIn || 0.0015);
+  fadeInPlace(out, sampleRate, options.fadeIn || 0.004);
   return out;
 }
 

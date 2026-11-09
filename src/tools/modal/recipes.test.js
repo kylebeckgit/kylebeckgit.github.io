@@ -5,7 +5,7 @@ import { renderPreview, peakStats, scaleToPeak } from './resonator.js';
 import { describePrompt, fileSlug, readRecipe } from './recipes.js';
 import { rememberedIndex } from './studio.js';
 
-test('a glass bowl becomes four sparse glass variations', () => {
+test('a glass bowl becomes four longer bowl variations', () => {
   const prompt = 'glass bowl struck softly, slightly detuned, long shimmer';
   const variations = describePrompt(prompt);
   assert.equal(variations.length, 4);
@@ -19,7 +19,7 @@ test('a glass bowl becomes four sparse glass variations', () => {
   const signatures = new Set(variations.map((variation) => JSON.stringify(variation.controls)));
   assert.equal(signatures.size, 4);
   for (const variation of variations) {
-    assert.equal(buildPartials(variation.controls).length, 6);
+    assert.ok(buildPartials(variation.controls).length >= 10);
   }
 });
 

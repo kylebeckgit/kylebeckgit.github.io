@@ -1,4 +1,4 @@
-import { PRESETS, NOTE_BUTTONS, buildPartials, toCsv, fromCsv, noteFrequency, defaultControls, sanitizeControls, alignReference } from './engine.js';
+import { PRESETS, NOTE_BUTTONS, buildPartials, previewPartials, toCsv, fromCsv, noteFrequency, defaultControls, sanitizeControls, alignReference } from './engine.js';
 import { analyzeSamples, decodeRecording, resampleMono, parseRoot, frequencyToNote } from './analyze.js';
 import { renderPreview, scaleToPeak } from './resonator.js';
 import { clampCamera, defaultCamera, hitPartial, paintModalView } from './modal-view.js';
@@ -237,7 +237,8 @@ export function mount(root) {
 
   function rebuild() {
     readControls();
-    adopt(buildPartials(state.controls), false);
+    const build = root.querySelector('[data-absorb]') ? previewPartials : buildPartials;
+    adopt(build(state.controls), false);
     render();
     pushModes();
   }
