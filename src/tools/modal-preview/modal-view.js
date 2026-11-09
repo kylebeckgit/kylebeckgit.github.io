@@ -5,11 +5,14 @@
 //   z  decay time, rising up-right. Long decays leave the comb.
 //
 // Each slice is three lines. A vertical front in the ink color. An accent
-// curve from the top of that bar back along decay: short ones fall straight
-// down just behind the bar, long ones sag across the next crests and then
-// rise into a tail. A floor rung in the ink color runs from the foot to
-// where that curve meets the floor, so the long ones cross their neighbors.
-// One blurred pass of those lines sits under the sharp pass. No filled area.
+// line beside that bar: every bar inside the comb has a near-vertical accent
+// a short depth behind it. Only the two longest decays leave the comb, the
+// fundamental sagging to about the fourth crest and then rising straight,
+// the octave running parallel just below it. On the floor, a heavy front
+// rail and a parallel back rail a short depth behind it run the full width.
+// The left-hand rungs continue up-right along depth and cross a few more
+// rails parallel to the front, so the hatch sits under the bars. Stroke
+// width tracks the view. A wide blurred pass sits under the sharp strokes.
 // Yaw turns frequency and decay around the vertical, so the fronts stay
 // vertical. Pitch only changes how steeply decay rises.
 //
@@ -30,16 +33,15 @@ export const PLANE = {
   span: 2.72,
   height: 1.29,
   depth: 3.15,
-  // Depth is the decay divided by the longest decay in the picture.
-  // Factory String is 1, 1/2, 1/3, … so the octave is a long tail and the
-  // third partial is already down at one third. Below the octave the length
-  // falls off faster than that, and those curves land inside the comb.
-  // Steep enough at the start that the fundamental sags down-right across
-  // the next crests, then flattens and the depth rise carries the tail up.
-  sag: 3.05,
+  // Below this fraction of the longest decay the accent stays a vertical
+  // line beside the bar. The two longest (string: fundamental and octave)
+  // are the only tails.
   airRel: 0.46,
-  // Short floor depth, straight back along the decay axis. Same length on every slice.
-  floorZ: 0.28,
+  // Back rail, a short depth behind the front, full width. The accent
+  // vertical lands on it, so each picket has a little base.
+  ribbonZ: 0.24,
+  // Further floor rails. Only the longer left-hand rungs reach these.
+  latticeZ: [0.46, 0.68, 0.90],
   ratioLo: 0.35,
   ratioHi: 48,
   styles: {
@@ -215,17 +217,18 @@ export function measureFit(slices, camera, width, height, detune = 0) {
   let minY = Infinity;
   let maxY = -Infinity;
   const list = slices?.length ? slices : [sliceFromPartial({ ratio: 1, gainDb: 0, decay: 1 })];
-  const clock = longestSeconds(list);
-  for (const slice of list) {
-    if (!slice || (slice.alpha < 0.04 && slice.height < 0.02 && slice.depth < 0.02)) continue;
-    const world = worldOf(slice, detune);
-    const shape = drawShape(Math.max(0.05, Number(slice.seconds) || 0.2), clock);
-    const samples = [
-      { x: world.x, y: 0, z: 0 },
-      { x: world.x, y: world.y, z: 0 },
-      floorBack(world, landingDepth(shape)),
-      ...tailWorld(slice, world, clock),
-    ];
+    const clock = longestSeconds(list);
+    const air = airFrame(list, clock, detune);
+    for (const slice of list) {
+      if (!slice || (slice.alpha < 0.04 && slice.height < 0.02 && slice.depth < 0.02)) continue;
+      const world = worldOf(slice, detune);
+      const shape = drawShape(Math.max(0.05, Number(slice.seconds) || 0.2), clock);
+      const samples = [
+        { x: world.x, y: 0, z: 0 },
+        { x: world.x, y: world.y, z: 0 },
+        floorBack(world, landingDepth(shape)),
+        ...tailWorld(slice, world, clock, air),
+      ];
     for (const sample of samples) {
       const point = screenOf(view, sample.x, sample.y, sample.z);
       if (point.x < minX) minX = point.x;
@@ -292,21 +295,17 @@ export function paintModalView(ctx, partials, options = {}) {
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
   const clock = longestSeconds(slices);
-  const blur = style === 'eco' ? 3.2 : 4.4;
+  const weight = lineWeight(fit.scale) * (style === 'eco' ? 0.85 : style === 'glow' ? 1.12 : 1);
+  const blur = weight * (style === 'eco' ? 1.8 : 3.8);
   ctx.save();
   ctx.filter = `blur(${blur}px)`;
-  drawSlices(ctx, slices, detune, place, camera, look, palette, clock, style, selected, true);
+  drawSlices(ctx, slices, detune, place, camera, look, palette, clock, style, selected, true, weight);
   ctx.restore();
-  if (style !== 'eco') {
-    ctx.save();
-    ctx.filter = 'blur(3.6px)';
-    drawLatticeGlow(ctx, slices, detune, place, camera, palette, clock);
-    ctx.restore();
-  }
-  drawSlices(ctx, slices, detune, place, camera, look, palette, clock, style, selected, false);
+  drawSlices(ctx, slices, detune, place, camera, look, palette, clock, style, selected, false, weight);
   ctx.globalAlpha = 1;
   ctx.globalCompositeOperation = 'source-over';
-  return slices.map((slice) => projectSlice(slice, detune, place, camera, clock).crest);
+  const air = airFrame(slices, clock, detune);
+  return slices.map((slice) => projectSlice(slice, detune, place, camera, clock, air).crest);
 }
 
 export function hitPartial(partials, camera, width, height, x, y, detune = 0, fit = null) {
@@ -317,11 +316,12 @@ export function hitPartial(partials, camera, width, height, x, y, detune = 0, fi
   const used = fit || measureFit(slices, view, width, height, detune);
   const place = placement(used, width, height);
   const clock = longestSeconds(slices);
+  const air = airFrame(slices, clock, detune);
   let best = -1;
   let score = 14;
   for (let i = 0; i < slices.length; i++) {
     if (slices[i].alpha < 0.2) continue;
-    const tri = projectSlice(slices[i], detune, place, view, clock);
+    const tri = projectSlice(slices[i], detune, place, view, clock, air);
     const distance = Math.min(
       distanceToSegment(x, y, tri.foot.x, tri.foot.y, tri.crest.x, tri.crest.y),
       distanceToSegment(x, y, tri.crest.x, tri.crest.y, tri.back.x, tri.back.y),
@@ -355,20 +355,22 @@ function showDecay(slices) {
   return slices.map((slice) => ({ ...slice, depth: (slice?.depth || 0) / max }));
 }
 
-function floorBack(world, z = PLANE.floorZ) {
+function floorBack(world, z = PLANE.ribbonZ) {
   return { x: world.x, y: 0, z };
 }
 
-// Where the white rung stops: the depth at which this slice's curve meets
-// the floor. A tail that stays in the air still lays a rung out through the
-// sag, long enough on the string's first bars to cross the neighbors.
+// Stroke width is about 1/150 of the floor's screen length, so a small
+// canvas and the full panel stay the same picture.
+function lineWeight(scale) {
+  const graphic = Math.max(80, scale * PLANE.span);
+  return graphic / 105;
+}
+
+// Short rungs stop at the back rail. The left-hand ones run out to the
+// furthest floor line so they cross the hatch.
 function landingDepth(shape) {
-  if (shape.tight) return shape.reach * PLANE.depth;
-  if (shape.floor) {
-    const u = Math.min(1, -Math.log(0.14) / Math.max(0.3, shape.drop));
-    return Math.max(0.03, u * shape.reach) * PLANE.depth;
-  }
-  return 0.3 * shape.reach * PLANE.depth;
+  if (shape.longRung) return PLANE.latticeZ[PLANE.latticeZ.length - 1];
+  return PLANE.ribbonZ;
 }
 
 function longestSeconds(slices) {
@@ -381,31 +383,38 @@ function longestSeconds(slices) {
   return max;
 }
 
-// Reach is how far along the depth axis the curve travels. Drop is the
-// exponent at that tip, so height = level * exp(-drop * u).
+// Anything under the two longest decays is a vertical accent beside its bar.
+// longRung marks the left-hand floor rungs that cross the hatch.
 function drawShape(seconds, maxSeconds) {
   const rel = Math.max(0.02, Math.max(0.02, seconds) / Math.max(0.05, maxSeconds));
   if (rel >= PLANE.airRel) {
-    return { reach: rel ** 0.72, drop: PLANE.sag, floor: false, tight: false };
+    return { air: true, tight: false, longRung: true, rel };
   }
-  // Under about 15% of the longest decay the curve only steps a bar-width
-  // behind the front and then falls straight down.
-  if (rel < 0.13) {
-    return { reach: 0.05 / 0.78 / PLANE.depth, drop: 1, floor: true, tight: true };
-  }
-  // Partials 3 to 7. The landing is several bar-gaps back, so the rung
-  // crosses three to five neighbours.
-  const t = (rel - 0.13) / (PLANE.airRel - 0.13);
-  return { reach: 0.28 + 0.05 * t, drop: 2.15, floor: true, tight: false, straight: true };
+  return { air: false, tight: true, longRung: rel >= 0.14, rel };
 }
 
-function tailWorld(slice, world, maxSeconds) {
-  const steps = 22;
+// The longest decay anchors the tails. Later air partials share its x so
+// they stay parallel instead of splaying off their own bars.
+function airFrame(slices, clock, detune) {
+  const air = [];
+  for (const slice of slices || []) {
+    if (!slice || slice.alpha < 0.08) continue;
+    const seconds = Math.max(0.05, Number(slice.seconds) || 0.2);
+    if (!drawShape(seconds, clock).air) continue;
+    air.push(slice);
+  }
+  air.sort((a, b) => b.seconds - a.seconds);
+  if (!air.length) return { anchorX: 0, anchorY: PLANE.height, rankOf: () => 0 };
+  const head = worldOf(air[0], detune);
+  const rank = new Map(air.map((slice, index) => [slice, index]));
+  return { anchorX: head.x, anchorY: head.y, rankOf: (slice) => rank.get(slice) ?? 0 };
+}
+
+function tailWorld(slice, world, maxSeconds, air) {
   const seconds = Math.max(0.05, Number(slice?.seconds) || 0.2);
   const shape = drawShape(seconds, maxSeconds || seconds);
-  const { reach, drop, floor, tight, straight } = shape;
-  if (tight) {
-    const z = reach * PLANE.depth;
+  if (!shape.air) {
+    const z = PLANE.ribbonZ;
     const top = world.y;
     return [
       { x: world.x, y: top, z: 0 },
@@ -413,21 +422,44 @@ function tailWorld(slice, world, maxSeconds) {
       { x: world.x, y: top * 0.02, z },
     ];
   }
-  if (straight) {
-    const z = landingDepth(shape);
-    return [
-      { x: world.x, y: world.y, z: 0 },
-      { x: world.x, y: 0, z },
-    ];
+  const rank = air?.rankOf(slice) ?? 0;
+  const x = air?.anchorX ?? world.x;
+  const y0 = air?.anchorY ?? world.y;
+  // Sag only as far as the fourth crest, then a straight rise. Tuned so the
+  // low point sits on bar 4's screen height and the tip stays above bar 1.
+  const sagZ = 0.47;
+  const sagY = y0 * 0.44;
+  const tipZ = 2.86;
+  // Constant height after the sag, so the rise is a straight line and the
+  // curve eases into it instead of kinking.
+  const tipY = sagY;
+  if (rank === 0) {
+    const points = [];
+    const dip = 8;
+    for (let i = 0; i <= dip; i++) {
+      const u = i / dip;
+      // Drop immediately so the line sags down across the next crests,
+      // then level out into the straight rise. A late drop reads as a hook.
+      const eased = Math.sin(u * Math.PI / 2);
+      points.push({ x, y: y0 + (sagY - y0) * eased, z: sagZ * u });
+    }
+    const rise = 10;
+    for (let i = 1; i <= rise; i++) {
+      const v = i / rise;
+      points.push({ x, y: sagY + (tipY - sagY) * v, z: sagZ + (tipZ - sagZ) * v });
+    }
+    return points;
   }
-  const points = [];
-  for (let i = 0; i <= steps; i++) {
-    const u = i / steps;
-    const env = Math.exp(-drop * u);
-    points.push({ x: world.x, y: world.y * env, z: u * reach * PLANE.depth });
-    if (floor && i > 2 && env < 0.12) break;
-  }
-  return points;
+  // Octave is about 40% of the fundamental and starts at the sag, near bar 4.
+  // Further tails step down and stop sooner, still on the same line.
+  const drop = 0.08 + (rank - 1) * 0.06;
+  const y1 = sagY - drop;
+  // The octave ends at about 40% of the fundamental. Later tails stop sooner.
+  const endZ = tipZ * Math.max(0.18, 0.40 - (rank - 1) * 0.1);
+  return [
+    { x, y: y1, z: sagZ },
+    { x, y: y1, z: Math.max(sagZ + 0.08, endZ) },
+  ];
 }
 
 function strokePath(ctx, points, color, width, alpha) {
@@ -446,79 +478,57 @@ function glow(ctx, points, color, look, alpha) {
   strokePath(ctx, points, color, look.width, look.alpha * alpha);
 }
 
-function mixHex(a, b, t) {
-  const parse = (hex) => {
-    const match = /^#([0-9a-f]{6})$/i.exec(String(hex || ''));
-    return match ? parseInt(match[1], 16) : null;
-  };
-  const pa = parse(a);
-  const pb = parse(b);
-  if (pa == null || pb == null) return a;
-  const channel = (shift) => Math.round(((pa >> shift) & 255) + (((pb >> shift) & 255) - ((pa >> shift) & 255)) * t);
-  return `#${[channel(16), channel(8), channel(0)].map((value) => value.toString(16).padStart(2, '0')).join('')}`;
-}
-
-function drawLatticeGlow(ctx, slices, detune, place, camera, palette, clock) {
-  const color = mixHex(palette.wire, '#ffffff', 0.22);
-  const look = { width: 6.5, alpha: 0.88, halo: 0, haloAlpha: 0 };
-  for (const slice of slices) {
-    if (!slice || slice.alpha < 0.2 || slice.height < 0.02) continue;
-    const shape = drawShape(Math.max(0.05, Number(slice.seconds) || 0.2), clock);
-    if (shape.tight || !shape.floor) continue;
-    const tri = projectSlice(slice, detune, place, camera, clock);
-    glow(ctx, tri.curve, color, look, slice.alpha);
-    glow(ctx, [tri.foot, tri.floor], color, { ...look, width: 5.5 }, slice.alpha);
-  }
-}
-
-function drawSlices(ctx, slices, detune, place, camera, look, palette, clock, style, selected, bloom) {
-  // The glow pass is faint on a single line and stacks where the lattice
-  // crosses, so the diamond reads brighter than the strokes around it.
-  const bulk = bloom ? 2.2 : 1;
-  const ink = {
-    width: Math.max(0.9, look.width * 0.85) * bulk,
-    alpha: bloom ? 0.2 : 1,
-    halo: 0,
-    haloAlpha: 0,
-  };
-  const accent = {
-    width: Math.max(0.7, look.width * 0.6) * bulk,
-    alpha: bloom ? 0.4 : 1,
-    halo: 0,
-    haloAlpha: 0,
-  };
-  const inkColor = bloom ? mixHex(palette.ink, '#ffffff', 0.35) : palette.ink;
-  const accentColor = bloom ? mixHex(palette.wire, '#ffffff', 0.28) : palette.wire;
+function drawSlices(ctx, slices, detune, place, camera, look, palette, clock, style, selected, bloom, weight) {
+  // The bloom pass is the same lines, wider and softer, in the real ink and
+  // accent. It is strong on a single stroke, not only where lines pile up.
+  const bulk = bloom ? 3.3 : 1;
+  const alpha = bloom ? 0.68 : 1;
+  const ink = { width: weight * bulk, alpha, halo: 0, haloAlpha: 0 };
+  const accent = { width: weight * bulk, alpha, halo: 0, haloAlpha: 0 };
+  const rail = { width: weight * 2.15 * bulk, alpha, halo: 0, haloAlpha: 0 };
+  const air = airFrame(slices, clock, detune);
   const visible = [];
   for (let index = 0; index < slices.length; index++) {
     const slice = slices[index];
     if (!slice || slice.alpha < 0.04 || slice.height < 0.02) continue;
-    if (index === selected) continue;
     visible.push(slice);
   }
-  const feet = [];
-  for (const slice of visible) {
-    const tri = projectSlice(slice, detune, place, camera, clock);
-    feet.push(tri.foot);
-    glow(ctx, tri.curve, accentColor, accent, slice.alpha);
-    if (style !== 'eco') {
-      glow(ctx, [tri.foot, tri.floor], inkColor, { ...ink, width: ink.width * 0.85 }, slice.alpha);
-      glow(ctx, [tri.foot, tri.crest], inkColor, ink, slice.alpha);
+  const placed = visible.map((slice) => ({
+    slice,
+    tri: projectSlice(slice, detune, place, camera, clock, air),
+    shape: drawShape(Math.max(0.05, Number(slice.seconds) || 0.2), clock),
+  }));
+  placed.sort((a, b) => worldOf(a.slice, detune).x - worldOf(b.slice, detune).x);
+  if (style !== 'eco') {
+    const atDepth = (z) => placed.map((item) => {
+      const world = worldOf(item.slice, detune);
+      return place(camera, world.x, 0, z);
+    });
+    glow(ctx, atDepth(0), palette.ink, rail, 1);
+    glow(ctx, atDepth(PLANE.ribbonZ), palette.ink, rail, 1);
+    for (const z of PLANE.latticeZ) {
+      const line = placed.filter((item) => item.shape.longRung).map((item) => {
+        const world = worldOf(item.slice, detune);
+        return place(camera, world.x, 0, z);
+      });
+      glow(ctx, line, palette.ink, ink, 1);
+    }
+    for (const item of placed) {
+      glow(ctx, [item.tri.foot, item.tri.floor], palette.ink, ink, item.slice.alpha);
+      glow(ctx, [item.tri.foot, item.tri.crest], palette.ink, ink, item.slice.alpha);
     }
   }
-  if (style !== 'eco' && feet.length > 1) {
-    glow(ctx, feet, inkColor, { ...ink, width: ink.width * 0.55 }, bloom ? 0.2 : 0.55);
+  for (const item of placed) {
+    glow(ctx, item.tri.curve, palette.wire, accent, item.slice.alpha);
   }
-  if (bloom) return;
-  if (selected >= 0 && slices[selected]) {
-    const slice = slices[selected];
-    const tri = projectSlice(slice, detune, place, camera, clock);
-    if (style !== 'eco') {
-      glow(ctx, [tri.foot, tri.crest], palette.ink, { ...ink, width: ink.width + 0.4 }, 1);
-      glow(ctx, [tri.foot, tri.floor], palette.ink, ink, 1);
-    }
-    glow(ctx, tri.curve, palette.wire, { ...accent, width: accent.width + 0.35 }, 1);
+  if (bloom || selected < 0 || !slices[selected]) return;
+  const slice = slices[selected];
+  const tri = projectSlice(slice, detune, place, camera, clock, air);
+  if (style !== 'eco') {
+    glow(ctx, [tri.foot, tri.crest], palette.ink, { ...ink, width: ink.width + weight * 0.35 }, 1);
+    glow(ctx, [tri.foot, tri.floor], palette.ink, ink, 1);
   }
+  glow(ctx, tri.curve, palette.wire, { ...accent, width: accent.width + weight * 0.3 }, 1);
 }
 
 export function layoutTriangles(slices, camera, width, height, detune = 0) {
@@ -527,15 +537,16 @@ export function layoutTriangles(slices, camera, width, height, detune = 0) {
   const fit = measureFit(spaced, view, width, height, detune);
   const place = placement(fit, width, height);
   const clock = longestSeconds(spaced);
-  return spaced.map((slice) => projectSlice(slice, detune, place, view, clock));
+  const air = airFrame(spaced, clock, detune);
+  return spaced.map((slice) => projectSlice(slice, detune, place, view, clock, air));
 }
 
-function projectSlice(slice, detune, place, camera, maxSeconds) {
+function projectSlice(slice, detune, place, camera, maxSeconds, air) {
   const world = worldOf(slice, detune);
   const seconds = Math.max(0.05, Number(slice?.seconds) || 0.2);
   const shape = drawShape(seconds, maxSeconds || seconds);
   const rear = floorBack(world, landingDepth(shape));
-  const curve = tailWorld(slice, world, maxSeconds).map((point) => place(camera, point.x, point.y, point.z));
+  const curve = tailWorld(slice, world, maxSeconds, air).map((point) => place(camera, point.x, point.y, point.z));
   return {
     foot: place(camera, world.x, 0, 0),
     crest: place(camera, world.x, world.y, 0),
