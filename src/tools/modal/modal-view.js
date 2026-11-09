@@ -27,13 +27,28 @@ export const WEDGE = {
   pitchMax: 1.35,
   span: 5.4,
   amp: 1.7,
-  depth: 0.72,
+  // Depth opens the face for every partial. leftWidth adds more at the low
+  // end, so that side is wider than the tip. decayDepth only nudges it.
+  depth: 1.45,
+  leftWidth: 1.7,
+  decayDepth: 0.35,
+  spine: 0.14,
+  // The cyan wire sits just above the cream face. The lid is a flat plane
+  // over the low partials, closing with a corner partway along the slab.
+  float: 0.1,
+  planeLift: 1.2,
+  planeEnd: 0.46,
+  step: 8,
+  tipSpan: 0.04,
+  tipRise: 0.28,
   decayLo: 0.05,
   decayHi: 4.5,
   marginX: 0.07,
   marginY: 0.08,
   panel: '#1c1a17',
   line: '#f2ede3',
+  wire: '#7ed4cc',
+  wireAlpha: 0.95,
   styles: {
     eco: { width: 0.75, alpha: 0.9, halo: 0, haloAlpha: 0, solid: false },
     fast: { width: 1.25, alpha: 0.85, halo: 0, haloAlpha: 0, solid: true },
@@ -68,7 +83,9 @@ export function paintModalView(ctx, partials, options) {
   if (smear) drawSheet(ctx, scene, look, WEDGE.line, selected, smear, 0.45);
   drawSheet(ctx, scene, look, WEDGE.line, selected, 0, 1);
   if (selected >= 0 && scene.modes[selected]) {
-    strokeRung(ctx, scene.modes[selected], { width: look.width + 1.3, alpha: 1, halo: 4, haloAlpha: 0.4 }, accent);
+    const mode = scene.modes[selected];
+    strokeRung(ctx, mode, { width: look.width + 1.3, alpha: 1, halo: 4, haloAlpha: 0.4 }, accent);
+    strokeRung(ctx, { base: mode.wireBase, crest: mode.wireCrest }, { width: look.width + 0.8, alpha: 1, halo: 3, haloAlpha: 0.35 }, accent);
   }
   return scene.modes.map((mode) => mode.base);
 }
@@ -95,11 +112,12 @@ export function layoutScene(partials, camera, width, height) {
   for (const mode of placed) {
     samples.push(rawProject(mode.x, 0, mode.z0, view));
     samples.push(rawProject(mode.x, mode.y, mode.z1, view));
+    if (mode.t <= WEDGE.planeEnd) samples.push(rawProject(mode.x, mode.y + WEDGE.planeLift, mode.z1, view));
   }
   if (placed.length) {
     const last = placed[placed.length - 1];
-    const yMax = Math.max(last.y, WEDGE.amp * 0.42);
-    const xNear = last.x - WEDGE.span * 0.055;
+    const yMax = Math.max(last.y, WEDGE.amp * WEDGE.tipRise);
+    const xNear = last.x - WEDGE.span * WEDGE.tipSpan;
     for (const x of [xNear, last.x]) {
       samples.push(rawProject(x, yMax, last.z1, view));
       samples.push(rawProject(x, 0, last.z0, view));
@@ -111,12 +129,45 @@ export function layoutScene(partials, camera, width, height) {
   const modes = placed.map((mode) => ({
     base: project(mode.x, 0, mode.z0),
     crest: project(mode.x, mode.y, mode.z1),
+    wireBase: project(mode.x, 0, mode.z0),
+    wireCrest: project(mode.x, mode.y, mode.z1),
+    plane: null,
     cap: project(mode.x, mode.y * 0.5, mode.z1),
     world: mode,
     depth: mode.x,
     amp: mode.amp,
   }));
+  raiseWire(modes, project);
   return { modes, project };
+}
+
+// The cyan copy sits a short step off the cream, toward the top plane.
+// The plane itself runs parallel to the spine and closes with a right-angle cap.
+function raiseWire(modes, project) {
+  if (modes.length < 2) return;
+  const origin = project(0, 0, 0);
+  const up = project(0, 1, 0);
+  const unit = Math.hypot(up.x - origin.x, up.y - origin.y) || 1;
+  const lift = unit * WEDGE.planeLift;
+  const floatLift = unit * WEDGE.float;
+  const tail = modes[modes.length - 1].base;
+  const head = modes[0].base;
+  const sx = tail.x - head.x;
+  const sy = tail.y - head.y;
+  const len = Math.hypot(sx, sy) || 1;
+  const px = sy / len;
+  const py = -sx / len;
+  const left = modes[0].crest;
+  for (const mode of modes) {
+    mode.wireBase = { x: mode.base.x + px * floatLift, y: mode.base.y + py * floatLift };
+    mode.wireCrest = { x: mode.crest.x + px * floatLift, y: mode.crest.y + py * floatLift };
+    if (mode.world.t <= WEDGE.planeEnd) {
+      mode.plane = {
+        x: left.x + sx * mode.world.t + px * lift,
+        y: left.y + sy * mode.world.t + py * lift,
+      };
+    }
+  }
 }
 
 function placeModes(partials) {
@@ -134,11 +185,13 @@ function placeModes(partials) {
     const amp = 10 ** (Math.max(-72, Math.min(0, Number(partial.gainDb) || 0)) / 20);
     const level = 0.46 + 0.54 * Math.sqrt(amp);
     const decayT = clamp((Math.log(Math.max(WEDGE.decayLo, Number(partial.decay) || WEDGE.decayLo)) - lo) / (hi - lo), 0.08, 1);
+    const left = 1 - indexT;
     return {
       x: u * WEDGE.span,
       y: level * WEDGE.amp,
-      z0: decayT * WEDGE.depth * 0.18,
-      z1: decayT * WEDGE.depth,
+      z0: WEDGE.spine,
+      z1: WEDGE.depth + left * WEDGE.leftWidth + decayT * WEDGE.decayDepth,
+      t: indexT,
       amp,
     };
   });
@@ -212,14 +265,52 @@ function drawSheet(ctx, scene, look, color, selected, shift, alphaScale) {
       line(ctx, shiftPoint(mode.base, shift), shiftPoint(mode.crest, shift));
     }
   }
-  ctx.strokeStyle = color;
-  ctx.globalAlpha = Math.min(1, 0.95 * alphaScale);
-  ctx.lineWidth = fuse ? 1.35 : look.width + 0.35;
-  strokePoly(ctx, modes.map((mode) => shiftPoint(mode.base, shift)));
-  strokeStepped(ctx, modes.map((mode) => shiftPoint(mode.crest, shift)));
+  drawWire(ctx, scene, look, shift, alphaScale, selected);
+  ctx.globalAlpha = 1;
+}
+
+function drawWire(ctx, scene, look, shift, alphaScale, selected) {
+  const modes = scene.modes;
+  if (modes.length < 2) return;
+  ctx.strokeStyle = WEDGE.wire;
+  const stride = Math.max(1, Math.round(modes.length / 18));
+  if (look.halo > 0) {
+    ctx.globalAlpha = look.haloAlpha * alphaScale;
+    ctx.lineWidth = look.halo;
+    strokeStepped(ctx, modes.map((mode) => shiftPoint(mode.wireCrest, shift)));
+    strokePoly(ctx, lidPoints(modes, shift));
+  }
+  ctx.globalAlpha = WEDGE.wireAlpha * alphaScale;
+  ctx.lineWidth = Math.max(1, look.width);
+  for (let i = 0; i < modes.length; i += stride) {
+    if (i === selected) continue;
+    const mode = modes[i];
+    line(ctx, shiftPoint(mode.wireBase, shift), shiftPoint(mode.wireCrest, shift));
+  }
+  const last = modes.length - 1;
+  if (last % stride !== 0 && last !== selected) {
+    line(ctx, shiftPoint(modes[last].wireBase, shift), shiftPoint(modes[last].wireCrest, shift));
+  }
+  strokePoly(ctx, modes.map((mode) => shiftPoint(mode.wireBase, shift)));
+  strokeStepped(ctx, modes.map((mode) => shiftPoint(mode.wireCrest, shift)));
+  const lid = lidPoints(modes, shift);
+  if (lid.length > 1) {
+    strokePoly(ctx, lid);
+    const cap = modes.findLast((mode) => mode.plane);
+    line(ctx, shiftPoint(modes[0].wireCrest, shift), lid[0]);
+    line(ctx, shiftPoint(cap.wireCrest, shift), lid[lid.length - 1]);
+  }
   ctx.lineWidth = 1;
   strokeTipGrid(ctx, scene, shift);
-  ctx.globalAlpha = 1;
+}
+
+function lidPoints(modes, shift) {
+  const points = [];
+  for (const mode of modes) {
+    if (!mode.plane) break;
+    points.push(shiftPoint(mode.plane, shift));
+  }
+  return points;
 }
 
 function fillFace(ctx, modes, shift) {
@@ -240,7 +331,7 @@ function fillFace(ctx, modes, shift) {
 
 function strokeStepped(ctx, points) {
   if (points.length < 2) return;
-  const step = 8;
+  const step = WEDGE.step;
   ctx.beginPath();
   let x = points[0].x;
   let y = points[0].y;
@@ -261,8 +352,8 @@ function strokeTipGrid(ctx, scene, shift) {
   const last = scene.modes[scene.modes.length - 1];
   if (!last?.world) return;
   const world = last.world;
-  const yMax = Math.max(world.y, WEDGE.amp * 0.42);
-  const xNear = world.x - WEDGE.span * 0.055;
+  const yMax = Math.max(world.y, WEDGE.amp * WEDGE.tipRise);
+  const xNear = world.x - WEDGE.span * WEDGE.tipSpan;
   const ySteps = 4;
   const zSteps = 3;
   const xs = [xNear, world.x];
