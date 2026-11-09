@@ -4,46 +4,45 @@
 // the low-frequency end, its top and bottom edges are straight, and they
 // meet at a sharp tip. Level and decay stay inside that outline: the rungs
 // are faint lines across the face, and they do not move the silhouette.
-// Cyan lines stack along the top edge. The lid is a second pair, parallel
-// to that edge and closed by a short right-angle hook at its far end.
+// Cyan lines stack along the top edge. The lid is two lines that leave that
+// edge about a third and a half of the way along and rise up-right, with a
+// short right-angle hook at the far end.
 //
 // WEDGE is the look and the drag limits. Retune numbers here.
 
 export const WEDGE = {
   // Default camera. The left edge projects vertical and the long axis
   // runs down-right, with the tip left of the right side of the box.
-  yaw: -1,
-  pitch: 0.35,
-  focal: 7,
-  perspective: 0.25,
+  yaw: -0.56,
+  pitch: 0.6,
+  focal: 10,
+  perspective: 0.4,
   yawMin: -1.7,
   yawMax: 2.25,
-  pitchMin: 0.16,
+  pitchMin: 0.08,
   pitchMax: 1.35,
-  span: 7,
-  leftH: 2.5,
-  tipY: 0.2,
-  tipZ: 1,
-  // Empty raw-space around the triangle so the tip sits lower-middle
-  // and the lid has room above the top edge.
-  padRight: 0.48,
-  padBelow: 0.34,
-  padAbove: 0.42,
-  marginX: 0.06,
-  marginY: 0.06,
-  // Cyan stack along the top, then the lid further out. Fractions of the
-  // left-edge length, so they scale with the canvas.
+  span: 6,
+  leftH: 4,
+  tipY: 0.8,
+  tipZ: 0.5,
+  // Resting placement in the box. The top-left corner sits at a quarter of
+  // the height, the left edge is tall, and a 45 degree top edge lands the
+  // tip near the horizontal middle at about 80 percent of the height.
+  originX: 0.05,
+  originY: 0.25,
+  leftScreen: 0.393,
   stackCount: 4,
-  stackGap: 0.013,
+  stackGap: 0.012,
   stackEnd: 0.97,
-  lidInner: 0.1,
-  lidOuter: 0.24,
-  lidStart: 0.04,
-  lidEnd: 0.55,
+  lidFrom: 0.33,
+  lidTo: 0.5,
+  lidReach: 0.78,
   rungAlpha: 0.16,
   tipSize: 0.055,
   panel: '#1c1a17',
   line: '#f2ede3',
+  bottom: '#fbf9f4',
+  bottomWire: 0.42,
   wire: '#7ed4cc',
   wireAlpha: 0.92,
   styles: {
@@ -103,11 +102,14 @@ export function hitPartial(partials, camera, width, height, x, y) {
 
 export function layoutScene(partials, camera, width, height) {
   const view = clampCamera(camera);
-  const fit = fitFrame(view, width, height);
-  const project = (x, y, z) => fit(rawProject(x, y, z, view));
-  const tl = project(0, WEDGE.leftH, 0);
-  const bl = project(0, 0, 0);
-  const tip = project(WEDGE.span, WEDGE.tipY, WEDGE.tipZ);
+  const place = placement(width, height);
+  const rawTl = place(view, 0, WEDGE.leftH, 0);
+  const rawBl = place(view, 0, 0, 0);
+  const rawTip = place(view, WEDGE.span, WEDGE.tipY, WEDGE.tipZ);
+  const fit = contain([rawTl, rawBl, rawTip, ...lidEnds(rawTl, rawBl, rawTip)], width, height);
+  const tl = fit(rawTl);
+  const bl = fit(rawBl);
+  const tip = fit(rawTip);
   const last = Math.max(1, partials.length - 1);
   const modes = partials.map((partial, index) => {
     const t = index / last;
@@ -118,34 +120,53 @@ export function layoutScene(partials, camera, width, height) {
       amp: 10 ** (Math.max(-72, Math.min(0, Number(partial.gainDb) || 0)) / 20),
     };
   });
-  return { modes, tl, bl, tip, project };
+  return { modes, tl, bl, tip, project: (x, y, z) => place(view, x, y, z) };
 }
 
-function fitFrame(camera, width, height) {
+// Pin the resting left edge, then keep that same screen scale while dragging.
+function placement(width, height) {
   const home = clampCamera(defaultCamera());
-  const frame = [rawProject(0, WEDGE.leftH, 0, home), rawProject(0, 0, 0, home), rawProject(WEDGE.span, WEDGE.tipY, WEDGE.tipZ, home)];
+  const origin = screenOf(home, 0, WEDGE.leftH, 0);
+  const foot = screenOf(home, 0, 0, 0);
+  const scale = (height * WEDGE.leftScreen) / (Math.hypot(foot.x - origin.x, foot.y - origin.y) || 1);
+  const ox = width * WEDGE.originX - origin.x * scale;
+  const oy = height * WEDGE.originY - origin.y * scale;
+  return (camera, x, y, z) => {
+    const point = screenOf(camera, x, y, z);
+    return { x: point.x * scale + ox, y: point.y * scale + oy };
+  };
+}
+
+function screenOf(camera, x, y, z) {
+  const point = rawProject(x, y, z, camera);
+  return { x: point.x, y: -point.y };
+}
+
+function lidEnds(tl, bl, tip) {
+  const edge = norm(sub(tip, tl));
+  let normal = { x: edge.y, y: -edge.x };
+  if (dot(normal, sub(bl, tl)) > 0) normal = { x: -normal.x, y: -normal.y };
+  const reach = (Math.hypot(bl.x - tl.x, bl.y - tl.y) || 1) * WEDGE.lidReach;
+  return [WEDGE.lidFrom, WEDGE.lidTo].map((t) => add(lerp(tl, tip, t), scale(normal, reach)));
+}
+
+function contain(points, width, height) {
+  const pad = 6;
   let minX = Infinity;
   let maxX = -Infinity;
   let minY = Infinity;
   let maxY = -Infinity;
-  for (const sample of frame) {
-    if (sample.x < minX) minX = sample.x;
-    if (sample.x > maxX) maxX = sample.x;
-    if (sample.y < minY) minY = sample.y;
-    if (sample.y > maxY) maxY = sample.y;
+  for (const point of points) {
+    if (point.x < minX) minX = point.x;
+    if (point.x > maxX) maxX = point.x;
+    if (point.y < minY) minY = point.y;
+    if (point.y > maxY) maxY = point.y;
   }
-  const spanX = Math.max(0.08, maxX - minX);
-  const spanY = Math.max(0.08, maxY - minY);
-  const samples = [
-    rawProject(0, WEDGE.leftH, 0, camera),
-    rawProject(0, 0, 0, camera),
-    rawProject(WEDGE.span, WEDGE.tipY, WEDGE.tipZ, camera),
-    { x: minX, y: maxY + spanY * WEDGE.padAbove },
-    { x: maxX + spanX * WEDGE.padRight, y: minY - spanY * WEDGE.padBelow },
-    { x: minX, y: minY - spanY * WEDGE.padBelow },
-    { x: maxX + spanX * WEDGE.padRight, y: maxY + spanY * WEDGE.padAbove },
-  ];
-  return fitTransform(samples, width, height);
+  if (minX >= pad && minY >= pad && maxX <= width - pad && maxY <= height - pad) return (point) => point;
+  const zoom = Math.min((width - pad * 2) / Math.max(1, maxX - minX), (height - pad * 2) / Math.max(1, maxY - minY));
+  const cx = (minX + maxX) / 2;
+  const cy = (minY + maxY) / 2;
+  return (point) => ({ x: width / 2 + (point.x - cx) * zoom, y: height / 2 + (point.y - cy) * zoom });
 }
 
 function rawProject(x, y, z, camera) {
@@ -160,30 +181,6 @@ function rawProject(x, y, z, camera) {
   const denom = camera.distance + z2 * WEDGE.perspective;
   const persp = clamp(camera.distance / Math.max(0.25, denom), 0.25, 2.4);
   return { x: x1 * persp, y: y2 * persp, depth: z2 };
-}
-
-function fitTransform(samples, width, height) {
-  let minX = Infinity;
-  let maxX = -Infinity;
-  let minY = Infinity;
-  let maxY = -Infinity;
-  for (const sample of samples) {
-    if (sample.x < minX) minX = sample.x;
-    if (sample.x > maxX) maxX = sample.x;
-    if (sample.y < minY) minY = sample.y;
-    if (sample.y > maxY) maxY = sample.y;
-  }
-  const marginX = width * WEDGE.marginX;
-  const marginY = height * WEDGE.marginY;
-  const spanX = Math.max(0.08, maxX - minX);
-  const spanY = Math.max(0.08, maxY - minY);
-  const zoom = Math.min((width - marginX * 2) / spanX, (height - marginY * 2) / spanY);
-  const midX = (minX + maxX) / 2;
-  const midY = (minY + maxY) / 2;
-  return (sample) => ({
-    x: width / 2 + (sample.x - midX) * zoom,
-    y: height / 2 - (sample.y - midY) * zoom,
-  });
 }
 
 function drawSheet(ctx, scene, look, selected, shift, alphaScale) {
@@ -204,10 +201,7 @@ function drawSheet(ctx, scene, look, selected, shift, alphaScale) {
     const mode = modes[i];
     line(ctx, shiftPoint(mode.base, shift), shiftPoint(mode.crest, shift));
   }
-  ctx.strokeStyle = WEDGE.line;
-  ctx.globalAlpha = Math.min(1, 0.95 * alphaScale);
-  ctx.lineWidth = 1.35;
-  strokeEdges(ctx, tl, bl, tip, shift);
+  strokeEdges(ctx, tl, bl, tip, shift, alphaScale);
   drawTopWire(ctx, tl, bl, tip, look, shift, alphaScale);
   drawTip(ctx, tl, bl, tip, shift, alphaScale);
   ctx.globalAlpha = 1;
@@ -231,25 +225,22 @@ function drawTopWire(ctx, tl, bl, tip, look, shift, alphaScale) {
   }
   ctx.globalAlpha = WEDGE.wireAlpha * alphaScale;
   for (let i = 1; i <= WEDGE.stackCount; i++) strokeOffset(ctx, tl, end, normal, gap * i, shift);
-  const inner = left * WEDGE.lidInner;
-  const outer = left * WEDGE.lidOuter;
-  const near = lerp(tl, tip, WEDGE.lidStart);
-  const far = lerp(tl, tip, WEDGE.lidEnd);
-  const a0 = add(near, scale(normal, inner));
-  const a1 = add(far, scale(normal, inner));
-  const b0 = add(near, scale(normal, outer));
-  const b1 = add(far, scale(normal, outer));
+  const reach = left * WEDGE.lidReach;
+  const startA = lerp(tl, tip, WEDGE.lidFrom);
+  const startB = lerp(tl, tip, WEDGE.lidTo);
+  const endA = add(startA, scale(normal, reach));
+  const endB = add(startB, scale(normal, reach));
   if (look.halo > 0) {
     ctx.globalAlpha = look.haloAlpha * alphaScale;
     ctx.lineWidth = look.halo;
-    line(ctx, shiftPoint(a0, shift), shiftPoint(a1, shift));
-    line(ctx, shiftPoint(b0, shift), shiftPoint(b1, shift));
+    line(ctx, shiftPoint(startA, shift), shiftPoint(endA, shift));
+    line(ctx, shiftPoint(startB, shift), shiftPoint(endB, shift));
     ctx.lineWidth = 1.15;
   }
   ctx.globalAlpha = WEDGE.wireAlpha * alphaScale;
-  line(ctx, shiftPoint(a0, shift), shiftPoint(a1, shift));
-  line(ctx, shiftPoint(b0, shift), shiftPoint(b1, shift));
-  line(ctx, shiftPoint(a1, shift), shiftPoint(b1, shift));
+  line(ctx, shiftPoint(startA, shift), shiftPoint(endA, shift));
+  line(ctx, shiftPoint(startB, shift), shiftPoint(endB, shift));
+  line(ctx, shiftPoint(endA, shift), shiftPoint(endB, shift));
 }
 
 function drawTip(ctx, tl, bl, tip, shift, alphaScale) {
@@ -283,10 +274,24 @@ function fillTriangle(ctx, tl, bl, tip, shift) {
   ctx.fill();
 }
 
-function strokeEdges(ctx, tl, bl, tip, shift) {
+function strokeEdges(ctx, tl, bl, tip, shift, alphaScale) {
+  ctx.strokeStyle = WEDGE.line;
+  ctx.globalAlpha = Math.min(1, 0.95 * alphaScale);
+  ctx.lineWidth = 1.35;
   line(ctx, shiftPoint(tl, shift), shiftPoint(bl, shift));
-  line(ctx, shiftPoint(bl, shift), shiftPoint(tip, shift));
   line(ctx, shiftPoint(tip, shift), shiftPoint(tl, shift));
+  ctx.strokeStyle = WEDGE.bottom;
+  ctx.globalAlpha = 1;
+  ctx.lineWidth = 1.7;
+  line(ctx, shiftPoint(bl, shift), shiftPoint(tip, shift));
+  const edge = norm(sub(tip, bl));
+  let outward = { x: edge.y, y: -edge.x };
+  if (dot(outward, sub(tl, bl)) > 0) outward = { x: -outward.x, y: -outward.y };
+  const offset = scale(outward, 1.6);
+  ctx.strokeStyle = WEDGE.wire;
+  ctx.globalAlpha = WEDGE.bottomWire * alphaScale;
+  ctx.lineWidth = 1.05;
+  line(ctx, shiftPoint(add(bl, offset), shift), shiftPoint(add(tip, offset), shift));
 }
 
 function strokeOffset(ctx, a, b, normal, distance, shift) {
