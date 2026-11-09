@@ -224,8 +224,8 @@ import Base from '../layouts/Base.astro';
     height: auto;
     aspect-ratio: 1.24;
     margin-inline: auto;
-    background: #1c1a17;
-    border-color: #3a362f;
+    background: var(--bg);
+    border-color: var(--line);
   }
   canvas[data-view="zebra"]:active { cursor: grabbing; }
   :global(tr.is-selected) { background: color-mix(in srgb, var(--accent) 12%, transparent); }

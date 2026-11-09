@@ -39,11 +39,7 @@ export const WEDGE = {
   lidReach: 0.78,
   rungAlpha: 0.16,
   tipSize: 0.055,
-  panel: '#1c1a17',
-  line: '#f2ede3',
-  bottom: '#fbf9f4',
   bottomWire: 0.42,
-  wire: '#7ed4cc',
   wireAlpha: 0.92,
   styles: {
     eco: { width: 0.75, alpha: 0.55, halo: 0, haloAlpha: 0, solid: false },
@@ -69,18 +65,18 @@ export function paintModalView(ctx, partials, options) {
   const { width, height, style = 'fast', colors, selected = -1, camera, detune = 0 } = options;
   const look = WEDGE.styles[style] || WEDGE.styles.fast;
   const scene = layoutScene(partials, camera, width, height);
+  const palette = sitePalette(colors);
   ctx.clearRect(0, 0, width, height);
-  ctx.fillStyle = WEDGE.panel;
+  ctx.fillStyle = palette.panel;
   ctx.fillRect(0, 0, width, height);
   ctx.lineCap = 'butt';
   ctx.lineJoin = 'miter';
-  const accent = colors?.accent || '#d4421c';
   const smear = Math.max(-1, Math.min(1, detune)) * 7;
-  if (smear) drawSheet(ctx, scene, look, selected, smear, 0.45);
-  drawSheet(ctx, scene, look, selected, 0, 1);
+  if (smear) drawSheet(ctx, scene, look, palette, selected, smear, 0.45);
+  drawSheet(ctx, scene, look, palette, selected, 0, 1);
   if (selected >= 0 && scene.modes[selected]) {
     const mode = scene.modes[selected];
-    strokeRung(ctx, mode, { width: look.width + 1.1, alpha: 1, halo: 3, haloAlpha: 0.35 }, accent);
+    strokeRung(ctx, mode, { width: look.width + 1.1, alpha: 1, halo: 3, haloAlpha: 0.35 }, palette.wire);
   }
   return scene.modes.map((mode) => mode.base);
 }
@@ -183,38 +179,46 @@ function rawProject(x, y, z, camera) {
   return { x: x1 * persp, y: y2 * persp, depth: z2 };
 }
 
-function drawSheet(ctx, scene, look, selected, shift, alphaScale) {
+function sitePalette(colors) {
+  return {
+    panel: colors?.bg || '#f2ede3',
+    face: colors?.ink || '#1a1916',
+    wire: colors?.accent || '#d4421c',
+  };
+}
+
+function drawSheet(ctx, scene, look, palette, selected, shift, alphaScale) {
   const { modes, tl, bl, tip } = scene;
   if (!tl || !bl || !tip) return;
   const fuse = modes.length >= 64 && look.solid;
-  ctx.fillStyle = WEDGE.line;
-  ctx.strokeStyle = WEDGE.line;
+  ctx.fillStyle = palette.face;
+  ctx.strokeStyle = palette.face;
   if (fuse) {
     ctx.globalAlpha = 0.94 * alphaScale;
     fillTriangle(ctx, tl, bl, tip, shift);
   }
   ctx.globalAlpha = (fuse ? WEDGE.rungAlpha : Math.min(0.7, look.alpha)) * alphaScale;
   ctx.lineWidth = fuse ? 1 : look.width;
-  ctx.strokeStyle = fuse ? WEDGE.wire : WEDGE.line;
+  ctx.strokeStyle = palette.wire;
   for (let i = 0; i < modes.length; i++) {
     if (i === selected) continue;
     const mode = modes[i];
     line(ctx, shiftPoint(mode.base, shift), shiftPoint(mode.crest, shift));
   }
-  strokeEdges(ctx, tl, bl, tip, shift, alphaScale);
-  drawTopWire(ctx, tl, bl, tip, look, shift, alphaScale);
-  drawTip(ctx, tl, bl, tip, shift, alphaScale);
+  strokeEdges(ctx, tl, bl, tip, palette, shift, alphaScale);
+  drawTopWire(ctx, tl, bl, tip, look, palette, shift, alphaScale);
+  drawTip(ctx, tl, bl, tip, palette, shift, alphaScale);
   ctx.globalAlpha = 1;
 }
 
-function drawTopWire(ctx, tl, bl, tip, look, shift, alphaScale) {
+function drawTopWire(ctx, tl, bl, tip, look, palette, shift, alphaScale) {
   const edge = norm(sub(tip, tl));
   let normal = { x: edge.y, y: -edge.x };
   const down = sub(bl, tl);
   if (dot(normal, down) > 0) normal = { x: -normal.x, y: -normal.y };
   const left = Math.hypot(bl.x - tl.x, bl.y - tl.y) || 1;
   const gap = left * WEDGE.stackGap;
-  ctx.strokeStyle = WEDGE.wire;
+  ctx.strokeStyle = palette.wire;
   ctx.lineWidth = 1.15;
   const end = lerp(tl, tip, WEDGE.stackEnd);
   if (look.halo > 0) {
@@ -243,11 +247,11 @@ function drawTopWire(ctx, tl, bl, tip, look, shift, alphaScale) {
   line(ctx, shiftPoint(endA, shift), shiftPoint(endB, shift));
 }
 
-function drawTip(ctx, tl, bl, tip, shift, alphaScale) {
+function drawTip(ctx, tl, bl, tip, palette, shift, alphaScale) {
   const back = norm(sub(mid(tl, bl), tip));
   const side = { x: -back.y, y: back.x };
   const size = Math.hypot(bl.x - tl.x, bl.y - tl.y) * WEDGE.tipSize;
-  ctx.strokeStyle = WEDGE.wire;
+  ctx.strokeStyle = palette.wire;
   ctx.globalAlpha = WEDGE.wireAlpha * alphaScale;
   ctx.lineWidth = 1;
   for (let i = 1; i <= 3; i++) {
@@ -274,21 +278,18 @@ function fillTriangle(ctx, tl, bl, tip, shift) {
   ctx.fill();
 }
 
-function strokeEdges(ctx, tl, bl, tip, shift, alphaScale) {
-  ctx.strokeStyle = WEDGE.line;
+function strokeEdges(ctx, tl, bl, tip, palette, shift, alphaScale) {
+  ctx.strokeStyle = palette.face;
   ctx.globalAlpha = Math.min(1, 0.95 * alphaScale);
   ctx.lineWidth = 1.35;
   line(ctx, shiftPoint(tl, shift), shiftPoint(bl, shift));
   line(ctx, shiftPoint(tip, shift), shiftPoint(tl, shift));
-  ctx.strokeStyle = WEDGE.bottom;
-  ctx.globalAlpha = 1;
-  ctx.lineWidth = 1.7;
   line(ctx, shiftPoint(bl, shift), shiftPoint(tip, shift));
   const edge = norm(sub(tip, bl));
   let outward = { x: edge.y, y: -edge.x };
   if (dot(outward, sub(tl, bl)) > 0) outward = { x: -outward.x, y: -outward.y };
   const offset = scale(outward, 1.6);
-  ctx.strokeStyle = WEDGE.wire;
+  ctx.strokeStyle = palette.wire;
   ctx.globalAlpha = WEDGE.bottomWire * alphaScale;
   ctx.lineWidth = 1.05;
   line(ctx, shiftPoint(add(bl, offset), shift), shiftPoint(add(tip, offset), shift));
