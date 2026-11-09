@@ -289,7 +289,7 @@ export function paintModalView(ctx, partials, options = {}) {
   const rawSlices = options.slices || spaceSlices(partials);
   const slices = combHeights(rawSlices, options.position);
   const look = PLANE.styles[style] || PLANE.styles.fast;
-  const palette = sitePalette(colors);
+  const palette = sitePalette(colors, options.invertPanel !== false);
   const ideal = measureFit(slices, camera, width, height, detune);
   const fit = options.fitMotion ? followFit(options.fitMotion, ideal, options.now ?? 0) : ideal;
   const place = placement(fit, width, height);
@@ -306,11 +306,13 @@ export function paintModalView(ctx, partials, options = {}) {
   const tight = Math.max(3, weight * (style === 'eco' ? 1.2 : 2.1));
   ctx.save();
   ctx.filter = `blur(${wide}px)`;
-  drawSlices(ctx, slices, detune, place, camera, look, palette, clock, style, selected, true, weight, 2.2, 0.42);
+  ctx.globalCompositeOperation = palette.bloom;
+  drawSlices(ctx, slices, detune, place, camera, look, palette, clock, style, selected, true, weight, 2.4, 0.55);
   ctx.restore();
   ctx.save();
   ctx.filter = `blur(${tight}px)`;
-  drawSlices(ctx, slices, detune, place, camera, look, palette, clock, style, selected, true, weight, 1.45, 0.7);
+  ctx.globalCompositeOperation = palette.bloom;
+  drawSlices(ctx, slices, detune, place, camera, look, palette, clock, style, selected, true, weight, 1.6, 0.85);
   ctx.restore();
   drawSlices(ctx, slices, detune, place, camera, look, palette, clock, style, selected, false, weight, 1, 1);
   ctx.globalAlpha = 1;
@@ -374,7 +376,7 @@ function floorBack(world, z = PLANE.ribbonZ) {
 // canvas and the full panel stay the same picture.
 function lineWeight(scale) {
   const graphic = Math.max(80, scale * PLANE.span);
-  return graphic / 105;
+  return graphic / 52;
 }
 
 // Short rungs stop at the back rail. The left-hand ones run out to the
@@ -418,7 +420,17 @@ function airFrame(slices, clock, detune) {
   if (!air.length) return { anchorX: 0, anchorY: PLANE.height, rankOf: () => 0 };
   const head = worldOf(air[0], detune);
   const rank = new Map(air.map((slice, index) => [slice, index]));
-  return { anchorX: head.x, anchorY: head.y, rankOf: (slice) => rank.get(slice) ?? 0 };
+  const ordered = (slices || [])
+    .filter((slice) => slice && slice.alpha >= 0.08 && slice.height >= 0.02)
+    .map((slice) => worldOf(slice, detune))
+    .sort((a, b) => a.x - b.x);
+  return {
+    anchorX: head.x,
+    anchorY: head.y,
+    rankOf: (slice) => rank.get(slice) ?? 0,
+    crests: ordered.slice(0, 4),
+    railRight: ordered.length ? ordered[ordered.length - 1].x : head.x + PLANE.span,
+  };
 }
 
 function fromRestScreen(x, sx, sy) {
@@ -427,49 +439,89 @@ function fromRestScreen(x, sx, sy) {
   return { x, y, z };
 }
 
-// A long shallow sag in screen space, from the crest down to about the
-// fourth bar's height, then a straight rise. The bow keeps it from
-// falling off the first crest as a hook.
-function tailSpline(x, y0, steps) {
-  const crestSy = -(y0 + (x * -0.625));
-  const botSx = x + 0.28;
-  const botSy = crestSy + (y0 * 0.26);
-  const tipSx = x + 2.05;
-  const tipSy = crestSy - (y0 * 0.62);
-  const sagN = Math.round(steps * 0.34);
+function restScreen(x, y, z) {
+  return {
+    sx: x + (z * 0.78),
+    sy: -(y + (x * -0.625) + (z * 0.6375)),
+  };
+}
+
+// Where this partial must pass so its screen position sits on another crest.
+function onCrest(x, crest) {
+  const target = restScreen(crest.x, crest.y, 0);
+  const z = Math.max(0, (target.sx - x) / 0.78);
+  const y = (-target.sy) - (x * -0.625) - (z * 0.6375);
+  return { x, y, z };
+}
+
+// Starts on bar 1's crest, runs down-right across the next crests, then
+// rises straight to a tip past the right end of the front rail.
+function tailSpline(x, y0, crests, railRight, steps) {
+  const guides = (crests && crests.length) ? crests : [{ x, y: y0 }];
+  const keys = guides.map((crest, index) => {
+    const point = index === 0 ? { x, y: y0, z: 0 } : onCrest(x, crest);
+    // Sit just above the middle crests so the sag is a line of its own,
+    // and let it meet bar 4's crest height at the end of the curve.
+    if (index > 0 && index < guides.length - 1) point.y += y0 * 0.08;
+    return point;
+  });
+  const crest = restScreen(x, y0, 0);
+  const tip = fromRestScreen(x, Math.max(railRight + 0.55, crest.sx + 2.6), crest.sy - (y0 * 0.72));
   const points = [];
+  const sagN = Math.max(8, Math.round(steps * 0.42));
   for (let i = 0; i <= sagN; i++) {
-    const u = i / sagN;
-    const bow = Math.sin(u * Math.PI) * y0 * 0.025;
-    const sx = x + ((botSx - x) * u);
-    const sy = crestSy + ((botSy - crestSy) * u) - bow;
+    const t = (i / sagN) * (keys.length - 1);
+    const index = Math.min(keys.length - 2, Math.floor(t));
+    const u = t - index;
+    const a = keys[index];
+    const b = keys[Math.min(keys.length - 1, index + 1)];
+    const bow = Math.sin(u * Math.PI) * y0 * 0.012;
+    const sx = restScreen(a.x, a.y, a.z).sx + ((restScreen(b.x, b.y, b.z).sx - restScreen(a.x, a.y, a.z).sx) * u);
+    const sy = restScreen(a.x, a.y, a.z).sy + ((restScreen(b.x, b.y, b.z).sy - restScreen(a.x, a.y, a.z).sy) * u) - bow;
     points.push(fromRestScreen(x, sx, sy));
   }
-  const fillet = 10;
-  const arrive = points[points.length - 1];
-  const before = points[points.length - 2];
-  const aSx = (arrive.x + (arrive.z * 0.78)) - (before.x + (before.z * 0.78));
-  const aSy = (-(arrive.y + (arrive.x * -0.625) + (arrive.z * 0.6375))) - (-(before.y + (before.x * -0.625) + (before.z * 0.6375)));
-  const aLen = Math.hypot(aSx, aSy) || 1;
-  const riseLen = Math.hypot(tipSx - botSx, tipSy - botSy) || 1;
-  let sx = botSx;
-  let sy = botSy;
-  const filletStep = (y0 * 1.5) / steps;
+  const prev = points[points.length - 2];
+  const botP = points[points.length - 1];
+  const bot = restScreen(botP.x, botP.y, botP.z);
+  const prevS = restScreen(prev.x, prev.y, prev.z);
+  const tipS = restScreen(tip.x, tip.y, tip.z);
+  const arrive = { x: bot.sx - prevS.sx, y: bot.sy - prevS.sy };
+  const depart = { x: tipS.sx - bot.sx, y: tipS.sy - bot.sy };
+  const aLen = Math.hypot(arrive.x, arrive.y) || 1;
+  const dLen = Math.hypot(depart.x, depart.y) || 1;
+  let sx = bot.sx;
+  let sy = bot.sy;
+  const fillet = 6;
+  const step = y0 * 0.045;
   for (let i = 1; i <= fillet; i++) {
     const t = i / (fillet + 1);
-    const dx = ((aSx / aLen) * (1 - t)) + (((tipSx - botSx) / riseLen) * t);
-    const dy = ((aSy / aLen) * (1 - t)) + (((tipSy - botSy) / riseLen) * t);
+    const dx = ((arrive.x / aLen) * (1 - t)) + ((depart.x / dLen) * t);
+    const dy = ((arrive.y / aLen) * (1 - t)) + ((depart.y / dLen) * t);
     const len = Math.hypot(dx, dy) || 1;
-    sx += (dx / len) * filletStep;
-    sy += (dy / len) * filletStep;
+    sx += (dx / len) * step;
+    sy += (dy / len) * step;
     points.push(fromRestScreen(x, sx, sy));
   }
-  const riseN = Math.max(4, steps - points.length + 1);
+  const riseN = Math.max(6, steps - points.length + 1);
   for (let i = 1; i <= riseN; i++) {
     const u = i / riseN;
-    points.push(fromRestScreen(x, sx + ((tipSx - sx) * u), sy + ((tipSy - sy) * u)));
+    points.push(fromRestScreen(x, sx + ((tipS.sx - sx) * u), sy + ((tipS.sy - sy) * u)));
   }
   return points;
+}
+
+function screenArcEnd(points, fraction) {
+  const seen = points.map((point) => restScreen(point.x, point.y, point.z));
+  let total = 0;
+  const at = [0];
+  for (let i = 1; i < seen.length; i++) {
+    total += Math.hypot(seen[i].sx - seen[i - 1].sx, seen[i].sy - seen[i - 1].sy);
+    at.push(total);
+  }
+  const stop = total * fraction;
+  let end = 1;
+  while (end < at.length - 1 && at[end] < stop) end += 1;
+  return end;
 }
 
 function tailWorld(slice, world, maxSeconds, air) {
@@ -487,22 +539,14 @@ function tailWorld(slice, world, maxSeconds, air) {
   const rank = air?.rankOf(slice) ?? 0;
   const x = air?.anchorX ?? world.x;
   const y0 = air?.anchorY ?? world.y;
-  const full = tailSpline(x, y0, 32);
+  const full = tailSpline(x, y0, air?.crests, air?.railRight ?? x + PLANE.span, 36);
   if (rank === 0) return full;
-  // Branch off the sag near its bottom, just below the fundamental, and
-  // run parallel for about 40% of that tail. Later tails stop sooner.
-  const screenDown = (point) => -(point.y + (point.x * -0.625) + (point.z * 0.6375));
-  let low = 0;
-  for (let i = 1; i < full.length; i++) if (screenDown(full[i]) > screenDown(full[low])) low = i;
-  const tuck = 0.12 + (rank - 1) * 0.04;
-  const span = Math.max(3, Math.round((full.length - 1) * Math.max(0.18, 0.40 - (rank - 1) * 0.1)));
-  const end = Math.min(full.length - 1, low + span);
-  const branch = [];
-  for (let i = low; i <= end; i++) {
-    const along = (i - low) / Math.max(1, end - low);
-    branch.push({ x: full[i].x, y: full[i].y - (tuck * (0.45 + 0.55 * along)), z: full[i].z });
-  }
-  return branch;
+  // Same curve, tucked just under the fundamental, ending at about 40% of
+  // its length. Later tails stop sooner.
+  const reach = Math.max(0.22, 0.40 - (rank - 1) * 0.08);
+  const end = screenArcEnd(full, reach);
+  const tuck = 0.08 + (rank - 1) * 0.035;
+  return full.slice(0, end + 1).map((point) => ({ x: point.x, y: point.y - tuck, z: point.z }));
 }
 
 function strokePath(ctx, points, color, width, alpha) {
@@ -547,7 +591,6 @@ function drawSlices(ctx, slices, detune, place, camera, look, palette, clock, st
   }));
   placed.sort((a, b) => worldOf(a.slice, detune).x - worldOf(b.slice, detune).x);
   const limit = hatchLimit(placed, detune);
-  const hatched = placed.filter((item) => worldOf(item.slice, detune).x <= limit);
   if (style !== 'eco') {
     const atDepth = (group, z) => group.map((item) => {
       const world = worldOf(item.slice, detune);
@@ -555,15 +598,13 @@ function drawSlices(ctx, slices, detune, place, camera, look, palette, clock, st
     });
     glow(ctx, atDepth(placed, 0), palette.ink, rail, 1);
     glow(ctx, atDepth(placed, PLANE.ribbonZ), palette.ink, rail, 1);
-    for (const z of PLANE.latticeZ) {
-      glow(ctx, atDepth(hatched, z), palette.ink, ink, bloom ? 1 : 0.82);
-    }
     for (const item of placed) {
       const world = worldOf(item.slice, detune);
-      const inHatch = world.x <= limit;
-      const rungZ = inHatch ? PLANE.latticeZ[PLANE.latticeZ.length - 1] : PLANE.ribbonZ;
+      // One rung per bar, back along depth. The left ones run far enough
+      // to cross the neighbouring curve-feet, which is the lattice.
+      const rungZ = world.x <= limit ? 0.62 : PLANE.ribbonZ;
       const far = place(camera, world.x, 0, rungZ);
-      glow(ctx, [item.tri.foot, far], palette.ink, ink, item.slice.alpha * (inHatch && !bloom ? 0.82 : 1));
+      glow(ctx, [item.tri.foot, far], palette.ink, ink, item.slice.alpha);
       glow(ctx, [item.tri.foot, item.tri.crest], palette.ink, ink, item.slice.alpha);
     }
   }
@@ -635,13 +676,15 @@ function rawProject(x, y, z, camera) {
   };
 }
 
-function sitePalette(colors) {
-  const panel = colors?.bg || '#f2ede3';
+function sitePalette(colors, invert = true) {
+  const bg = colors?.bg || '#f2ede3';
+  const fg = colors?.ink || colors?.fg || '#1f1d1a';
+  const panel = invert ? fg : bg;
   return {
     panel,
-    ink: colors?.ink || colors?.fg || '#1f1d1a',
+    ink: invert ? bg : fg,
     wire: colors?.accent || '#d4421c',
-    bloom: luminance(panel) < 90 ? 'lighter' : 'source-over',
+    bloom: invert ? 'lighter' : 'source-over',
   };
 }
 

@@ -987,6 +987,7 @@ function drawZebra(canvas, partials, state) {
     camera: state.camera,
     style: state.drawStyle || 'fast',
     colors,
+    invertPanel: canvas.dataset.panel !== 'cream',
     selected: state.selectedPartial,
     detune: state.detune || 0,
     position: state.position,
