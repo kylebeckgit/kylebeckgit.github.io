@@ -2,8 +2,9 @@
 //
 // The bright face is a triangle, not the spectrum outline. Its left edge is
 // the low-frequency end, its top and bottom edges are straight, and they
-// meet at a sharp tip. Level and decay stay inside that outline: the rungs
-// are faint lines across the face, and they do not move the silhouette.
+// meet at a sharp tip. Inside it, rung spacing follows log ratio on a fixed
+// window, so a profile or a Tune sweep slides the lines. Length and brightness
+// follow level.
 // Cyan lines stack along the top edge. The lid is two lines that leave that
 // edge about a third and a half of the way along and rise up-right, with a
 // short right-angle hook at the far end.
@@ -37,14 +38,16 @@ export const WEDGE = {
   lidFrom: 0.33,
   lidTo: 0.5,
   lidReach: 0.78,
-  rungAlpha: 0.16,
+  rungAlpha: 0.55,
+  ratioLo: 0.35,
+  ratioHi: 48,
   tipSize: 0.055,
   bottomWire: 0.42,
   wireAlpha: 0.92,
   styles: {
     eco: { width: 0.75, alpha: 0.55, halo: 0, haloAlpha: 0, solid: false },
     fast: { width: 1.15, alpha: 0.85, halo: 0, haloAlpha: 0, solid: true },
-    glow: { width: 1.15, alpha: 0.72, halo: 6, haloAlpha: 0.28, solid: true },
+    glow: { width: 1.45, alpha: 0.95, halo: 18, haloAlpha: 0.62, solid: true },
   },
 };
 
@@ -106,14 +109,20 @@ export function layoutScene(partials, camera, width, height) {
   const tl = fit(rawTl);
   const bl = fit(rawBl);
   const tip = fit(rawTip);
-  const last = Math.max(1, partials.length - 1);
-  const modes = partials.map((partial, index) => {
-    const t = index / last;
+  const logLo = Math.log2(WEDGE.ratioLo);
+  const logHi = Math.log2(WEDGE.ratioHi);
+  const modes = partials.map((partial) => {
+    const ratio = Math.max(Number(partial.ratio) || WEDGE.ratioLo, 1e-6);
+    const t = clamp((Math.log2(ratio) - logLo) / (logHi - logLo), 0, 1);
+    const amp = 10 ** (Math.max(-72, Math.min(0, Number(partial.gainDb) || 0)) / 20);
+    const reach = 0.22 + 0.78 * Math.sqrt(amp);
+    const foot = lerp(bl, tip, t);
+    const head = lerp(tl, tip, t);
     return {
-      base: lerp(bl, tip, t),
-      crest: lerp(tl, tip, t),
+      base: foot,
+      crest: lerp(foot, head, reach),
       t,
-      amp: 10 ** (Math.max(-72, Math.min(0, Number(partial.gainDb) || 0)) / 20),
+      amp,
     };
   });
   return { modes, tl, bl, tip, project: (x, y, z) => place(view, x, y, z) };
@@ -194,15 +203,22 @@ function drawSheet(ctx, scene, look, palette, selected, shift, alphaScale) {
   ctx.fillStyle = palette.face;
   ctx.strokeStyle = palette.face;
   if (fuse) {
-    ctx.globalAlpha = 0.94 * alphaScale;
+    ctx.globalAlpha = (modes.length > 96 ? 0.72 : 0.9) * alphaScale;
     fillTriangle(ctx, tl, bl, tip, shift);
   }
-  ctx.globalAlpha = (fuse ? WEDGE.rungAlpha : Math.min(0.7, look.alpha)) * alphaScale;
-  ctx.lineWidth = fuse ? 1 : look.width;
   ctx.strokeStyle = palette.wire;
+  const rungWidth = modes.length > 160 ? 0.7 : modes.length > 48 ? 1.15 : look.width;
   for (let i = 0; i < modes.length; i++) {
     if (i === selected) continue;
     const mode = modes[i];
+    const presence = 0.35 + 0.65 * mode.amp;
+    if (look.halo > 0) {
+      ctx.globalAlpha = look.haloAlpha * presence * alphaScale;
+      ctx.lineWidth = look.halo * (0.45 + 0.55 * mode.amp);
+      line(ctx, shiftPoint(mode.base, shift), shiftPoint(mode.crest, shift));
+    }
+    ctx.globalAlpha = (fuse ? WEDGE.rungAlpha : Math.min(0.85, look.alpha)) * presence * alphaScale;
+    ctx.lineWidth = rungWidth;
     line(ctx, shiftPoint(mode.base, shift), shiftPoint(mode.crest, shift));
   }
   strokeEdges(ctx, tl, bl, tip, palette, shift, alphaScale);

@@ -87,6 +87,7 @@ export function createVoice(partials, options, sampleRate) {
     filePos: 0,
     mallet: exciter === 'mallet' ? malletTable(sampleRate, options.hardness) : null,
     holding: true,
+    impulse: options.impulse ? 1 : 0,
   };
 }
 
@@ -129,7 +130,11 @@ export function nextExciter(state) {
 }
 
 export function processSample(state) {
-  const input = nextExciter(state);
+  let input = nextExciter(state);
+  if (state.impulse) {
+    input += state.impulse;
+    state.impulse = 0;
+  }
   let sum = 0;
   const modes = state.modes;
   for (let i = 0; i < modes.length; i++) {

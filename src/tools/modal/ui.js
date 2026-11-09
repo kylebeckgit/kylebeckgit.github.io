@@ -183,7 +183,7 @@ export function mount(root) {
   function adopt(partials, custom) {
     const copy = partials.map((partial) => ({ ratio: partial.ratio, gainDb: partial.gainDb, decay: partial.decay }));
     if (root.querySelector('[data-absorb]')) {
-      state.profilePartials = copy;
+      state.profilePartials = capAudible(copy);
       publishShape();
     } else {
       state.partials = copy;
@@ -888,6 +888,38 @@ function setPlayError(root, message) {
   if (el) el.textContent = message || '';
 }
 
+function capAudible(partials) {
+  const limit = 48;
+  let peak = 0;
+  for (const partial of partials) if (partial.ratio > peak) peak = partial.ratio;
+  if (!(peak > limit)) return partials;
+  const span = Math.log2(peak / limit) || 1;
+  return partials.map((partial) => {
+    if (!(partial.ratio > limit)) return partial;
+    const over = Math.log2(partial.ratio / limit) / span;
+    return { ...partial, ratio: limit * 2 ** (over * 0.5 - 0.5) };
+  });
+}
+
+function heardPartials(partials, fundamental, sampleRate) {
+  const ceiling = sampleRate * 0.45;
+  if (!(fundamental > 0) || !(ceiling > fundamental) || !partials.length) return partials;
+  let top = 0;
+  for (const partial of partials) {
+    const freq = fundamental * partial.ratio;
+    if (freq > top) top = freq;
+  }
+  if (!(top > ceiling)) return partials;
+  const span = Math.log2(top / ceiling);
+  return partials.map((partial) => {
+    const freq = fundamental * partial.ratio;
+    if (!(freq > ceiling)) return partial;
+    const t = Math.log2(freq / ceiling) / span;
+    const heard = ceiling * 2 ** (-0.05 + 0.05 * t);
+    return { ...partial, ratio: heard / fundamental, gainDb: Math.max(partial.gainDb, -18) };
+  });
+}
+
 function playHeard(state, recipe) {
   const AudioCtx = window.AudioContext || window.webkitAudioContext;
   if (!AudioCtx) throw new Error('This browser cannot play audio.');
@@ -902,8 +934,12 @@ function playHeard(state, recipe) {
   const resumed = ctx.resume();
   const exciter = recipe.exciter || state.exciter;
   const seconds = exciter === 'bow' ? 1.1 : 1.6;
-  const samples = renderPreview(state.partials, {
-    fundamental: noteFrequency(state.note),
+  const fundamental = noteFrequency(state.note);
+  const heardList = state.canvas?.dataset.view === 'zebra'
+    ? heardPartials(state.partials, fundamental, ctx.sampleRate)
+    : state.partials;
+  const samples = renderPreview(heardList, {
+    fundamental,
     velocity: state.velocity,
     position: state.position,
     exciter,
@@ -911,6 +947,7 @@ function playHeard(state, recipe) {
     file: state.file,
     sampleRate: ctx.sampleRate,
     seconds,
+    impulse: state.canvas?.dataset.view === 'zebra',
     releaseAt: exciter === 'bow' ? Math.floor(ctx.sampleRate * 0.85) : undefined,
   });
   const heard = scaleToPeak(samples, 0.45);
