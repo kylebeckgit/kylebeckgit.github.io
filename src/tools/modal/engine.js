@@ -252,6 +252,22 @@ export function buildPartials(rawControls) {
   return partials;
 }
 
+// If stiffness moved the partial nearest ratio 1, move the note with it.
+// Then ratio × fundamental is the frequency the resonator plays.
+export function alignReference(partials, fundamental) {
+  if (!partials.length) return { partials, fundamental };
+  let ref = partials[0];
+  for (const partial of partials) {
+    if (Math.abs(Math.log(partial.ratio)) < Math.abs(Math.log(ref.ratio))) ref = partial;
+  }
+  if (!(ref.ratio > 0) || Math.abs(ref.ratio - 1) <= 1e-4) return { partials, fundamental };
+  const scale = ref.ratio;
+  return {
+    fundamental: fundamental * scale,
+    partials: partials.map((partial) => ({ ...partial, ratio: partial.ratio / scale })),
+  };
+}
+
 export function toCsv(partials) {
   const lines = ['Ratio;GainDB;Decay'];
   for (const partial of partials) {

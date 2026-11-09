@@ -1,4 +1,4 @@
-import { PRESETS, NOTE_BUTTONS, buildPartials, toCsv, fromCsv, noteFrequency, defaultControls, sanitizeControls } from './engine.js';
+import { PRESETS, NOTE_BUTTONS, buildPartials, toCsv, fromCsv, noteFrequency, defaultControls, sanitizeControls, alignReference } from './engine.js';
 import { analyzeSamples, decodeRecording, resampleMono, parseRoot, frequencyToNote } from './analyze.js';
 import { renderPreview, scaleToPeak } from './resonator.js';
 import { clampCamera, defaultCamera, hitPartial, paintModalView } from './modal-view.js';
@@ -187,7 +187,11 @@ export function mount(root) {
   }
 
   function adopt(partials, custom) {
-    const copy = partials.map((partial) => ({ ratio: partial.ratio, gainDb: partial.gainDb, decay: partial.decay }));
+    const aligned = root.querySelector('[data-absorb]')
+      ? alignReference(partials, noteFrequency(state.note))
+      : { partials, fundamental: noteFrequency(state.note) };
+    state.hearFundamental = aligned.fundamental;
+    const copy = aligned.partials.map((partial) => ({ ratio: partial.ratio, gainDb: partial.gainDb, decay: partial.decay }));
     if (root.querySelector('[data-absorb]')) {
       state.profilePartials = capAudible(copy);
       publishShape();
@@ -924,7 +928,7 @@ function playHeard(state, recipe) {
   const exciter = recipe.exciter || state.exciter;
   const zebra = state.canvas?.dataset.view === 'zebra';
   const seconds = zebra ? 4 : (exciter === 'bow' ? 1.1 : 1.6);
-  const fundamental = noteFrequency(state.note);
+  const fundamental = state.hearFundamental || noteFrequency(state.note);
   const samples = renderPreview(state.partials, {
     fundamental,
     velocity: state.velocity,
