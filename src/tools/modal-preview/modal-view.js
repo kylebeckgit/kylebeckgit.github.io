@@ -292,11 +292,17 @@ export function paintModalView(ctx, partials, options = {}) {
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
   const clock = longestSeconds(slices);
-  const blur = style === 'eco' ? 2.6 : 4.2;
+  const blur = style === 'eco' ? 3.2 : 4.4;
   ctx.save();
   ctx.filter = `blur(${blur}px)`;
   drawSlices(ctx, slices, detune, place, camera, look, palette, clock, style, selected, true);
   ctx.restore();
+  if (style !== 'eco') {
+    ctx.save();
+    ctx.filter = 'blur(3.6px)';
+    drawLatticeGlow(ctx, slices, detune, place, camera, palette, clock);
+    ctx.restore();
+  }
   drawSlices(ctx, slices, detune, place, camera, look, palette, clock, style, selected, false);
   ctx.globalAlpha = 1;
   ctx.globalCompositeOperation = 'source-over';
@@ -357,11 +363,12 @@ function floorBack(world, z = PLANE.floorZ) {
 // the floor. A tail that stays in the air still lays a rung out through the
 // sag, long enough on the string's first bars to cross the neighbors.
 function landingDepth(shape) {
+  if (shape.tight) return shape.reach * PLANE.depth;
   if (shape.floor) {
     const u = Math.min(1, -Math.log(0.14) / Math.max(0.3, shape.drop));
     return Math.max(0.03, u * shape.reach) * PLANE.depth;
   }
-  return 0.42 * shape.reach * PLANE.depth;
+  return 0.3 * shape.reach * PLANE.depth;
 }
 
 function longestSeconds(slices) {
@@ -379,18 +386,40 @@ function longestSeconds(slices) {
 function drawShape(seconds, maxSeconds) {
   const rel = Math.max(0.02, Math.max(0.02, seconds) / Math.max(0.05, maxSeconds));
   if (rel >= PLANE.airRel) {
-    return { reach: rel ** 0.72, drop: PLANE.sag, floor: false };
+    return { reach: rel ** 0.72, drop: PLANE.sag, floor: false, tight: false };
   }
-  // Just under the octave the rung still crosses the next bars. By the
-  // right-hand pickets the curve only steps behind its own bar.
-  const t = Math.min(1, rel / PLANE.airRel);
-  return { reach: 0.016 + 0.3 * t ** 1.45, drop: 3.1, floor: true };
+  // Under about 15% of the longest decay the curve only steps a bar-width
+  // behind the front and then falls straight down.
+  if (rel < 0.13) {
+    return { reach: 0.05 / 0.78 / PLANE.depth, drop: 1, floor: true, tight: true };
+  }
+  // Partials 3 to 7. The landing is several bar-gaps back, so the rung
+  // crosses three to five neighbours.
+  const t = (rel - 0.13) / (PLANE.airRel - 0.13);
+  return { reach: 0.28 + 0.05 * t, drop: 2.15, floor: true, tight: false, straight: true };
 }
 
 function tailWorld(slice, world, maxSeconds) {
   const steps = 22;
   const seconds = Math.max(0.05, Number(slice?.seconds) || 0.2);
-  const { reach, drop, floor } = drawShape(seconds, maxSeconds || seconds);
+  const shape = drawShape(seconds, maxSeconds || seconds);
+  const { reach, drop, floor, tight, straight } = shape;
+  if (tight) {
+    const z = reach * PLANE.depth;
+    const top = world.y;
+    return [
+      { x: world.x, y: top, z: 0 },
+      { x: world.x, y: top * 0.98, z },
+      { x: world.x, y: top * 0.02, z },
+    ];
+  }
+  if (straight) {
+    const z = landingDepth(shape);
+    return [
+      { x: world.x, y: world.y, z: 0 },
+      { x: world.x, y: 0, z },
+    ];
+  }
   const points = [];
   for (let i = 0; i <= steps; i++) {
     const u = i / steps;
@@ -417,19 +446,49 @@ function glow(ctx, points, color, look, alpha) {
   strokePath(ctx, points, color, look.width, look.alpha * alpha);
 }
 
+function mixHex(a, b, t) {
+  const parse = (hex) => {
+    const match = /^#([0-9a-f]{6})$/i.exec(String(hex || ''));
+    return match ? parseInt(match[1], 16) : null;
+  };
+  const pa = parse(a);
+  const pb = parse(b);
+  if (pa == null || pb == null) return a;
+  const channel = (shift) => Math.round(((pa >> shift) & 255) + (((pb >> shift) & 255) - ((pa >> shift) & 255)) * t);
+  return `#${[channel(16), channel(8), channel(0)].map((value) => value.toString(16).padStart(2, '0')).join('')}`;
+}
+
+function drawLatticeGlow(ctx, slices, detune, place, camera, palette, clock) {
+  const color = mixHex(palette.wire, '#ffffff', 0.22);
+  const look = { width: 6.5, alpha: 0.88, halo: 0, haloAlpha: 0 };
+  for (const slice of slices) {
+    if (!slice || slice.alpha < 0.2 || slice.height < 0.02) continue;
+    const shape = drawShape(Math.max(0.05, Number(slice.seconds) || 0.2), clock);
+    if (shape.tight || !shape.floor) continue;
+    const tri = projectSlice(slice, detune, place, camera, clock);
+    glow(ctx, tri.curve, color, look, slice.alpha);
+    glow(ctx, [tri.foot, tri.floor], color, { ...look, width: 5.5 }, slice.alpha);
+  }
+}
+
 function drawSlices(ctx, slices, detune, place, camera, look, palette, clock, style, selected, bloom) {
+  // The glow pass is faint on a single line and stacks where the lattice
+  // crosses, so the diamond reads brighter than the strokes around it.
+  const bulk = bloom ? 2.2 : 1;
   const ink = {
-    width: Math.max(0.9, look.width * 0.85),
-    alpha: 1,
+    width: Math.max(0.9, look.width * 0.85) * bulk,
+    alpha: bloom ? 0.2 : 1,
     halo: 0,
     haloAlpha: 0,
   };
   const accent = {
-    width: Math.max(0.7, look.width * 0.6),
-    alpha: 1,
+    width: Math.max(0.7, look.width * 0.6) * bulk,
+    alpha: bloom ? 0.4 : 1,
     halo: 0,
     haloAlpha: 0,
   };
+  const inkColor = bloom ? mixHex(palette.ink, '#ffffff', 0.35) : palette.ink;
+  const accentColor = bloom ? mixHex(palette.wire, '#ffffff', 0.28) : palette.wire;
   const visible = [];
   for (let index = 0; index < slices.length; index++) {
     const slice = slices[index];
@@ -441,14 +500,14 @@ function drawSlices(ctx, slices, detune, place, camera, look, palette, clock, st
   for (const slice of visible) {
     const tri = projectSlice(slice, detune, place, camera, clock);
     feet.push(tri.foot);
-    glow(ctx, tri.curve, palette.wire, accent, slice.alpha);
+    glow(ctx, tri.curve, accentColor, accent, slice.alpha);
     if (style !== 'eco') {
-      glow(ctx, [tri.foot, tri.floor], palette.ink, { ...ink, width: ink.width * 0.85 }, slice.alpha);
-      glow(ctx, [tri.foot, tri.crest], palette.ink, ink, slice.alpha);
+      glow(ctx, [tri.foot, tri.floor], inkColor, { ...ink, width: ink.width * 0.85 }, slice.alpha);
+      glow(ctx, [tri.foot, tri.crest], inkColor, ink, slice.alpha);
     }
   }
   if (style !== 'eco' && feet.length > 1) {
-    glow(ctx, feet, palette.ink, { ...ink, width: ink.width * 0.55 }, 0.55);
+    glow(ctx, feet, inkColor, { ...ink, width: ink.width * 0.55 }, bloom ? 0.2 : 0.55);
   }
   if (bloom) return;
   if (selected >= 0 && slices[selected]) {
