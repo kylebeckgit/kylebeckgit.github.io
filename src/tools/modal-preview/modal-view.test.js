@@ -79,20 +79,27 @@ test('each partial is its own triangle and eco draws only the tops', () => {
   assert.ok(fast.strokes > eco.strokes);
 });
 
-test('front edges stay vertical and decay runs up-right at the resting angle', () => {
-  const list = partials(16).map((partial, index) => (
-    index === 0 ? { ...partial, gainDb: 0, decay: 8 } : partial
-  ));
-  const slices = list.map((partial) => sliceFromPartial(partial));
-  const tris = layoutTriangles(slices, defaultCamera(), 800, 520, 0);
+test('the resting wedge is a dense comb with short up-right tails', () => {
+  const list = [];
+  const fund = 8.6;
+  for (let i = 0; i < 16; i++) {
+    const harm = i + 1;
+    list.push({ ratio: harm, gainDb: Math.max(-36, -i * 2.1), decay: fund / harm ** 0.85 });
+  }
+  const tris = layoutTriangles(list.map((partial) => sliceFromPartial(partial)), defaultCamera(), 800, 520, 0);
   const first = tris[0];
-  const later = tris[8];
+  const last = tris[15];
+  const bar = Math.abs(first.foot.y - first.crest.y);
+  const tail = Math.hypot(first.back.x - first.crest.x, first.back.y - first.crest.y);
+  const run = Math.hypot(last.foot.x - first.foot.x, last.foot.y - first.foot.y);
+  const tailDeg = Math.atan2(first.crest.y - first.back.y, first.back.x - first.crest.x) * 180 / Math.PI;
+  const freqDeg = Math.atan2(last.foot.y - first.foot.y, last.foot.x - first.foot.x) * 180 / Math.PI;
   assert.ok(Math.abs(first.foot.x - first.crest.x) < 0.75);
   assert.ok(first.crest.y < first.foot.y);
-  assert.ok(first.back.x > first.crest.x + 8);
-  assert.ok(first.back.y < first.crest.y);
-  assert.ok(later.foot.x > first.foot.x);
-  assert.ok(later.foot.y > first.foot.y);
+  assert.ok(tail / bar > 1 && tail / bar < 1.5, `tail/bar ${tail / bar}`);
+  assert.ok(run < bar, `run/bar ${run / bar}`);
+  assert.ok(tailDeg > 24 && tailDeg < 38, `tail ${tailDeg}`);
+  assert.ok(freqDeg > 8 && freqDeg < 24, `freq ${freqDeg}`);
 });
 
 test('the triangles stay inside the canvas at the resting angle and a full turn', () => {

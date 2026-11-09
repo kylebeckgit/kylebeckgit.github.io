@@ -17,15 +17,18 @@
 export const MORPH_MS = 260;
 
 export const PLANE = {
-  // Resting three-quarter. Frequency falls down-right, decay rises up-right.
-  yaw: 0.04,
-  pitch: 0.72,
+  // Resting three-quarter. Frequency falls down-right at a shallow angle.
+  // Decay rises up-right at about 30 degrees. The frequency run is short
+  // next to the bar height, and the longest tail is only a little longer
+  // than the tallest bar.
+  yaw: 0.02,
+  pitch: 0.58,
   focal: 9.5,
-  pitchMin: 0.28,
+  pitchMin: 0.5,
   pitchMax: 0.95,
-  span: 4.6,
-  height: 2.35,
-  depth: 8.4,
+  span: 4.2,
+  height: 2.7,
+  depth: 3.4,
   ratioLo: 0.35,
   ratioHi: 48,
   styles: {
@@ -82,7 +85,7 @@ export function levelHeight(gainDb) {
 
 export function decayDepth(decay) {
   const seconds = clamp(Number(decay) || 0, 0, 24);
-  return Math.pow(seconds / 8, 0.7);
+  return clamp(Math.pow(seconds / 9, 0.8), 0, 1);
 }
 
 // Positive detune spreads frequency away from the low end. Negative bunches
@@ -166,10 +169,16 @@ export function measureFit(slices, camera, width, height, detune = 0) {
     minY = -1;
     maxY = 1;
   }
-  const scale = Math.min(
-    (width - FIT_MARGIN * 2) / Math.max(0.001, maxX - minX),
-    (height - FIT_MARGIN * 2) / Math.max(0.001, maxY - minY),
+  const spanX = Math.max(0.001, maxX - minX);
+  const spanY = Math.max(0.001, maxY - minY);
+  const fitScale = Math.min(
+    (width - FIT_MARGIN * 2) / spanX,
+    (height - FIT_MARGIN * 2) / spanY,
   );
+  // Don't blow a compact wedge up to the edges. Still shrink if a turn
+  // or a detune spread would otherwise leave the canvas.
+  const capScale = Math.min((width * 0.62) / spanX, (height * 0.62) / spanY);
+  const scale = Math.min(fitScale, capScale);
   return { scale, cx: (minX + maxX) / 2, cy: (minY + maxY) / 2 };
 }
 
@@ -255,7 +264,7 @@ export function worldOf(slice, detune = 0) {
   return {
     x: (t - 0.5) * PLANE.span,
     y: clamp(slice.height, 0, 1.2) * PLANE.height,
-    z: clamp(slice.depth, 0, 1.6) * PLANE.depth,
+    z: clamp(slice.depth, 0, 1) * PLANE.depth,
   };
 }
 
@@ -271,13 +280,13 @@ function drawFloor(ctx, slices, detune, place, camera, palette) {
   }
   ctx.globalCompositeOperation = 'source-over';
   ctx.strokeStyle = palette.ink;
-  ctx.globalAlpha = 0.35;
+  ctx.globalAlpha = 0.22;
   ctx.lineWidth = 1;
   line(ctx, place(camera, minX, 0, 0), place(camera, maxX, 0, 0));
-  ctx.globalAlpha = 0.14;
-  const reach = PLANE.depth * 0.28;
+  ctx.globalAlpha = 0.1;
+  const reach = PLANE.depth * 0.22;
   for (let i = 1; i <= 2; i++) {
-    const z = (reach * i) / 3;
+    const z = (reach * i) / 2;
     line(ctx, place(camera, minX, 0, z), place(camera, maxX, 0, z));
   }
   ctx.globalAlpha = 1;
@@ -304,10 +313,11 @@ function strokeTriangle(ctx, slice, detune, place, camera, look, palette, style,
   line(ctx, tri.crest, tri.back);
   if (!topsOnly) {
     ctx.strokeStyle = palette.ink;
-    ctx.globalAlpha = 0.88 * fade;
+    ctx.globalAlpha = 0.9 * fade;
     ctx.lineWidth = 1.05;
     line(ctx, tri.foot, tri.crest);
-    ctx.globalAlpha = 0.22 * fade;
+    ctx.globalAlpha = 0.55 * fade;
+    ctx.lineWidth = 1;
     line(ctx, tri.foot, tri.back);
   }
 }
@@ -350,11 +360,12 @@ function rawProject(x, y, z, camera) {
   // so a front edge stays a vertical line at every yaw.
   const x1 = x * cy + z * sy;
   const z1 = -x * sy + z * cy;
-  const elev = camera.pitch;
-  const drop = 0.78;
+  // Tuned so a full-height bar and a full-length tail meet at about 30 degrees
+  // up-right, and the tail is a little longer than the bar.
+  const tailRise = camera.pitch * 2.8;
   return {
-    x: x1 * 1.0 + z1 * 0.5,
-    y: y * 1.35 - x1 * drop + z1 * elev,
+    x: x1 + z1,
+    y: y * 1.15 - x1 * 0.29 + z1 * tailRise,
     depth: z1,
   };
 }
