@@ -1,6 +1,7 @@
 import { PRESETS, NOTE_BUTTONS, buildPartials, toCsv, fromCsv, noteFrequency, defaultControls, sanitizeControls } from './engine.js';
 import { analyzeSamples, decodeRecording, resampleMono, parseRoot, frequencyToNote } from './analyze.js';
 import { renderPreview, scaleToPeak } from './resonator.js';
+import { defaultCamera, hitPartial, paintModalView } from './modal-view.js';
 import { fileSlug } from './recipes.js';
 import { mountStudio } from './studio.js';
 
@@ -31,6 +32,9 @@ export function mount(root) {
     userHolding: false,
     autoHearToken: 0,
     autoHearTimer: 0,
+    camera: defaultCamera(),
+    drawStyle: 'fast',
+    selectedPartial: -1,
   };
 
   root.querySelector('[data-presets]').innerHTML = PRESETS.map((preset) => `<option value="${preset.id}">${preset.label}</option>`).join('');
@@ -146,7 +150,7 @@ export function mount(root) {
   function render() {
     draw(canvas, state.partials, state);
     tableBody.innerHTML = state.partials.map((partial, index) => `
-      <tr>
+      <tr class="${index === state.selectedPartial ? 'is-selected' : ''}">
         <th scope="row"><button type="button" class="partial-index" data-make-root="${index}" aria-label="Make partial ${index + 1} the root">${index + 1}</button></th>
         <td><input type="number" step="0.0001" min="0.0001" data-index="${index}" data-field="ratio" value="${partial.ratio.toFixed(4)}" aria-label="Partial ${index + 1} ratio"></td>
         <td><input type="number" step="0.01" data-index="${index}" data-field="gainDb" value="${partial.gainDb.toFixed(2)}" aria-label="Partial ${index + 1} gain"></td>
@@ -248,6 +252,17 @@ export function mount(root) {
   canvas.addEventListener('pointerdown', (event) => {
     canvas.setPointerCapture?.(event.pointerId);
     const point = canvasPoint(canvas, event);
+    if (canvas.dataset.view === 'zebra') {
+      state.gesture = {
+        orbit: true,
+        x: point.x,
+        y: point.y,
+        yaw: state.camera.yaw,
+        pitch: state.camera.pitch,
+        moved: false,
+      };
+      return;
+    }
     state.gesture = {
       shift: event.shiftKey,
       x: point.x,
@@ -261,6 +276,15 @@ export function mount(root) {
   canvas.addEventListener('pointermove', (event) => {
     if (!state.gesture) return;
     const point = canvasPoint(canvas, event);
+    if (state.gesture.orbit) {
+      const travel = Math.hypot(point.x - state.gesture.x, point.y - state.gesture.y);
+      if (travel < 3) return;
+      state.gesture.moved = true;
+      state.camera.yaw = state.gesture.yaw - (point.x - state.gesture.x) * 0.008;
+      state.camera.pitch = clamp(state.gesture.pitch + (point.y - state.gesture.y) * 0.006, 0.18, 1.2);
+      scheduleDraw(canvas, state);
+      return;
+    }
     const travel = Math.hypot(point.x - state.gesture.x, point.y - state.gesture.y);
     if (!state.gesture.moved && travel < 5) return;
     if (!state.gesture.moved) {
@@ -272,7 +296,17 @@ export function mount(root) {
     state.gesture.lastX = point.x;
     state.gesture.lastY = point.y;
   });
-  canvas.addEventListener('pointerup', () => {
+  canvas.addEventListener('pointerup', (event) => {
+    if (state.gesture?.orbit) {
+      if (!state.gesture.moved) {
+        const point = canvasPoint(canvas, event);
+        const index = hitPartial(state.partials, state.camera, canvas.clientWidth, canvas.clientHeight, point.x, point.y);
+        state.selectedPartial = index;
+        render();
+      }
+      state.gesture = null;
+      return;
+    }
     if (state.gesture && !state.gesture.moved && !state.drawMode) {
       const index = nearestPartial(state.partials, state.gesture.x, state.gesture.scale || state.scale);
       if (index >= 0) makeRoot(index);
@@ -280,6 +314,28 @@ export function mount(root) {
     state.gesture = null;
   });
   canvas.addEventListener('pointercancel', () => { state.gesture = null; });
+  canvas.addEventListener('dblclick', () => {
+    if (canvas.dataset.view !== 'zebra') return;
+    state.camera = defaultCamera();
+    draw(canvas, state.partials, state);
+  });
+  const styleSelect = root.querySelector('[data-draw-style]');
+  if (styleSelect) {
+    state.drawStyle = styleSelect.value || 'fast';
+    styleSelect.addEventListener('change', () => {
+      state.drawStyle = styleSelect.value;
+      draw(canvas, state.partials, state);
+    });
+  }
+  tableBody.addEventListener('focusin', (event) => {
+    if (canvas.dataset.view !== 'zebra') return;
+    const input = event.target.closest?.('[data-index]');
+    if (!input) return;
+    state.selectedPartial = Number(input.dataset.index);
+    draw(canvas, state.partials, state);
+    for (const row of tableBody.querySelectorAll('tr')) row.classList.remove('is-selected');
+    input.closest('tr')?.classList.add('is-selected');
+  });
 
   root.querySelector('[data-export]').addEventListener('click', () => {
     const blob = new Blob([toCsv(state.partials)], { type: 'text/csv' });
@@ -748,7 +804,15 @@ function playHeard(state, recipe) {
   }).catch(() => setPlayError(root, 'The browser blocked audio. Click Hear again.'));
 }
 
-function drawZebra(canvas, partials, state, frozen) {
+function scheduleDraw(canvas, state) {
+  if (state.drawFrame) return;
+  state.drawFrame = requestAnimationFrame(() => {
+    state.drawFrame = 0;
+    draw(canvas, state.partials, state);
+  });
+}
+
+function drawZebra(canvas, partials, state) {
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   const width = canvas.clientWidth || 640;
   const height = canvas.clientHeight || 220;
@@ -757,44 +821,15 @@ function drawZebra(canvas, partials, state, frozen) {
   const ctx = canvas.getContext('2d');
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   const colors = canvasColors();
-  ctx.fillStyle = colors.card;
-  ctx.fillRect(0, 0, width, height);
-  const scale = frozen || layout(partials, width, height, 36);
-  if (!frozen) state.scale = scale;
-  const font = getComputedStyle(document.body).fontFamily;
-  ctx.font = `500 12px ${font}`;
-  ctx.fillStyle = colors.muted;
-  ctx.textBaseline = 'top';
-  ctx.fillText('Level', 8, 8);
-  ctx.textBaseline = 'alphabetic';
-  ctx.fillText('Ratio', width - 52, height - 8);
-  ctx.fillText('Decay', width - 58, 18);
-  const floor = height - scale.pad;
-  ctx.strokeStyle = colors.line;
-  ctx.beginPath();
-  ctx.moveTo(scale.pad, floor);
-  ctx.lineTo(width - scale.pad, floor);
-  ctx.stroke();
-  if (!partials.length) return;
-  for (const partial of partials) {
-    const x = ratioToX(partial.ratio, scale);
-    const top = floor - ((Math.max(-80, Math.min(0, partial.gainDb)) + 80) / 80) * (height - scale.pad * 2);
-    const depth = Math.max(0, Math.min(1, partial.decay / 4)) * 36;
-    ctx.lineWidth = 1.5;
-    ctx.strokeStyle = colors.ink;
-    ctx.globalAlpha = 0.45;
-    ctx.beginPath();
-    ctx.moveTo(x, top);
-    ctx.lineTo(x + depth, top - depth * 0.65);
-    ctx.stroke();
-    ctx.globalAlpha = 1;
-    ctx.strokeStyle = partial.gainDb > -18 ? colors.accent : colors.ink;
-    ctx.beginPath();
-    ctx.moveTo(x, floor);
-    ctx.lineTo(x, top);
-    ctx.stroke();
-    ctx.lineWidth = 1;
-  }
+  colors.font = getComputedStyle(document.body).fontFamily;
+  paintModalView(ctx, partials, {
+    width,
+    height,
+    camera: state.camera || defaultCamera(),
+    style: state.drawStyle || 'fast',
+    colors,
+    selected: state.selectedPartial,
+  });
 }
 
 function draw(canvas, partials, state, frozen) {
