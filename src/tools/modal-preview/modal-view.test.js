@@ -96,17 +96,19 @@ test('the resting wedge is a dense comb with short up-right tails', () => {
   const freqDeg = Math.atan2(last.foot.y - first.foot.y, last.foot.x - first.foot.x) * 180 / Math.PI;
   assert.ok(Math.abs(first.foot.x - first.crest.x) < 0.75);
   assert.ok(first.crest.y < first.foot.y);
-  assert.ok(tail / bar > 2.4 && tail / bar < 5.2, `tail/bar ${tail / bar}`);
-  assert.ok(run / bar > 2.6 && run / bar < 4.1, `run/bar ${run / bar}`);
-  assert.ok(tailDeg > 24 && tailDeg < 42, `tail ${tailDeg}`);
+  const rise = first.crest.y - first.back.y;
+  assert.ok(rise / bar > 1.0 && rise / bar < 1.45, `rise/bar ${rise / bar}`);
+  assert.ok(tail / bar > 1.5 && tail / bar < 2.8, `tail/bar ${tail / bar}`);
+  assert.ok(run / bar > 2.2 && run / bar < 2.9, `run/bar ${run / bar}`);
+  assert.ok(tailDeg > 30 && tailDeg < 42, `tail ${tailDeg}`);
   assert.ok(freqDeg > 28 && freqDeg < 38, `freq ${freqDeg}`);
   const lastH = Math.abs(last.foot.y - last.crest.y);
-  assert.ok(lastH / bar > 0.42 && lastH / bar < 0.62, `last/first ${lastH / bar}`);
+  assert.ok(lastH / bar > 0.58 && lastH / bar < 0.8, `last/first ${lastH / bar}`);
   const lipX = first.floor.x - first.foot.x;
   const lipY = first.foot.y - first.floor.y;
   assert.ok(lipY > 0, `rear rail should sit above the front, ${lipY}`);
   const lip = Math.hypot(lipX, first.floor.y - first.foot.y);
-  assert.ok(bar / lip > 2.8 && bar / lip < 4.4, `bar/ladder ${bar / lip}`);
+  assert.ok(bar / lip > 3.2 && bar / lip < 6.2, `bar/ladder ${bar / lip}`);
 });
 
 test('the triangles stay inside the canvas at the resting angle and a full turn', () => {

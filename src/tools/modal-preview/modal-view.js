@@ -25,8 +25,8 @@ export const PLANE = {
   pitchMin: 0.35,
   pitchMax: 0.85,
   span: 2.72,
-  height: 1,
-  depth: 4.6,
+  height: 1.29,
+  depth: 3.15,
   // Rear rail. Shallow: the tallest bar is about three and a half ladder-depths.
   lipX: -0.12,
   lipZ: 0.34,
@@ -100,9 +100,9 @@ export function frequencyT(ratio) {
 
 export function levelHeight(gainDb) {
   const number = Number(gainDb);
-  const db = clamp(Number.isFinite(number) ? number : -60, -72, 0);
-  // Compressed, like a dB meter. −24 dB (the 16th harmonic of 1/n) is half height.
-  const floor = -48;
+  const db = clamp(Number.isFinite(number) ? number : -60, -90, 0);
+  // A wide window, so a large drop in level only shortens the bar a little.
+  const floor = -78;
   return clamp((db - floor) / -floor, 0, 1);
 }
 
@@ -110,7 +110,7 @@ export function decayDepth(decay) {
   const seconds = clamp(Number(decay) || 0, 0, 24);
   // Steep on purpose: the fundamental's tail is long, the next is shorter,
   // and the rest stay down among the bars.
-  return clamp(Math.pow(seconds / 10, 1.45), 0, 1);
+  return clamp(Math.pow(seconds / 10, 1.18), 0, 1);
 }
 
 function evenT(index, count) {
@@ -258,7 +258,7 @@ export function paintModalView(ctx, partials, options = {}) {
   order.sort((a, b) => a.slice.t - b.slice.t);
   for (const item of order) {
     if (item.index === selected) continue;
-    strokeDiagonal(ctx, item.slice, detune, place, camera, look, palette, 1);
+    strokeDiagonal(ctx, item.slice, detune, place, camera, look, palette, 1, item.index);
   }
   if (style !== 'eco') {
     for (const item of order) {
@@ -349,7 +349,7 @@ function tailWorld(world) {
     const u = i / steps;
     // A small sag as the line leaves the crest, then a nearly straight run
     // along the decay axis. Short decays never get far enough to show.
-    const env = 1 - 0.34 * (1 - Math.exp(-9 * u));
+    const env = 1 - 0.18 * (1 - Math.exp(-8 * u));
     points.push({ x: world.x, y: world.y * env, z: world.z * u });
   }
   return points;
@@ -375,21 +375,23 @@ function strokeStructure(ctx, slice, detune, place, camera, look, palette, alpha
   if (!slice || slice.alpha < 0.04 || slice.height < 0.02) return;
   const tri = projectSlice(slice, detune, place, camera);
   const fade = slice.alpha * alphaScale;
-  const rung = { ...look, width: look.width * 0.65, halo: 0, haloAlpha: 0 };
-  glow(ctx, [tri.foot, tri.crest], palette.ink, look, fade);
-  strokePath(ctx, [tri.foot, tri.floor], palette.ink, rung.width, fade * 0.32);
+  const front = { ...look, width: look.width * 1.4, halo: look.halo * 1.45, haloAlpha: Math.min(0.5, look.haloAlpha * 1.25) };
+  const rung = { ...look, width: look.width * 0.6, halo: 0, haloAlpha: 0 };
+  glow(ctx, [tri.foot, tri.crest], palette.ink, front, fade);
+  strokePath(ctx, [tri.foot, tri.floor], palette.ink, rung.width, fade * 0.3);
 }
 
-function strokeDiagonal(ctx, slice, detune, place, camera, look, palette, alphaScale) {
+function strokeDiagonal(ctx, slice, detune, place, camera, look, palette, alphaScale, index = 0) {
   if (!slice || slice.alpha < 0.04 || slice.height < 0.02) return;
   const tri = projectSlice(slice, detune, place, camera);
-  const hair = { width: Math.max(0.7, look.width * 0.45), halo: look.halo * 0.35, haloAlpha: look.haloAlpha * 0.25, alpha: 0.4 };
-  glow(ctx, [tri.crest, tri.floor], palette.wire, hair, slice.alpha * alphaScale * 0.4);
+  const near = index < 8 ? 1 : Math.max(0.2, 1 - (index - 7) / 9);
+  const hair = { width: Math.max(0.75, look.width * 0.55), halo: look.halo * 0.5, haloAlpha: look.haloAlpha * 0.4, alpha: 0.55 };
+  glow(ctx, [tri.crest, tri.floor], palette.wire, hair, slice.alpha * alphaScale * 0.55 * near);
 }
 
 function strokeTail(ctx, slice, detune, place, camera, look, palette, alphaScale) {
   // Short decays stay hidden in the bar tops. Only the long ones leave the comb.
-  if (!slice || slice.alpha < 0.04 || slice.depth < 0.24) return;
+  if (!slice || slice.alpha < 0.04 || slice.depth < 0.36) return;
   const tri = projectSlice(slice, detune, place, camera);
   glow(ctx, tri.curve, palette.wire, look, slice.alpha * alphaScale);
 }
@@ -440,7 +442,7 @@ function rawProject(x, y, z, camera) {
   const rise = 0.85 + (camera.pitch - PLANE.pitch) * 1.15;
   return {
     x: xr * 1 + zr * 0.78,
-    y: y + xr * -0.625 + zr * 0.58 * rise,
+    y: y + xr * -0.625 + zr * 0.75 * rise,
     depth: zr,
   };
 }
