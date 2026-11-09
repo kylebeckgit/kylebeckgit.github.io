@@ -23,6 +23,30 @@
 
 export const MORPH_MS = 260;
 
+// Knobs the String 16 picture is tuned with. paintModalView may override
+// them for a comparison pass; the defaults are what the page draws.
+const TUNE = {
+  panelMix: 0.16,
+  tailGlow: 0.52,
+  octaveGlow: 0.5,
+  tailSharp: 0.9,
+  octaveSharp: 0.74,
+  fillet: 22,
+  filletStep: 0.05,
+  bow: 0.006,
+  leftSharp: 0.82,
+  leftWidth: 0.66,
+  leftGlow: 0.5,
+  rightSharp: 0.7,
+  accentZ: 0.016,
+  rungZ: 1.5,
+  hatchAlpha: 0.78,
+};
+let activeTune = null;
+function tune() {
+  return activeTune || TUNE;
+}
+
 export const PLANE = {
   // Resting view. The floor run is about five bar-heights long.
   yaw: 0,
@@ -45,7 +69,7 @@ export const PLANE = {
   ribbonZ: 0.04,
   // Floor hatch under bars 1 to about 6. Deep enough to cross, short
   // enough to stay in the lower left.
-  latticeZ: [0.18, 0.32, 0.48],
+  latticeZ: [0.42, 0.74, 1.05],
   ratioLo: 0.35,
   ratioHi: 48,
   styles: {
@@ -289,6 +313,7 @@ export function paintModalView(ctx, partials, options = {}) {
   const rawSlices = options.slices || spaceSlices(partials);
   const slices = combHeights(rawSlices, options.position);
   const look = PLANE.styles[style] || PLANE.styles.fast;
+  activeTune = { ...TUNE, ...(options.tune || {}) };
   const palette = sitePalette(colors, options.invertPanel !== false);
   const ideal = measureFit(slices, camera, width, height, detune);
   const fit = options.fitMotion ? followFit(options.fitMotion, ideal, options.now ?? 0) : ideal;
@@ -466,12 +491,14 @@ function tailSpline(x, y0, crests, railRight, steps) {
   const points = [];
   const sagN = Math.max(8, Math.round(steps * 0.42));
   for (let i = 0; i <= sagN; i++) {
-    const t = (i / sagN) * (keys.length - 1);
+    const raw = i / sagN;
+    const eased = 1 - ((1 - raw) ** 2);
+    const t = eased * (keys.length - 1);
     const index = Math.min(keys.length - 2, Math.floor(t));
     const u = t - index;
     const a = keys[index];
     const b = keys[Math.min(keys.length - 1, index + 1)];
-    const bow = Math.sin(u * Math.PI) * y0 * 0.01;
+    const bow = Math.sin(u * Math.PI) * y0 * tune().bow;
     const sx = restScreen(a.x, a.y, a.z).sx + ((restScreen(b.x, b.y, b.z).sx - restScreen(a.x, a.y, a.z).sx) * u);
     // Bow downward, so the sag is concave and never kicks up off bar 1.
     const sy = restScreen(a.x, a.y, a.z).sy + ((restScreen(b.x, b.y, b.z).sy - restScreen(a.x, a.y, a.z).sy) * u) + bow;
@@ -481,28 +508,28 @@ function tailSpline(x, y0, crests, railRight, steps) {
   const botP = points[points.length - 1];
   const bot = restScreen(botP.x, botP.y, botP.z);
   const prevS = restScreen(prev.x, prev.y, prev.z);
-  const tipS = restScreen(tip.x, tip.y, tip.z);
   const arrive = { x: bot.sx - prevS.sx, y: bot.sy - prevS.sy };
-  const depart = { x: tipS.sx - bot.sx, y: tipS.sy - bot.sy };
+  const riseRad = 32 * Math.PI / 180;
+  const depart = { x: Math.cos(riseRad), y: -Math.sin(riseRad) };
   const aLen = Math.hypot(arrive.x, arrive.y) || 1;
-  const dLen = Math.hypot(depart.x, depart.y) || 1;
   let sx = bot.sx;
   let sy = bot.sy;
-  const fillet = 16;
-  const step = y0 * 0.085;
+  const fillet = tune().fillet;
+  const step = y0 * tune().filletStep;
   for (let i = 1; i <= fillet; i++) {
-    const t = i / (fillet + 1);
-    const dx = ((arrive.x / aLen) * (1 - t)) + ((depart.x / dLen) * t);
-    const dy = ((arrive.y / aLen) * (1 - t)) + ((depart.y / dLen) * t);
+    const t = i / fillet;
+    const dx = ((arrive.x / aLen) * (1 - t)) + (depart.x * t);
+    const dy = ((arrive.y / aLen) * (1 - t)) + (depart.y * t);
     const len = Math.hypot(dx, dy) || 1;
     sx += (dx / len) * step;
     sy += (dy / len) * step;
     points.push(fromRestScreen(x, sx, sy));
   }
-  const riseN = Math.max(6, steps - points.length + 1);
+  const riseN = 31;
   for (let i = 1; i <= riseN; i++) {
-    const u = i / riseN;
-    points.push(fromRestScreen(x, sx + ((tipS.sx - sx) * u), sy + ((tipS.sy - sy) * u)));
+    sx += depart.x * step;
+    sy += depart.y * step;
+    points.push(fromRestScreen(x, sx, sy));
   }
   return points;
 }
@@ -525,7 +552,7 @@ function tailWorld(slice, world, maxSeconds, air) {
   const seconds = Math.max(0.05, Number(slice?.seconds) || 0.2);
   const shape = drawShape(seconds, maxSeconds || seconds);
   if (!shape.air) {
-    const z = PLANE.accentZ;
+    const z = tune().accentZ;
     const top = world.y;
     return [
       { x: world.x, y: top, z: 0 },
@@ -565,16 +592,16 @@ function glow(ctx, points, color, look, alpha) {
 function hatchLimit(placed, detune) {
   const xs = placed.map((item) => worldOf(item.slice, detune).x).sort((a, b) => a - b);
   if (xs.length < 2) return Infinity;
-  return xs[0] + 0.27 * (xs[xs.length - 1] - xs[0]);
+  return xs[0] + 0.34 * (xs[xs.length - 1] - xs[0]);
 }
 
 function drawSlices(ctx, slices, detune, place, camera, look, palette, clock, style, selected, bloom, weight, bulk = 1, alpha = 1, accentAlpha = alpha, hatchAlpha = alpha) {
   const ink = { width: weight * bulk, alpha, halo: 0, haloAlpha: 0 };
   const accent = { width: weight * 0.5 * bulk, alpha: accentAlpha, halo: 0, haloAlpha: 0 };
-  const tail = { width: weight * bulk, alpha: 1, halo: 0, haloAlpha: 0 };
-  const octave = { width: weight * 0.78 * bulk, alpha: 1, halo: 0, haloAlpha: 0 };
+  const tail = { width: weight * (bloom ? 1.05 : 1), alpha: 1, halo: 0, haloAlpha: 0 };
+  const octave = { width: weight * (bloom ? 0.82 : 0.78), alpha: 1, halo: 0, haloAlpha: 0 };
   const rail = { width: weight * bulk, alpha, halo: 0, haloAlpha: 0 };
-  const rung = { width: weight * 0.72 * bulk, alpha: hatchAlpha, halo: 0, haloAlpha: 0 };
+  const rung = { width: weight * 0.72 * bulk, alpha: bloom ? hatchAlpha : tune().hatchAlpha, halo: 0, haloAlpha: 0 };
   const air = airFrame(slices, clock, detune);
   const visible = [];
   for (let index = 0; index < slices.length; index++) {
@@ -604,7 +631,7 @@ function drawSlices(ctx, slices, detune, place, camera, look, palette, clock, st
       const world = worldOf(item.slice, detune);
       // One rung per bar, back along depth. The left ones run far enough
       // to cross the neighbouring curve-feet, which is the lattice.
-      const rungZ = world.x <= limit ? 0.7 : PLANE.ribbonZ;
+      const rungZ = world.x <= limit ? tune().rungZ : PLANE.ribbonZ;
       const far = place(camera, world.x, 0, rungZ);
       glow(ctx, [item.tri.foot, far], palette.ink, world.x <= limit ? rung : ink, item.slice.alpha);
       glow(ctx, [item.tri.foot, item.tri.crest], palette.ink, ink, item.slice.alpha);
@@ -615,13 +642,18 @@ function drawSlices(ctx, slices, detune, place, camera, look, palette, clock, st
     if (item.shape.air) {
       const rank = air.rankOf(item.slice);
       const look = rank === 0 ? tail : octave;
-      const strength = bloom ? (rank === 0 ? 0.95 : 0.7) : (rank === 0 ? 1 : 0.82);
+      const strength = bloom
+        ? (rank === 0 ? tune().tailGlow : tune().octaveGlow)
+        : (rank === 0 ? tune().tailSharp : tune().octaveSharp);
       glow(ctx, item.tri.curve, palette.wire, look, strength);
       continue;
     }
     const left = world.x <= limit;
-    const strength = left ? (bloom ? 0.55 : 0.9) : (bloom ? accentAlpha * 1.6 : 0.66);
-    glow(ctx, item.tri.curve, palette.wire, accent, Math.min(1, strength));
+    const width = weight * (left ? tune().leftWidth : 0.5) * bulk;
+    const strength = left
+      ? (bloom ? tune().leftGlow : tune().leftSharp)
+      : (bloom ? accentAlpha * 1.8 : tune().rightSharp);
+    glow(ctx, item.tri.curve, palette.wire, { ...accent, width }, Math.min(1, strength));
   }
   if (bloom || selected < 0 || !slices[selected]) return;
   const slice = slices[selected];
@@ -705,7 +737,7 @@ function sitePalette(colors, invert = true) {
   const fg = colors?.ink || colors?.fg || '#1f1d1a';
   // --muted is the site's lighter dark. Zebra's panel is a mid grey, not black.
   const muted = colors?.muted || '#6a655c';
-  const panel = invert ? mixHex(fg, muted, 0.42) : bg;
+  const panel = invert ? mixHex(fg, muted, tune().panelMix) : bg;
   return {
     panel,
     ink: invert ? bg : fg,
