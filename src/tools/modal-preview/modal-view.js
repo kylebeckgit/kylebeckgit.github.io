@@ -302,19 +302,21 @@ export function paintModalView(ctx, partials, options = {}) {
   const weight = lineWeight(fit.scale) * (style === 'eco' ? 0.85 : style === 'glow' ? 1.12 : 1);
   // Two stacked blooms. The wide one fills the gaps between close lines.
   // The tighter one brightens the mesh those overlaps make.
-  const wide = Math.max(6, weight * (style === 'eco' ? 2.2 : 4.2));
-  const tight = Math.max(3, weight * (style === 'eco' ? 1.2 : 2.1));
+  // Cream bloom stays soft so neighbours keep a dark gap. Accent bloom
+  // is softer still, a tint rather than a second set of bars.
+  const wide = Math.max(3.5, weight * (style === 'eco' ? 1.1 : 1.55));
+  const tight = Math.max(2, weight * (style === 'eco' ? 0.7 : 0.95));
   ctx.save();
   ctx.filter = `blur(${wide}px)`;
   ctx.globalCompositeOperation = palette.bloom;
-  drawSlices(ctx, slices, detune, place, camera, look, palette, clock, style, selected, true, weight, 2.4, 0.55);
+  drawSlices(ctx, slices, detune, place, camera, look, palette, clock, style, selected, true, weight, 1.25, 0.26, 0.12, 0.16);
   ctx.restore();
   ctx.save();
   ctx.filter = `blur(${tight}px)`;
   ctx.globalCompositeOperation = palette.bloom;
-  drawSlices(ctx, slices, detune, place, camera, look, palette, clock, style, selected, true, weight, 1.6, 0.85);
+  drawSlices(ctx, slices, detune, place, camera, look, palette, clock, style, selected, true, weight, 1.08, 0.2, 0.08, 0.12);
   ctx.restore();
-  drawSlices(ctx, slices, detune, place, camera, look, palette, clock, style, selected, false, weight, 1, 1);
+  drawSlices(ctx, slices, detune, place, camera, look, palette, clock, style, selected, false, weight, 1, 1, 0.48, 0.55);
   ctx.globalAlpha = 1;
   ctx.globalCompositeOperation = 'source-over';
   const air = airFrame(slices, clock, detune);
@@ -458,13 +460,7 @@ function onCrest(x, crest) {
 // rises straight to a tip past the right end of the front rail.
 function tailSpline(x, y0, crests, railRight, steps) {
   const guides = (crests && crests.length) ? crests : [{ x, y: y0 }];
-  const keys = guides.map((crest, index) => {
-    const point = index === 0 ? { x, y: y0, z: 0 } : onCrest(x, crest);
-    // Sit just above the middle crests so the sag is a line of its own,
-    // and let it meet bar 4's crest height at the end of the curve.
-    if (index > 0 && index < guides.length - 1) point.y += y0 * 0.08;
-    return point;
-  });
+  const keys = guides.map((crest, index) => (index === 0 ? { x, y: y0, z: 0 } : onCrest(x, crest)));
   const crest = restScreen(x, y0, 0);
   const tip = fromRestScreen(x, Math.max(railRight + 0.55, crest.sx + 2.6), crest.sy - (y0 * 0.72));
   const points = [];
@@ -475,9 +471,10 @@ function tailSpline(x, y0, crests, railRight, steps) {
     const u = t - index;
     const a = keys[index];
     const b = keys[Math.min(keys.length - 1, index + 1)];
-    const bow = Math.sin(u * Math.PI) * y0 * 0.012;
+    const bow = Math.sin(u * Math.PI) * y0 * 0.02;
     const sx = restScreen(a.x, a.y, a.z).sx + ((restScreen(b.x, b.y, b.z).sx - restScreen(a.x, a.y, a.z).sx) * u);
-    const sy = restScreen(a.x, a.y, a.z).sy + ((restScreen(b.x, b.y, b.z).sy - restScreen(a.x, a.y, a.z).sy) * u) - bow;
+    // Bow downward, so the sag is concave and never kicks up off bar 1.
+    const sy = restScreen(a.x, a.y, a.z).sy + ((restScreen(b.x, b.y, b.z).sy - restScreen(a.x, a.y, a.z).sy) * u) + bow;
     points.push(fromRestScreen(x, sx, sy));
   }
   const prev = points[points.length - 2];
@@ -571,12 +568,11 @@ function hatchLimit(placed, detune) {
   return xs[0] + 0.27 * (xs[xs.length - 1] - xs[0]);
 }
 
-function drawSlices(ctx, slices, detune, place, camera, look, palette, clock, style, selected, bloom, weight, bulk = 1, alpha = 1) {
+function drawSlices(ctx, slices, detune, place, camera, look, palette, clock, style, selected, bloom, weight, bulk = 1, alpha = 1, accentAlpha = alpha, hatchAlpha = alpha) {
   const ink = { width: weight * bulk, alpha, halo: 0, haloAlpha: 0 };
-  const accent = { width: weight * 0.58 * bulk, alpha, halo: 0, haloAlpha: 0 };
-  // The two rails are a ribbon. On the sharp pass they are heavier; the
-  // bloom passes are what fuse them.
-  const rail = { width: weight * (bloom ? bulk : 2.4), alpha, halo: 0, haloAlpha: 0 };
+  const accent = { width: weight * 0.5 * bulk, alpha: accentAlpha, halo: 0, haloAlpha: 0 };
+  const rail = { width: weight * bulk, alpha, halo: 0, haloAlpha: 0 };
+  const rung = { width: weight * 0.72 * bulk, alpha: hatchAlpha, halo: 0, haloAlpha: 0 };
   const air = airFrame(slices, clock, detune);
   const visible = [];
   for (let index = 0; index < slices.length; index++) {
@@ -602,9 +598,9 @@ function drawSlices(ctx, slices, detune, place, camera, look, palette, clock, st
       const world = worldOf(item.slice, detune);
       // One rung per bar, back along depth. The left ones run far enough
       // to cross the neighbouring curve-feet, which is the lattice.
-      const rungZ = world.x <= limit ? 0.62 : PLANE.ribbonZ;
+      const rungZ = world.x <= limit ? 0.7 : PLANE.ribbonZ;
       const far = place(camera, world.x, 0, rungZ);
-      glow(ctx, [item.tri.foot, far], palette.ink, ink, item.slice.alpha);
+      glow(ctx, [item.tri.foot, far], palette.ink, world.x <= limit ? rung : ink, item.slice.alpha);
       glow(ctx, [item.tri.foot, item.tri.crest], palette.ink, ink, item.slice.alpha);
     }
   }
@@ -679,7 +675,8 @@ function rawProject(x, y, z, camera) {
 function sitePalette(colors, invert = true) {
   const bg = colors?.bg || '#f2ede3';
   const fg = colors?.ink || colors?.fg || '#1f1d1a';
-  const panel = invert ? fg : bg;
+  // --muted is the site's lighter dark. Zebra's panel is a mid grey, not black.
+  const panel = invert ? (colors?.muted || '#6a655c') : bg;
   return {
     panel,
     ink: invert ? bg : fg,
