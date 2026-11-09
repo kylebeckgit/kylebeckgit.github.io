@@ -26,19 +26,19 @@ export const MORPH_MS = 260;
 // Knobs the String 16 picture is tuned with. paintModalView may override
 // them for a comparison pass; the defaults are what the page draws.
 const TUNE = {
-  panelMix: 0.16,
+  panelMix: 0.34,
   tailGlow: 0.52,
   octaveGlow: 0.5,
   tailSharp: 0.9,
   octaveSharp: 0.74,
   fillet: 22,
-  filletStep: 0.05,
+  filletStep: 0.08,
   bow: 0.006,
   leftSharp: 0.82,
   leftWidth: 0.66,
-  leftGlow: 0.5,
+  leftGlow: 0.68,
   rightSharp: 0.7,
-  accentZ: 0.016,
+  accentZ: 0.008,
   rungZ: 1.5,
   hatchAlpha: 0.78,
 };
