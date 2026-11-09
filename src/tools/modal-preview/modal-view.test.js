@@ -96,14 +96,17 @@ test('the resting wedge is a dense comb with short up-right tails', () => {
   const freqDeg = Math.atan2(last.foot.y - first.foot.y, last.foot.x - first.foot.x) * 180 / Math.PI;
   assert.ok(Math.abs(first.foot.x - first.crest.x) < 0.75);
   assert.ok(first.crest.y < first.foot.y);
-  assert.ok(tail / bar > 0.85 && tail / bar < 1.6, `tail/bar ${tail / bar}`);
-  assert.ok(run < bar * 0.85, `run/bar ${run / bar}`);
-  assert.ok(tailDeg > 24 && tailDeg < 40, `tail ${tailDeg}`);
-  assert.ok(freqDeg > 32 && freqDeg < 48, `freq ${freqDeg}`);
-  const second = tris[1];
-  const h1 = Math.abs(first.foot.y - first.crest.y);
-  const h2 = Math.abs(second.foot.y - second.crest.y);
-  assert.ok(h2 / h1 > 0.42 && h2 / h1 < 0.62, `second/first ${h2 / h1}`);
+  assert.ok(tail / bar > 2.4 && tail / bar < 5.2, `tail/bar ${tail / bar}`);
+  assert.ok(run / bar > 4.2 && run / bar < 6.2, `run/bar ${run / bar}`);
+  assert.ok(tailDeg > 24 && tailDeg < 42, `tail ${tailDeg}`);
+  assert.ok(freqDeg > 28 && freqDeg < 38, `freq ${freqDeg}`);
+  const lastH = Math.abs(last.foot.y - last.crest.y);
+  assert.ok(lastH / bar > 0.42 && lastH / bar < 0.62, `last/first ${lastH / bar}`);
+  const lipX = first.floor.x - first.foot.x;
+  const lipY = first.foot.y - first.floor.y;
+  assert.ok(lipX < 0 && lipY > 0, `lip ${lipX} ${lipY}`);
+  const lip = Math.hypot(lipX, first.floor.y - first.foot.y);
+  assert.ok(lip / bar < 0.7, `lip/bar ${lip / bar}`);
 });
 
 test('the triangles stay inside the canvas at the resting angle and a full turn', () => {

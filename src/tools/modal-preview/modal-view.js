@@ -1,13 +1,13 @@
-// Each partial is its own wireframe right triangle. Nothing connects them.
+// Each partial is its own wireframe slice, oblique like Zebra's Partials view.
 //
-// The picture is oblique, like Zebra's Partials view. Level is screen-vertical,
-// so the front edge never leans. Frequency runs down-right. Decay runs up-right.
-// Yaw turns that pair around the vertical. Pitch only changes how steeply
-// decay rises. It does not tilt the verticals.
+//   x  frequency, evenly spaced, falling down-right at about 32 degrees
+//   y  level, screen-vertical, on a compressed dB scale
+//   z  decay time, rising up-right. Only the long decays leave the comb.
 //
-//   x  frequency
-//   y  level
-//   z  decay
+// The floor has a short second rail. Its offset is up-left at the resting
+// angle: a little thickness into the screen, not the long decay axis.
+// Yaw turns frequency and decay around the vertical, so the fronts stay
+// vertical. Pitch only changes how steeply decay rises.
 //
 // Motion lives in aimSlices / sampleSlices. Match by index. A profile change
 // eases for MORPH_MS with ease-out. New indices grow from zero height. Indices
@@ -17,24 +17,24 @@
 export const MORPH_MS = 260;
 
 export const PLANE = {
-  // Resting three-quarter. Frequency falls down-right at a shallow angle.
-  // Decay rises up-right at about 30 degrees. The frequency run is short
-  // next to the bar height, and the longest tail is only a little longer
-  // than the tallest bar.
-  yaw: 0.02,
-  pitch: 0.58,
+  // Resting view. The floor run is about five bar-heights long.
+  yaw: 0,
+  pitch: 0.55,
   focal: 9.5,
-  pitchMin: 0.5,
-  pitchMax: 0.95,
-  span: 2.6,
-  height: 2.8,
-  depth: 4.6,
+  pitchMin: 0.35,
+  pitchMax: 0.85,
+  span: 4.24,
+  height: 1,
+  depth: 5.05,
+  // Short floor thickness. At yaw 0 this lands up-left of each foot.
+  lipX: -0.2,
+  lipZ: 0.035,
   ratioLo: 0.35,
   ratioHi: 48,
   styles: {
-    eco: { width: 1.15, alpha: 0.95, halo: 0, haloAlpha: 0 },
-    fast: { width: 1.05, alpha: 0.92, halo: 3.2, haloAlpha: 0.22 },
-    glow: { width: 1.15, alpha: 1, halo: 5.5, haloAlpha: 0.4 },
+    eco: { width: 1.05, alpha: 0.95, halo: 2.4, haloAlpha: 0.16 },
+    fast: { width: 1.05, alpha: 0.92, halo: 6, haloAlpha: 0.22 },
+    glow: { width: 1.1, alpha: 1, halo: 7.5, haloAlpha: 0.28 },
   },
 };
 
@@ -79,13 +79,22 @@ export function frequencyT(ratio) {
 
 export function levelHeight(gainDb) {
   const number = Number(gainDb);
-  const db = clamp(Number.isFinite(number) ? number : -60, -80, 0);
-  return Math.pow(10, db / 20);
+  const db = clamp(Number.isFinite(number) ? number : -60, -72, 0);
+  // Compressed, like a dB meter. −24 dB (the 16th harmonic of 1/n) is half height.
+  const floor = -48;
+  return clamp((db - floor) / -floor, 0, 1);
 }
 
 export function decayDepth(decay) {
   const seconds = clamp(Number(decay) || 0, 0, 24);
-  return clamp(Math.pow(seconds / 9, 0.8), 0, 1);
+  // Steep on purpose: the fundamental's tail is long, the next is shorter,
+  // and the rest stay down among the bars.
+  return clamp(Math.pow(seconds / 10, 1.45), 0, 1);
+}
+
+function evenT(index, count) {
+  if (count <= 1) return 0.5;
+  return index / (count - 1);
 }
 
 // Positive detune spreads frequency away from the low end. Negative bunches
@@ -108,6 +117,7 @@ export function aimSlices(motion, partials, now, duration = MORPH_MS) {
   const to = [];
   for (let i = 0; i < count; i++) {
     const target = next[i] || { ...(shown[i] || sliceFromPartial(null, 0)), height: 0, depth: 0, alpha: 0 };
+    target.t = evenT(i, count);
     if (shown[i]) from.push(shown[i]);
     else from.push({ t: target.t, height: 0, depth: 0, alpha: 0 });
     to.push(target);
@@ -154,7 +164,8 @@ export function measureFit(slices, camera, width, height, detune = 0) {
     const world = worldOf(slice, detune);
     const samples = [
       { x: world.x, y: 0, z: 0 },
-      { x: world.x, y: 0, z: world.z },
+      { x: world.x, y: world.y, z: 0 },
+      floorBack(world),
       ...tailWorld(world),
     ];
     for (const sample of samples) {
@@ -179,7 +190,7 @@ export function measureFit(slices, camera, width, height, detune = 0) {
   );
   // Don't blow a compact wedge up to the edges. Still shrink if a turn
   // or a detune spread would otherwise leave the canvas.
-  const capScale = Math.min((width * 0.62) / spanX, (height * 0.62) / spanY);
+  const capScale = Math.min((width * 0.9) / spanX, (height * 0.84) / spanY);
   const scale = Math.min(fitScale, capScale);
   return { scale, cx: (minX + maxX) / 2, cy: (minY + maxY) / 2 };
 }
@@ -210,7 +221,7 @@ export function followFit(motion, ideal, now) {
 export function paintModalView(ctx, partials, options = {}) {
   const { width, height, style = 'fast', colors, selected = -1, detune = 0 } = options;
   const camera = clampCamera(options.camera);
-  const slices = options.slices || (partials || []).map((partial) => sliceFromPartial(partial, 1));
+  const slices = options.slices || spaceSlices(partials);
   const look = PLANE.styles[style] || PLANE.styles.fast;
   const palette = sitePalette(colors);
   const ideal = measureFit(slices, camera, width, height, detune);
@@ -221,15 +232,23 @@ export function paintModalView(ctx, partials, options = {}) {
   ctx.fillRect(0, 0, width, height);
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
-  drawFloor(ctx, slices, detune, place, camera, palette);
   const order = slices.map((slice, index) => ({ slice, index }));
-  order.sort((a, b) => worldOf(b.slice, detune).z - worldOf(a.slice, detune).z);
+  order.sort((a, b) => a.slice.t - b.slice.t);
+  if (style !== 'eco') {
+    drawRails(ctx, order.map((item) => item.slice), detune, place, camera, palette, look);
+    for (const item of order) {
+      if (item.index === selected) continue;
+      strokeStructure(ctx, item.slice, detune, place, camera, look, palette, 1);
+    }
+  }
   for (const item of order) {
     if (item.index === selected) continue;
-    strokeTriangle(ctx, item.slice, detune, place, camera, look, palette, style, 1);
+    strokeTail(ctx, item.slice, detune, place, camera, look, palette, 1);
   }
   if (selected >= 0 && slices[selected]) {
-    strokeTriangle(ctx, slices[selected], detune, place, camera, { ...look, width: look.width + 0.8, halo: Math.max(look.halo, 3), haloAlpha: 0.4 }, palette, style, 1);
+    const chosen = { ...look, width: look.width + 0.6, halo: Math.max(look.halo, 3.5), haloAlpha: Math.max(look.haloAlpha, 0.28) };
+    if (style !== 'eco') strokeStructure(ctx, slices[selected], detune, place, camera, chosen, palette, 1);
+    strokeTail(ctx, slices[selected], detune, place, camera, chosen, palette, 1);
   }
   ctx.globalAlpha = 1;
   ctx.globalCompositeOperation = 'source-over';
@@ -270,32 +289,39 @@ export function worldOf(slice, detune = 0) {
   };
 }
 
-function drawFloor(ctx, slices, detune, place, camera, palette) {
-  const visible = slices.filter((slice) => slice && slice.alpha > 0.2);
+function spaceSlices(partials) {
+  const slices = (partials || []).map((partial) => sliceFromPartial(partial, 1));
+  for (let i = 0; i < slices.length; i++) slices[i].t = evenT(i, slices.length);
+  return slices;
+}
+
+function drawRails(ctx, slices, detune, place, camera, palette, look) {
+  const visible = slices.filter((slice) => slice && slice.alpha > 0.35 && slice.height > 0.02);
   if (visible.length < 2) return;
-  const worlds = visible.map((slice) => worldOf(slice, detune));
-  let minX = Infinity;
-  let maxX = -Infinity;
-  for (const world of worlds) {
-    if (world.x < minX) minX = world.x;
-    if (world.x > maxX) maxX = world.x;
+  const front = [];
+  const back = [];
+  for (const slice of visible) {
+    const world = worldOf(slice, detune);
+    const rear = floorBack(world);
+    front.push(place(camera, world.x, 0, 0));
+    back.push(place(camera, rear.x, rear.y, rear.z));
   }
-  ctx.globalCompositeOperation = 'source-over';
-  ctx.strokeStyle = palette.wire;
-  ctx.globalAlpha = 0.35;
-  ctx.lineWidth = 1;
-  line(ctx, place(camera, minX, 0, 0), place(camera, maxX, 0, 0));
-  ctx.globalAlpha = 1;
+  strokePath(ctx, back, palette.ink, look.width, 0.55);
+  strokePath(ctx, front, palette.ink, look.width, 0.85);
+}
+
+function floorBack(world) {
+  return { x: world.x + PLANE.lipX, y: 0, z: PLANE.lipZ };
 }
 
 function tailWorld(world) {
-  const steps = 8;
+  const steps = 12;
   const points = [];
   for (let i = 0; i <= steps; i++) {
     const u = i / steps;
-    // Exponential level over the decay time. The oblique time axis lifts
-    // the start of the curve; the fall bends it back toward the floor.
-    const env = Math.exp(-0.72 * u);
+    // A small sag as the line leaves the crest, then a nearly straight run
+    // along the decay axis. Short decays never get far enough to show.
+    const env = 1 - 0.14 * (1 - Math.exp(-6 * u));
     points.push({ x: world.x, y: world.y * env, z: world.z * u });
   }
   return points;
@@ -312,37 +338,43 @@ function strokePath(ctx, points, color, width, alpha) {
   ctx.stroke();
 }
 
-function strokeTriangle(ctx, slice, detune, place, camera, look, palette, style, alphaScale) {
-  if (!slice || slice.alpha < 0.015) return;
+function glow(ctx, points, color, look, alpha) {
+  if (look.halo > 0) strokePath(ctx, points, color, look.halo, look.haloAlpha * alpha);
+  strokePath(ctx, points, color, look.width, look.alpha * alpha);
+}
+
+function strokeStructure(ctx, slice, detune, place, camera, look, palette, alphaScale) {
+  if (!slice || slice.alpha < 0.04 || slice.height < 0.02) return;
   const tri = projectSlice(slice, detune, place, camera);
   const fade = slice.alpha * alphaScale;
-  const topsOnly = style === 'eco';
-  const parts = topsOnly ? [tri.curve] : [tri.curve, [tri.foot, tri.crest], [tri.foot, tri.floor]];
-  if (look.halo > 0) {
-    ctx.save();
-    ctx.globalCompositeOperation = palette.bloom;
-    for (const part of parts) strokePath(ctx, part, palette.wire, look.halo, look.haloAlpha * fade);
-    ctx.restore();
-  }
-  ctx.globalCompositeOperation = 'source-over';
-  for (const part of parts) strokePath(ctx, part, palette.wire, look.width, look.alpha * fade);
+  glow(ctx, [tri.foot, tri.crest], palette.ink, look, fade);
+  glow(ctx, [tri.foot, tri.floor], palette.ink, { ...look, haloAlpha: look.haloAlpha * 0.7 }, fade * 0.85);
+}
+
+function strokeTail(ctx, slice, detune, place, camera, look, palette, alphaScale) {
+  // Short decays stay hidden in the bar tops. Only the long ones leave the comb.
+  if (!slice || slice.alpha < 0.04 || slice.depth < 0.24) return;
+  const tri = projectSlice(slice, detune, place, camera);
+  glow(ctx, tri.curve, palette.wire, look, slice.alpha * alphaScale);
 }
 
 export function layoutTriangles(slices, camera, width, height, detune = 0) {
   const view = clampCamera(camera);
-  const fit = measureFit(slices, view, width, height, detune);
+  const spaced = slices.map((slice, index) => ({ ...slice, t: evenT(index, slices.length) }));
+  const fit = measureFit(spaced, view, width, height, detune);
   const place = placement(fit, width, height);
-  return slices.map((slice) => projectSlice(slice, detune, place, view));
+  return spaced.map((slice) => projectSlice(slice, detune, place, view));
 }
 
 function projectSlice(slice, detune, place, camera) {
   const world = worldOf(slice, detune);
+  const rear = floorBack(world);
   const curve = tailWorld(world).map((point) => place(camera, point.x, point.y, point.z));
   return {
     foot: place(camera, world.x, 0, 0),
     crest: place(camera, world.x, world.y, 0),
     back: curve[curve.length - 1],
-    floor: place(camera, world.x, 0, world.z),
+    floor: place(camera, rear.x, rear.y, rear.z),
     curve,
   };
 }
@@ -365,19 +397,15 @@ function screenOf(camera, x, y, z) {
 function rawProject(x, y, z, camera) {
   const cy = Math.cos(camera.yaw);
   const sy = Math.sin(camera.yaw);
-  // Turn frequency and decay around the vertical. Level is not rotated,
-  // so a front edge stays a vertical line at every yaw.
-  const x1 = x * cy + z * sy;
-  const z1 = -x * sy + z * cy;
-  // Tuned so a full-height bar and a full-length tail meet at about 30 degrees
-  // up-right, and the tail is a little longer than the bar.
-  // Frequency falls at about 38 degrees. Decay rises; the curve then
-  // bends as the level falls, so the chord of a full tail is near 30 degrees.
-  const tailRise = camera.pitch * 2.02;
+  // Frequency and decay turn around the vertical. Level does not, so a
+  // front edge stays vertical at every yaw.
+  const xr = x * cy + z * sy;
+  const zr = -x * sy + z * cy;
+  const rise = 0.85 + (camera.pitch - PLANE.pitch) * 1.15;
   return {
-    x: x1 * 0.72 + z1 * 1.15,
-    y: y * 1.55 - x1 * 0.62 + z1 * tailRise,
-    depth: z1,
+    x: xr * 1 + zr * 0.78,
+    y: y + xr * -0.625 + zr * 0.58 * rise,
+    depth: zr,
   };
 }
 
@@ -385,7 +413,7 @@ function sitePalette(colors) {
   const panel = colors?.bg || '#f2ede3';
   return {
     panel,
-    ink: colors?.ink || '#1a1916',
+    ink: colors?.ink || colors?.fg || '#1f1d1a',
     wire: colors?.accent || '#d4421c',
     bloom: luminance(panel) < 90 ? 'lighter' : 'source-over',
   };
