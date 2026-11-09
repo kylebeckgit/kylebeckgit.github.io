@@ -39,7 +39,7 @@ export const PLANE = {
   airRel: 0.46,
   // Accent sits just beside the ink bar. Close enough to glow into it,
   // far enough that the bar stays the ink colour.
-  accentZ: 0.09,
+  accentZ: 0.05,
   // Back rail, close enough that the glow fuses it with the front into
   // one heavy ribbon.
   ribbonZ: 0.04,
@@ -430,7 +430,7 @@ function airFrame(slices, clock, detune) {
     anchorX: head.x,
     anchorY: head.y,
     rankOf: (slice) => rank.get(slice) ?? 0,
-    crests: ordered.slice(0, 4),
+    crests: ordered.slice(0, 5),
     railRight: ordered.length ? ordered[ordered.length - 1].x : head.x + PLANE.span,
   };
 }
@@ -471,7 +471,7 @@ function tailSpline(x, y0, crests, railRight, steps) {
     const u = t - index;
     const a = keys[index];
     const b = keys[Math.min(keys.length - 1, index + 1)];
-    const bow = Math.sin(u * Math.PI) * y0 * 0.02;
+    const bow = Math.sin(u * Math.PI) * y0 * 0.01;
     const sx = restScreen(a.x, a.y, a.z).sx + ((restScreen(b.x, b.y, b.z).sx - restScreen(a.x, a.y, a.z).sx) * u);
     // Bow downward, so the sag is concave and never kicks up off bar 1.
     const sy = restScreen(a.x, a.y, a.z).sy + ((restScreen(b.x, b.y, b.z).sy - restScreen(a.x, a.y, a.z).sy) * u) + bow;
@@ -488,8 +488,8 @@ function tailSpline(x, y0, crests, railRight, steps) {
   const dLen = Math.hypot(depart.x, depart.y) || 1;
   let sx = bot.sx;
   let sy = bot.sy;
-  const fillet = 6;
-  const step = y0 * 0.045;
+  const fillet = 16;
+  const step = y0 * 0.085;
   for (let i = 1; i <= fillet; i++) {
     const t = i / (fillet + 1);
     const dx = ((arrive.x / aLen) * (1 - t)) + ((depart.x / dLen) * t);
@@ -571,6 +571,8 @@ function hatchLimit(placed, detune) {
 function drawSlices(ctx, slices, detune, place, camera, look, palette, clock, style, selected, bloom, weight, bulk = 1, alpha = 1, accentAlpha = alpha, hatchAlpha = alpha) {
   const ink = { width: weight * bulk, alpha, halo: 0, haloAlpha: 0 };
   const accent = { width: weight * 0.5 * bulk, alpha: accentAlpha, halo: 0, haloAlpha: 0 };
+  const tail = { width: weight * bulk, alpha: 1, halo: 0, haloAlpha: 0 };
+  const octave = { width: weight * 0.78 * bulk, alpha: 1, halo: 0, haloAlpha: 0 };
   const rail = { width: weight * bulk, alpha, halo: 0, haloAlpha: 0 };
   const rung = { width: weight * 0.72 * bulk, alpha: hatchAlpha, halo: 0, haloAlpha: 0 };
   const air = airFrame(slices, clock, detune);
@@ -594,6 +596,10 @@ function drawSlices(ctx, slices, detune, place, camera, look, palette, clock, st
     });
     glow(ctx, atDepth(placed, 0), palette.ink, rail, 1);
     glow(ctx, atDepth(placed, PLANE.ribbonZ), palette.ink, rail, 1);
+    const hatched = placed.filter((item) => worldOf(item.slice, detune).x <= limit);
+    for (const z of PLANE.latticeZ) {
+      glow(ctx, atDepth(hatched, z), palette.ink, rung, 1);
+    }
     for (const item of placed) {
       const world = worldOf(item.slice, detune);
       // One rung per bar, back along depth. The left ones run far enough
@@ -605,7 +611,17 @@ function drawSlices(ctx, slices, detune, place, camera, look, palette, clock, st
     }
   }
   for (const item of placed) {
-    glow(ctx, item.tri.curve, palette.wire, accent, item.slice.alpha);
+    const world = worldOf(item.slice, detune);
+    if (item.shape.air) {
+      const rank = air.rankOf(item.slice);
+      const look = rank === 0 ? tail : octave;
+      const strength = bloom ? (rank === 0 ? 0.95 : 0.7) : (rank === 0 ? 1 : 0.82);
+      glow(ctx, item.tri.curve, palette.wire, look, strength);
+      continue;
+    }
+    const left = world.x <= limit;
+    const strength = left ? (bloom ? 0.55 : 0.9) : (bloom ? accentAlpha * 1.6 : 0.66);
+    glow(ctx, item.tri.curve, palette.wire, accent, Math.min(1, strength));
   }
   if (bloom || selected < 0 || !slices[selected]) return;
   const slice = slices[selected];
@@ -672,11 +688,24 @@ function rawProject(x, y, z, camera) {
   };
 }
 
+function mixHex(a, b, t) {
+  const parse = (hex) => {
+    const match = /^#([0-9a-f]{6})$/i.exec(String(hex || ''));
+    return match ? parseInt(match[1], 16) : null;
+  };
+  const pa = parse(a);
+  const pb = parse(b);
+  if (pa == null || pb == null) return a;
+  const channel = (shift) => Math.round(((pa >> shift) & 255) * (1 - t) + ((pb >> shift) & 255) * t);
+  return `#${[channel(16), channel(8), channel(0)].map((value) => value.toString(16).padStart(2, '0')).join('')}`;
+}
+
 function sitePalette(colors, invert = true) {
   const bg = colors?.bg || '#f2ede3';
   const fg = colors?.ink || colors?.fg || '#1f1d1a';
   // --muted is the site's lighter dark. Zebra's panel is a mid grey, not black.
-  const panel = invert ? (colors?.muted || '#6a655c') : bg;
+  const muted = colors?.muted || '#6a655c';
+  const panel = invert ? mixHex(fg, muted, 0.42) : bg;
   return {
     panel,
     ink: invert ? bg : fg,
