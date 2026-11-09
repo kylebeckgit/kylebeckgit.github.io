@@ -1,12 +1,13 @@
 // Each partial is its own wireframe right triangle. Nothing connects them.
 //
-//   x  frequency, left to right
-//   y  level, up from the floor
-//   z  decay, front to back
+// The picture is oblique, like Zebra's Partials view. Level is screen-vertical,
+// so the front edge never leans. Frequency runs down-right. Decay runs up-right.
+// Yaw turns that pair around the vertical. Pitch only changes how steeply
+// decay rises. It does not tilt the verticals.
 //
-// A triangle is three lines: the vertical on the front plane, the floor line
-// running back, and the sloping top that joins them. The lid is those tops
-// seen together. Eco draws only the tops. Glow is Fast plus a bloom.
+//   x  frequency
+//   y  level
+//   z  decay
 //
 // Motion lives in aimSlices / sampleSlices. Match by index. A profile change
 // eases for MORPH_MS with ease-out. New indices grow from zero height. Indices
@@ -16,21 +17,21 @@
 export const MORPH_MS = 260;
 
 export const PLANE = {
-  yaw: -0.62,
-  pitch: 0.58,
+  // Resting three-quarter. Frequency falls down-right, decay rises up-right.
+  yaw: 0.04,
+  pitch: 0.72,
   focal: 9.5,
-  perspective: 0.34,
-  pitchMin: 0.2,
-  pitchMax: 1.15,
-  span: 7.2,
-  height: 2.7,
-  depth: 3.4,
+  pitchMin: 0.28,
+  pitchMax: 0.95,
+  span: 4.6,
+  height: 2.35,
+  depth: 8.4,
   ratioLo: 0.35,
   ratioHi: 48,
   styles: {
-    eco: { width: 1.15, alpha: 0.9, halo: 0 },
-    fast: { width: 1.2, alpha: 0.92, halo: 0 },
-    glow: { width: 1.35, alpha: 1, halo: 7, haloAlpha: 0.45 },
+    eco: { width: 1.15, alpha: 0.95, halo: 0, haloAlpha: 0 },
+    fast: { width: 1.2, alpha: 1, halo: 6, haloAlpha: 0.38 },
+    glow: { width: 1.35, alpha: 1, halo: 9, haloAlpha: 0.5 },
   },
 };
 
@@ -136,18 +137,80 @@ export function slicesMoving(motion, now) {
   return now < motion.t0 + motion.dur;
 }
 
+const FIT_MARGIN = 22;
+
+export function measureFit(slices, camera, width, height, detune = 0) {
+  const view = clampCamera(camera);
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  const list = slices?.length ? slices : [sliceFromPartial({ ratio: 1, gainDb: 0, decay: 1 })];
+  for (const slice of list) {
+    if (!slice || (slice.alpha < 0.04 && slice.height < 0.02 && slice.depth < 0.02)) continue;
+    const world = worldOf(slice, detune);
+    for (const point of [
+      screenOf(view, world.x, 0, 0),
+      screenOf(view, world.x, world.y, 0),
+      screenOf(view, world.x, 0, world.z),
+    ]) {
+      if (point.x < minX) minX = point.x;
+      if (point.x > maxX) maxX = point.x;
+      if (point.y < minY) minY = point.y;
+      if (point.y > maxY) maxY = point.y;
+    }
+  }
+  if (!Number.isFinite(minX)) {
+    minX = -1;
+    maxX = 1;
+    minY = -1;
+    maxY = 1;
+  }
+  const scale = Math.min(
+    (width - FIT_MARGIN * 2) / Math.max(0.001, maxX - minX),
+    (height - FIT_MARGIN * 2) / Math.max(0.001, maxY - minY),
+  );
+  return { scale, cx: (minX + maxX) / 2, cy: (minY + maxY) / 2 };
+}
+
+export function createFitMotion() {
+  return { shown: null, now: 0, moving: false };
+}
+
+// Zooming in eases. Zooming out tracks the slices immediately so the tails
+// never leave the canvas. The center stays on the current bounds.
+export function followFit(motion, ideal, now) {
+  if (!motion.shown) {
+    motion.shown = { scale: ideal.scale, cx: ideal.cx, cy: ideal.cy };
+    motion.now = now;
+    motion.moving = false;
+    return motion.shown;
+  }
+  const dt = Math.min(0.05, Math.max(0, (now - motion.now) / 1000));
+  motion.now = now;
+  const k = dt > 0 ? 1 - Math.exp(-dt / 0.11) : 0;
+  let scale = motion.shown.scale + (ideal.scale - motion.shown.scale) * k;
+  scale = Math.min(scale, ideal.scale);
+  motion.shown = { scale, cx: ideal.cx, cy: ideal.cy };
+  motion.moving = ideal.scale - scale > ideal.scale * 0.012;
+  return motion.shown;
+}
+
 export function paintModalView(ctx, partials, options = {}) {
   const { width, height, style = 'fast', colors, selected = -1, detune = 0 } = options;
   const camera = clampCamera(options.camera);
   const slices = options.slices || (partials || []).map((partial) => sliceFromPartial(partial, 1));
   const look = PLANE.styles[style] || PLANE.styles.fast;
   const palette = sitePalette(colors);
-  const place = placement(width, height);
+  const ideal = measureFit(slices, camera, width, height, detune);
+  const fit = options.fitMotion ? followFit(options.fitMotion, ideal, options.now ?? 0) : ideal;
+  const place = placement(fit, width, height);
   ctx.clearRect(0, 0, width, height);
   ctx.fillStyle = palette.panel;
   ctx.fillRect(0, 0, width, height);
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
+  drawFloor(ctx, slices, detune, place, camera, palette);
   const order = slices.map((slice, index) => ({ slice, index }));
   order.sort((a, b) => worldOf(b.slice, detune).z - worldOf(a.slice, detune).z);
   for (const item of order) {
@@ -162,12 +225,13 @@ export function paintModalView(ctx, partials, options = {}) {
   return slices.map((slice) => projectSlice(slice, detune, place, camera).crest);
 }
 
-export function hitPartial(partials, camera, width, height, x, y, detune = 0) {
+export function hitPartial(partials, camera, width, height, x, y, detune = 0, fit = null) {
   const slices = partials?.[0] && 't' in partials[0]
     ? partials
     : (partials || []).map((partial) => sliceFromPartial(partial, 1));
-  const place = placement(width, height);
   const view = clampCamera(camera);
+  const used = fit || measureFit(slices, view, width, height, detune);
+  const place = placement(used, width, height);
   let best = -1;
   let score = 14;
   for (let i = 0; i < slices.length; i++) {
@@ -195,6 +259,30 @@ export function worldOf(slice, detune = 0) {
   };
 }
 
+function drawFloor(ctx, slices, detune, place, camera, palette) {
+  const visible = slices.filter((slice) => slice && slice.alpha > 0.2);
+  if (visible.length < 2) return;
+  const worlds = visible.map((slice) => worldOf(slice, detune));
+  let minX = Infinity;
+  let maxX = -Infinity;
+  for (const world of worlds) {
+    if (world.x < minX) minX = world.x;
+    if (world.x > maxX) maxX = world.x;
+  }
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.strokeStyle = palette.ink;
+  ctx.globalAlpha = 0.35;
+  ctx.lineWidth = 1;
+  line(ctx, place(camera, minX, 0, 0), place(camera, maxX, 0, 0));
+  ctx.globalAlpha = 0.14;
+  const reach = PLANE.depth * 0.28;
+  for (let i = 1; i <= 2; i++) {
+    const z = (reach * i) / 3;
+    line(ctx, place(camera, minX, 0, z), place(camera, maxX, 0, z));
+  }
+  ctx.globalAlpha = 1;
+}
+
 function strokeTriangle(ctx, slice, detune, place, camera, look, palette, style, alphaScale) {
   if (!slice || slice.alpha < 0.015) return;
   const tri = projectSlice(slice, detune, place, camera);
@@ -207,23 +295,28 @@ function strokeTriangle(ctx, slice, detune, place, camera, look, palette, style,
     ctx.globalAlpha = look.haloAlpha * fade;
     ctx.lineWidth = look.halo;
     line(ctx, tri.crest, tri.back);
-    if (!topsOnly) {
-      line(ctx, tri.foot, tri.crest);
-      line(ctx, tri.foot, tri.back);
-    }
     ctx.restore();
   }
   ctx.globalCompositeOperation = 'source-over';
+  ctx.strokeStyle = palette.wire;
   ctx.lineWidth = look.width;
   ctx.globalAlpha = look.alpha * fade;
-  ctx.strokeStyle = palette.wire;
   line(ctx, tri.crest, tri.back);
   if (!topsOnly) {
     ctx.strokeStyle = palette.ink;
-    ctx.globalAlpha = 0.72 * fade;
+    ctx.globalAlpha = 0.88 * fade;
+    ctx.lineWidth = 1.05;
     line(ctx, tri.foot, tri.crest);
+    ctx.globalAlpha = 0.22 * fade;
     line(ctx, tri.foot, tri.back);
   }
+}
+
+export function layoutTriangles(slices, camera, width, height, detune = 0) {
+  const view = clampCamera(camera);
+  const fit = measureFit(slices, view, width, height, detune);
+  const place = placement(fit, width, height);
+  return slices.map((slice) => projectSlice(slice, detune, place, view));
 }
 
 function projectSlice(slice, detune, place, camera) {
@@ -235,43 +328,14 @@ function projectSlice(slice, detune, place, camera) {
   };
 }
 
-function placement(width, height) {
-  const home = defaultCamera();
-  const margin = 16;
-  const corners = fieldCorners();
-  let minX = Infinity;
-  let maxX = -Infinity;
-  let minY = Infinity;
-  let maxY = -Infinity;
-  for (const corner of corners) {
-    const point = screenOf(home, corner.x, corner.y, corner.z);
-    if (point.x < minX) minX = point.x;
-    if (point.x > maxX) maxX = point.x;
-    if (point.y < minY) minY = point.y;
-    if (point.y > maxY) maxY = point.y;
-  }
-  const scale = Math.min(
-    (width - margin * 2) / Math.max(0.001, maxX - minX),
-    (height - margin * 2) / Math.max(0.001, maxY - minY),
-  );
-  const cx = (minX + maxX) / 2;
-  const cy = (minY + maxY) / 2;
+function placement(fit, width, height) {
   return (camera, x, y, z) => {
     const point = screenOf(camera, x, y, z);
     return {
-      x: width / 2 + (point.x - cx) * scale,
-      y: height / 2 + (point.y - cy) * scale,
+      x: width / 2 + (point.x - fit.cx) * fit.scale,
+      y: height / 2 + (point.y - fit.cy) * fit.scale,
     };
   };
-}
-
-function fieldCorners() {
-  const xs = [-PLANE.span * 0.62, PLANE.span * 0.62];
-  const ys = [0, PLANE.height];
-  const zs = [0, PLANE.depth];
-  const corners = [];
-  for (const x of xs) for (const y of ys) for (const z of zs) corners.push({ x, y, z });
-  return corners;
 }
 
 function screenOf(camera, x, y, z) {
@@ -282,15 +346,17 @@ function screenOf(camera, x, y, z) {
 function rawProject(x, y, z, camera) {
   const cy = Math.cos(camera.yaw);
   const sy = Math.sin(camera.yaw);
-  const cp = Math.cos(camera.pitch);
-  const sp = Math.sin(camera.pitch);
+  // Turn frequency and decay around the vertical. Level is not rotated,
+  // so a front edge stays a vertical line at every yaw.
   const x1 = x * cy + z * sy;
   const z1 = -x * sy + z * cy;
-  const y2 = y * cp - z1 * sp;
-  const z2 = y * sp + z1 * cp;
-  const denom = camera.distance + z2 * PLANE.perspective;
-  const persp = clamp(camera.distance / Math.max(0.3, denom), 0.3, 2.2);
-  return { x: x1 * persp, y: y2 * persp, depth: z2 };
+  const elev = camera.pitch;
+  const drop = 0.78;
+  return {
+    x: x1 * 1.0 + z1 * 0.5,
+    y: y * 1.35 - x1 * drop + z1 * elev,
+    depth: z1,
+  };
 }
 
 function sitePalette(colors) {

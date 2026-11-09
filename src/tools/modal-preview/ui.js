@@ -1,7 +1,7 @@
 import { PRESETS, NOTE_BUTTONS, buildPartials, previewPartials, toCsv, fromCsv, noteFrequency, defaultControls, sanitizeControls, alignReference } from './engine.js';
 import { analyzeSamples, decodeRecording, resampleMono, parseRoot, frequencyToNote } from './analyze.js';
 import { renderPreview, scaleToPeak } from './resonator.js';
-import { aimSlices, clampCamera, createSliceMotion, defaultCamera, hitPartial, MORPH_MS, paintModalView, sampleSlices, slicesMoving } from './modal-view.js';
+import { aimSlices, clampCamera, createFitMotion, createSliceMotion, defaultCamera, hitPartial, MORPH_MS, paintModalView, sampleSlices, slicesMoving } from './modal-view.js';
 import { shapePartials } from './shape.js';
 import { fileSlug } from './recipes.js';
 import { mountStudio } from './studio.js';
@@ -40,6 +40,7 @@ export function mount(root) {
     detune: 0,
     slices: createSliceMotion(),
     slicesReady: false,
+    fit: createFitMotion(),
     viewFrame: 0,
     cameraAim: null,
   };
@@ -150,7 +151,7 @@ export function mount(root) {
     const frame = (now) => {
       const moving = slicesMoving(state.slices, now) || stepCamera(now);
       draw(canvas, state.partials, state);
-      if (moving) state.viewFrame = requestAnimationFrame(frame);
+      if (moving || state.fit.moving) state.viewFrame = requestAnimationFrame(frame);
       else state.viewFrame = 0;
     };
     state.viewFrame = requestAnimationFrame(frame);
@@ -374,6 +375,7 @@ export function mount(root) {
         pitch: state.gesture.pitch + dy * 0.0048,
       });
       draw(canvas, state.partials, state);
+      if (state.fit.moving) kickView();
       return;
     }
     const travel = Math.hypot(point.x - state.gesture.x, point.y - state.gesture.y);
@@ -399,6 +401,7 @@ export function mount(root) {
           point.x,
           point.y,
           state.detune || 0,
+          state.fit.shown,
         );
         render();
       }
@@ -430,8 +433,16 @@ export function mount(root) {
       draw(canvas, state.partials, state);
     });
   }
+  const density = root.querySelector('[data-density]');
+  if (density && density.tagName === 'SELECT') {
+    density.addEventListener('change', () => {
+      publishShape(MORPH_MS);
+      render();
+      pushModes();
+    });
+  }
   let knobDown = false;
-  for (const name of ['absorb', 'disperse', 'modal-decay', 'density', 'tune', 'normalize', 'decay-kf']) {
+  for (const name of ['absorb', 'disperse', 'modal-decay', 'tune', 'normalize', 'decay-kf']) {
     const slider = root.querySelector(`[data-${name}]`);
     if (!slider) continue;
     slider.addEventListener('pointerdown', () => { knobDown = true; });
@@ -455,6 +466,7 @@ export function mount(root) {
       if (out) out.textContent = detune.value;
       state.detune = Number(detune.value) / 100;
       draw(canvas, state.partials, state);
+      if (state.fit.moving) kickView();
     });
   }
   tableBody.addEventListener('focusin', (event) => {
@@ -976,6 +988,8 @@ function drawZebra(canvas, partials, state) {
     colors,
     selected: state.selectedPartial,
     detune: state.detune || 0,
+    now: performance.now(),
+    fitMotion: state.fit,
     slices: state.slicesReady ? sampleSlices(state.slices, performance.now()) : undefined,
   });
 }

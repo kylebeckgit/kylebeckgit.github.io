@@ -84,8 +84,15 @@ import Base from '../layouts/Base.astro';
           <label class="knob">Position <span data-position-out>0.18</span>
             <input data-position type="range" min="0.02" max="0.98" step="0.01" value="0.18">
           </label>
-          <label class="knob">Density <span data-density-out>64</span>
-            <input data-density type="range" min="8" max="256" step="1" value="64">
+          <label class="knob">Density
+            <select data-density>
+              <option value="8">8</option>
+              <option value="16" selected>16</option>
+              <option value="32">32</option>
+              <option value="64">64</option>
+              <option value="128">128</option>
+              <option value="256">256</option>
+            </select>
           </label>
         </div>
         <div class="knobs knobs-3">
@@ -214,6 +221,16 @@ import Base from '../layouts/Base.astro';
 
 <style>
   #modal-app { margin-top: 1.75rem; }
+  #modal-app :global(button),
+  #modal-app :global(select),
+  #modal-app :global(input),
+  #modal-app :global(textarea) {
+    font-family: var(--body);
+    font-stretch: var(--body-stretch);
+    font-weight: 500;
+    font-size: .95rem;
+  }
+  #modal-app :global(button.btn) { font-weight: 550; }
   .quiet { color: var(--muted); max-width: 62ch; margin: .65rem 0 0; font-size: .95rem; }
   .status { color: var(--fg); min-height: 0; margin: .5rem 0 0; }
   .status:empty { display: none; }
@@ -338,6 +355,13 @@ import Base from '../layouts/Base.astro';
     font-size: .95rem;
   }
   .knob > span { color: var(--muted); font-variant-numeric: tabular-nums; justify-self: end; }
+  .knob select {
+    grid-column: 1 / -1;
+    width: 100%;
+    min-height: 2.75rem;
+    color: inherit;
+    background: var(--bg);
+  }
   .knob input[type="range"], .play-field input[type="range"], .analyze-grid input[type="range"] {
     grid-column: 1 / -1;
     width: 100%;

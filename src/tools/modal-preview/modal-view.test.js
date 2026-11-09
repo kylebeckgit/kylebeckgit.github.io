@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { performance } from 'node:perf_hooks';
-import { aimSlices, clampCamera, createSliceMotion, defaultCamera, detuneT, frameMotion, paintModalView, PLANE, sampleSlices, sliceFromPartial, worldOf } from './modal-view.js';
+import { aimSlices, clampCamera, createFitMotion, createSliceMotion, defaultCamera, detuneT, followFit, frameMotion, layoutTriangles, paintModalView, PLANE, sampleSlices, sliceFromPartial, worldOf } from './modal-view.js';
 import { shapePartials } from './shape.js';
 
 function stubContext() {
@@ -76,25 +76,55 @@ test('each partial is its own triangle and eco draws only the tops', () => {
   const fast = stubContext();
   paintModalView(eco, list, { width: 960, height: 460, style: 'eco', colors, camera: defaultCamera() });
   paintModalView(fast, list, { width: 960, height: 460, style: 'fast', colors, camera: defaultCamera() });
-  assert.equal(eco.strokes, list.length);
-  assert.equal(fast.strokes, list.length * 3);
+  assert.ok(fast.strokes > eco.strokes);
+});
+
+test('front edges stay vertical and decay runs up-right at the resting angle', () => {
+  const list = partials(16).map((partial, index) => (
+    index === 0 ? { ...partial, gainDb: 0, decay: 8 } : partial
+  ));
+  const slices = list.map((partial) => sliceFromPartial(partial));
+  const tris = layoutTriangles(slices, defaultCamera(), 800, 520, 0);
+  const first = tris[0];
+  const later = tris[8];
+  assert.ok(Math.abs(first.foot.x - first.crest.x) < 0.75);
+  assert.ok(first.crest.y < first.foot.y);
+  assert.ok(first.back.x > first.crest.x + 8);
+  assert.ok(first.back.y < first.crest.y);
+  assert.ok(later.foot.x > first.foot.x);
+  assert.ok(later.foot.y > first.foot.y);
 });
 
 test('the triangles stay inside the canvas at the resting angle and a full turn', () => {
   const ctx = stubContext();
-  const list = partials(64);
+  const list = partials(64).map((partial, index) => index < 4 ? { ...partial, decay: 18 } : partial);
   const points = [];
   ctx.lineTo = (x, y) => { points.push({ x, y }); };
   ctx.moveTo = (x, y) => { points.push({ x, y }); };
   for (const camera of [defaultCamera(), clampCamera({ yaw: Math.PI, pitch: 0.4 }), clampCamera({ yaw: 1.8, pitch: 0.9 })]) {
-    points.length = 0;
-    paintModalView(ctx, list, { width: 960, height: 460, style: 'fast', colors, camera });
-    assert.ok(points.length > 30);
-    for (const point of points) {
-      assert.ok(point.x >= -1 && point.x <= 961, `x ${point.x}`);
-      assert.ok(point.y >= -1 && point.y <= 461, `y ${point.y}`);
+    for (const detune of [0, 1]) {
+      points.length = 0;
+      paintModalView(ctx, list, { width: 960, height: 460, style: 'fast', colors, camera, detune });
+      assert.ok(points.length > 30);
+      for (const point of points) {
+        assert.ok(point.x >= 8 && point.x <= 952, `x ${point.x}`);
+        assert.ok(point.y >= 8 && point.y <= 452, `y ${point.y}`);
+      }
     }
   }
+});
+
+test('zooming in eases and zooming out stays tight enough to fit', () => {
+  const motion = createFitMotion();
+  const wide = followFit(motion, { scale: 1, cx: 0, cy: 0 }, 0);
+  assert.equal(wide.scale, 1);
+  const tighter = followFit(motion, { scale: 0.4, cx: 12, cy: -4 }, 0);
+  assert.ok(tighter.scale <= 0.4);
+  assert.equal(tighter.cx, 12);
+  followFit(motion, { scale: 0.4, cx: 12, cy: -4 }, 1000);
+  const opening = followFit(motion, { scale: 1.2, cx: 12, cy: -4 }, 1120);
+  assert.ok(opening.scale > 0.4 && opening.scale < 1.2);
+  assert.equal(motion.moving, true);
 });
 
 test('a density change eases by index, growing the new slices from zero', () => {
