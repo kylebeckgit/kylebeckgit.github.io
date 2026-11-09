@@ -534,14 +534,14 @@ function drawSlices(ctx, slices, detune, place, camera, look, palette, clock, st
     for (const z of PLANE.latticeZ) {
       // Sharp pass stays faint so the bloom is what shows, and the hatch
       // melts into the bars instead of reading as its own grid.
-      glow(ctx, atDepth(hatched, z), palette.ink, { ...ink, width: ink.width * 0.9 }, bloom ? 1 : 0.08);
+      glow(ctx, atDepth(hatched, z), palette.ink, { ...ink, width: ink.width * 0.9 }, bloom ? 1 : 0.4);
     }
     for (const item of placed) {
       const world = worldOf(item.slice, detune);
       const inHatch = world.x <= limit;
       const rungZ = inHatch ? PLANE.latticeZ[PLANE.latticeZ.length - 1] : PLANE.ribbonZ;
       const far = place(camera, world.x, 0, rungZ);
-      const rungAlpha = inHatch && !bloom ? 0.12 : 1;
+      const rungAlpha = inHatch && !bloom ? 0.45 : 1;
       glow(ctx, [item.tri.foot, far], palette.ink, ink, item.slice.alpha * rungAlpha);
       glow(ctx, [item.tri.foot, item.tri.crest], palette.ink, ink, item.slice.alpha);
     }
