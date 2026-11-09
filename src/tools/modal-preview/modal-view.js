@@ -27,15 +27,15 @@ export const PLANE = {
   span: 2.72,
   height: 1,
   depth: 4.6,
-  // Rear rail. At yaw 0 the rung lands up-left of the foot and stays parallel.
-  lipX: -0.22,
-  lipZ: 0.64,
+  // Rear rail. Shallow: the tallest bar is about three and a half ladder-depths.
+  lipX: -0.12,
+  lipZ: 0.34,
   ratioLo: 0.35,
   ratioHi: 48,
   styles: {
-    eco: { width: 1.7, alpha: 0.95, halo: 5, haloAlpha: 0.28 },
-    fast: { width: 2.15, alpha: 1, halo: 8, haloAlpha: 0.34 },
-    glow: { width: 2.4, alpha: 1, halo: 12, haloAlpha: 0.46 },
+    eco: { width: 1.05, alpha: 0.95, halo: 3.2, haloAlpha: 0.26 },
+    fast: { width: 1.3, alpha: 1, halo: 5, haloAlpha: 0.32 },
+    glow: { width: 1.45, alpha: 1, halo: 7.5, haloAlpha: 0.42 },
   },
 };
 
@@ -256,6 +256,10 @@ export function paintModalView(ctx, partials, options = {}) {
   ctx.lineJoin = 'round';
   const order = slices.map((slice, index) => ({ slice, index }));
   order.sort((a, b) => a.slice.t - b.slice.t);
+  for (const item of order) {
+    if (item.index === selected) continue;
+    strokeDiagonal(ctx, item.slice, detune, place, camera, look, palette, 1);
+  }
   if (style !== 'eco') {
     for (const item of order) {
       if (item.index === selected) continue;
@@ -265,13 +269,12 @@ export function paintModalView(ctx, partials, options = {}) {
   }
   for (const item of order) {
     if (item.index === selected) continue;
-    strokeDiagonal(ctx, item.slice, detune, place, camera, look, palette, 1);
     strokeTail(ctx, item.slice, detune, place, camera, look, palette, 1);
   }
   if (selected >= 0 && slices[selected]) {
-    const chosen = { ...look, width: look.width + 0.6, halo: Math.max(look.halo, 4), haloAlpha: Math.max(look.haloAlpha, 0.4) };
-    if (style !== 'eco') strokeStructure(ctx, slices[selected], detune, place, camera, chosen, palette, 1);
+    const chosen = { ...look, width: look.width + 0.4, halo: Math.max(look.halo, 3.5), haloAlpha: Math.max(look.haloAlpha, 0.4) };
     strokeDiagonal(ctx, slices[selected], detune, place, camera, chosen, palette, 1);
+    if (style !== 'eco') strokeStructure(ctx, slices[selected], detune, place, camera, chosen, palette, 1);
     strokeTail(ctx, slices[selected], detune, place, camera, chosen, palette, 1);
   }
   ctx.globalAlpha = 1;
@@ -330,8 +333,9 @@ function drawRails(ctx, slices, detune, place, camera, palette, look) {
     front.push(place(camera, world.x, 0, 0));
     back.push(place(camera, rear.x, rear.y, rear.z));
   }
-  glow(ctx, back, palette.ink, look, 0.9);
-  glow(ctx, front, palette.ink, look, 1);
+  const rail = { ...look, width: look.width * 0.7, halo: look.halo * 0.45, haloAlpha: look.haloAlpha * 0.35 };
+  glow(ctx, back, palette.ink, rail, 0.38);
+  glow(ctx, front, palette.ink, rail, 0.5);
 }
 
 function floorBack(world) {
@@ -371,14 +375,16 @@ function strokeStructure(ctx, slice, detune, place, camera, look, palette, alpha
   if (!slice || slice.alpha < 0.04 || slice.height < 0.02) return;
   const tri = projectSlice(slice, detune, place, camera);
   const fade = slice.alpha * alphaScale;
+  const rung = { ...look, width: look.width * 0.65, halo: 0, haloAlpha: 0 };
   glow(ctx, [tri.foot, tri.crest], palette.ink, look, fade);
-  glow(ctx, [tri.foot, tri.floor], palette.ink, look, fade * 0.95);
+  strokePath(ctx, [tri.foot, tri.floor], palette.ink, rung.width, fade * 0.32);
 }
 
 function strokeDiagonal(ctx, slice, detune, place, camera, look, palette, alphaScale) {
   if (!slice || slice.alpha < 0.04 || slice.height < 0.02) return;
   const tri = projectSlice(slice, detune, place, camera);
-  glow(ctx, [tri.crest, tri.floor], palette.wire, look, slice.alpha * alphaScale);
+  const hair = { width: Math.max(0.7, look.width * 0.45), halo: look.halo * 0.35, haloAlpha: look.haloAlpha * 0.25, alpha: 0.4 };
+  glow(ctx, [tri.crest, tri.floor], palette.wire, hair, slice.alpha * alphaScale * 0.4);
 }
 
 function strokeTail(ctx, slice, detune, place, camera, look, palette, alphaScale) {
