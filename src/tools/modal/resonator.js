@@ -72,7 +72,16 @@ export function createVoice(partials, options, sampleRate) {
     // back by the pole radius and keeps following GainDB.
     const sine = Math.max(1e-4, Math.sin((2 * Math.PI * freq) / sampleRate));
     const radius = continuous ? Math.sqrt(Math.max(1 - coeff.R * coeff.R, 1e-8)) : 1;
-    modes.push({ a1: coeff.a1, a2: coeff.a2, feed: amp * sine * radius, y1: 0, y2: 0 });
+    modes.push({
+      a1: coeff.a1,
+      a2: coeff.a2,
+      feed: amp * sine * radius,
+      y1: 0,
+      y2: 0,
+      freq,
+      t60: partial.decay,
+      glide: Boolean(options.glide) && partial.ratio < (options.glide.maxRatio ?? 6),
+    });
   }
   const bowCutoff = 3200;
   return {
@@ -92,6 +101,8 @@ export function createVoice(partials, options, sampleRate) {
     holding: true,
     impulse: !flat && options.impulse ? 1 : 0,
     linear: flat,
+    glide: options.glide || null,
+    n: 0,
   };
 }
 
@@ -142,6 +153,20 @@ export function nextExciter(state) {
 }
 
 export function processSample(state) {
+  if (state.glide) {
+    const t = state.n / state.sampleRate;
+    const u = Math.min(1, t / state.glide.seconds);
+    if (u < 1) {
+      const bend = 2 ** ((state.glide.cents * u) / 1200);
+      for (const mode of state.modes) {
+        if (!mode.glide) continue;
+        const coeff = modeCoeffs(mode.freq * bend, mode.t60, state.sampleRate);
+        mode.a1 = coeff.a1;
+        mode.a2 = coeff.a2;
+      }
+    }
+    state.n += 1;
+  }
   let input = nextExciter(state);
   if (state.impulse) {
     input += state.impulse;
@@ -190,7 +215,7 @@ function renderFlat(partials, options, sampleRate, seconds) {
   const length = Math.max(8, Math.floor(sampleRate * seconds));
   const out = new Float32Array(length);
   for (let i = 0; i < length; i++) out[i] = processSample(state);
-  // 1.5 ms cosine rise. The impulse still excites every partial; the rise
+  // 4 ms cosine rise. The impulse still excites every partial; the rise
   // only keeps the first sample from stepping.
   fadeInPlace(out, sampleRate, options.fadeIn || 0.004);
   return out;

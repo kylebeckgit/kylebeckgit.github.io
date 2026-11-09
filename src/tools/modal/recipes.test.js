@@ -19,7 +19,7 @@ test('a glass bowl becomes four longer bowl variations', () => {
   const signatures = new Set(variations.map((variation) => JSON.stringify(variation.controls)));
   assert.equal(signatures.size, 4);
   for (const variation of variations) {
-    assert.ok(buildPartials(variation.controls).length >= 10);
+    assert.equal(buildPartials(variation.controls).length, 7);
   }
 });
 

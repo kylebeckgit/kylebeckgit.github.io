@@ -26,12 +26,10 @@ const BELL_NAMED = [0.5, 1, 1.2, 1.5, 2, 2.5, 3, 4];
 // at the attack even though it rings the longest (Rossing, Acoustics of Bells).
 const BELL_STRIKE_DB = [ -18, -9, -5, -12, 0, -7, -9, -14 ];
 
-// Struck glass. Rossing, Glass Music World (Winter 2004), first modes of a
-// wineglass: 1 : 1.89 : 3.21 : 4.88 : 6.96 : 9.23. The (n,0) series of a
-// singing bowl is Inácio, Henrique & Antunes, Acta Acustica 92 (2006) Table 1
-// (Bowl 2): 1, 2.66, 4.84, 7.52, 10.64, 14.21, 18.14. Rossing's in-between
-// values are the (n,1) family (one nodal circle) on the same bowls.
-const BOWL_RATIOS = [1, 1.89, 2.66, 3.21, 4.84, 4.88, 6.96, 7.52, 9.23, 10.64, 14.21, 18.14];
+// Singing bowl (n,0) modes. Inácio, Henrique & Antunes, Acta Acustica united
+// with Acustica 92 (2006), Table I, Bowl 1 (180 mm): 1, 2.8, 5.2, 8.1, 11.6,
+// 15.6, 19.9 for (2,0) through (8,0). Glass bowls use the same series.
+const BOWL_RATIOS = [1, 2.8, 5.2, 8.1, 11.6, 15.6, 19.9];
 
 // Japanese bonsho, not a Western minor-third bell. Low modes are the Muromachi
 // bell in Nishiguchi & Takasawa, J. Acoust. Soc. Jpn. 53 (1997) Table 1,
@@ -40,9 +38,10 @@ const BOWL_RATIOS = [1, 1.89, 2.66, 3.21, 4.84, 4.88, 6.96, 7.52, 9.23, 10.64, 1
 // 247, 624, 850, 1100, 1380, 1640, 2050 Hz, kept only above the body modes.
 const BONSHO_RATIOS = [1, 2.207, 2.906, 2.998, 3.308, 3.331, 4.068, 5.587, 6.64, 8.3, 9.45, 10.7];
 
-// Rim modes of a cup, from Rossing's struck wineglass (same 2004 article).
-// A mug is this family, not a bell.
-const CUP_RATIOS = [1, 1.89, 3.21, 4.88, 6.96, 9.23, 12.4, 16.1];
+// Mug. Bossart, Fleury & Apffel, arXiv:2501.01180 (2025): the handle splits the
+// rim mode into 2800 and 2940 Hz, a ratio of 1.05. The modes above that follow
+// the wine-glass series 2.32, 4.25, 6.63, 9.38.
+const CUP_RATIOS = [1, 1.05, 2.32, 4.25, 6.63, 9.38];
 
 function barBeta(n) {
   if (n <= BAR_BETA.length) return BAR_BETA[n - 1];
@@ -346,13 +345,14 @@ export function buildPartials(rawControls) {
   return partials;
 }
 
-function dropCloseTwins(partials) {
+function dropCloseTwins(partials, minCents = 55) {
   // A 20 ms fit cannot separate modes a few dozen cents apart, and a quieter
   // twin still leaks into the louder one's level. Keep the lower frequency.
+  if (!partials.length) return partials;
   const kept = [partials[0]];
   for (let i = 1; i < partials.length; i++) {
     const cents = 1200 * Math.log2(partials[i].ratio / kept[kept.length - 1].ratio);
-    if (cents < 55) continue;
+    if (cents < minCents) continue;
     kept.push(partials[i]);
   }
   return kept;
@@ -373,7 +373,14 @@ export function previewPartials(rawControls) {
       return { ...partial, decay: clamp(fundSeconds / harm ** 0.85, 0.08, 30) };
     });
   }
-  if (controls.preset === 'membrane' || controls.voice === 'bonsho' || controls.voice === 'glass' || controls.voice === 'gong' || controls.voice === 'shell') {
+  if (controls.voice === 'shell') {
+    // The raw Donnell list has modes about 90–100 cents apart. A search that
+    // wide locks onto the neighbor, about −90 to −100 cents, even though the
+    // resonator is playing the listed frequency. Keep only modes a 20 ms fit
+    // can assign, still on the shell formula.
+    return dropCloseTwins(tuned, 110);
+  }
+  if (controls.preset === 'membrane' || controls.voice === 'bonsho' || controls.voice === 'glass' || controls.voice === 'gong') {
     return dropCloseTwins(tuned);
   }
   return tuned;

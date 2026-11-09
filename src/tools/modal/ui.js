@@ -941,6 +941,7 @@ function playHeard(state, recipe) {
     seconds,
     impulse: false,
     matchGains: zebra,
+    glide: zebra && state.controls?.voice === 'gong' ? { cents: 35, seconds: 0.45, maxRatio: 6 } : undefined,
     releaseAt: exciter === 'bow' ? Math.floor(ctx.sampleRate * 0.85) : undefined,
   });
   const heard = scaleToPeak(samples, 0.45);
