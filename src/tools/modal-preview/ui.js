@@ -1,7 +1,7 @@
 import { PRESETS, NOTE_BUTTONS, buildPartials, previewPartials, toCsv, fromCsv, noteFrequency, defaultControls, sanitizeControls, alignReference } from './engine.js';
 import { analyzeSamples, decodeRecording, resampleMono, parseRoot, frequencyToNote } from './analyze.js';
 import { renderPreview, scaleToPeak } from './resonator.js';
-import { clampCamera, defaultCamera, hitPartial, paintModalView } from './modal-view.js';
+import { aimSlices, clampCamera, createSliceMotion, defaultCamera, hitPartial, MORPH_MS, paintModalView, sampleSlices, slicesMoving } from './modal-view.js';
 import { shapePartials } from './shape.js';
 import { fileSlug } from './recipes.js';
 import { mountStudio } from './studio.js';
@@ -38,9 +38,10 @@ export function mount(root) {
     profilePartials: null,
     camera: defaultCamera(),
     detune: 0,
-    drawPartials: null,
-    easing: false,
-    easeFrame: 0,
+    slices: createSliceMotion(),
+    slicesReady: false,
+    viewFrame: 0,
+    cameraAim: null,
   };
 
   root.querySelector('[data-presets]').innerHTML = PRESETS.map((preset) => `<option value="${preset.id}">${preset.label}</option>`).join('');
@@ -131,59 +132,42 @@ export function mount(root) {
     };
   }
 
-  function publishShape() {
+  function publishShape(duration = MORPH_MS) {
     const shape = readShape();
     if (!shape || !state.profilePartials) return;
     const identity = shape.absorb === 0 && shape.disperse === 0 && shape.decay === 0
       && shape.decayKf === 0 && shape.normalize === 0 && shape.tune === 0
       && shape.density === state.profilePartials.length;
     state.partials = identity ? state.profilePartials : shapePartials(state.profilePartials, shape);
-    beginEase();
+    const first = !state.slicesReady;
+    state.slicesReady = true;
+    aimSlices(state.slices, state.partials, performance.now(), first ? 0 : duration);
+    if (!first && duration > 0) kickView();
   }
 
-  function beginEase() {
-    state.easing = true;
-    if (!state.easeFrame) state.easeFrame = requestAnimationFrame(tickEase);
+  function kickView() {
+    if (state.viewFrame) return;
+    const frame = (now) => {
+      const moving = slicesMoving(state.slices, now) || stepCamera(now);
+      draw(canvas, state.partials, state);
+      if (moving) state.viewFrame = requestAnimationFrame(frame);
+      else state.viewFrame = 0;
+    };
+    state.viewFrame = requestAnimationFrame(frame);
   }
 
-  function tickEase() {
-    state.easeFrame = 0;
-    let moving = easeList();
-    if (state.cameraGoal) {
-      state.camera.yaw += (state.cameraGoal.yaw - state.camera.yaw) * 0.22;
-      state.camera.pitch += (state.cameraGoal.pitch - state.camera.pitch) * 0.22;
-      if (Math.abs(state.cameraGoal.yaw - state.camera.yaw) < 0.004
-        && Math.abs(state.cameraGoal.pitch - state.camera.pitch) < 0.004) {
-        state.camera = { ...state.cameraGoal, distance: state.camera.distance };
-        state.cameraGoal = null;
-      } else {
-        moving = true;
-      }
-    }
-    draw(canvas, state.drawPartials || state.partials, state);
-    if (moving) state.easeFrame = requestAnimationFrame(tickEase);
-    else state.easing = false;
-  }
-
-  function easeList() {
-    const goal = state.partials;
-    if (!goal?.length) return false;
-    if (!state.drawPartials || state.drawPartials.length !== goal.length) {
-      state.drawPartials = goal.map((partial) => ({ ratio: partial.ratio, gainDb: partial.gainDb, decay: partial.decay }));
-      return false;
-    }
-    let moving = false;
-    for (let i = 0; i < goal.length; i++) {
-      const drawn = state.drawPartials[i];
-      const target = goal[i];
-      for (const key of ['ratio', 'gainDb', 'decay']) {
-        const delta = target[key] - drawn[key];
-        if (Math.abs(delta) > (key === 'ratio' ? 0.004 : 0.03)) moving = true;
-        drawn[key] += delta * 0.28;
-      }
-    }
-    if (!moving) state.drawPartials = goal;
-    return moving;
+  function stepCamera(now) {
+    const aim = state.cameraAim;
+    if (!aim) return false;
+    const t = aim.dur <= 0 ? 1 : Math.min(1, (now - aim.t0) / aim.dur);
+    const eased = 1 - (1 - t) ** 3;
+    const turn = Math.atan2(Math.sin(aim.to.yaw - aim.from.yaw), Math.cos(aim.to.yaw - aim.from.yaw));
+    state.camera = clampCamera({
+      yaw: aim.from.yaw + turn * eased,
+      pitch: aim.from.pitch + (aim.to.pitch - aim.from.pitch) * eased,
+    });
+    if (t >= 1) state.cameraAim = null;
+    return t < 1;
   }
 
   function adopt(partials, custom) {
@@ -244,7 +228,7 @@ export function mount(root) {
   }
 
   function render() {
-    draw(canvas, state.drawPartials || state.partials, state);
+    draw(canvas, state.partials, state);
     tableBody.innerHTML = state.partials.map((partial, index) => `
       <tr class="${index === state.selectedPartial ? 'is-selected' : ''}">
         <th scope="row"><button type="button" class="partial-index" data-make-root="${index}" aria-label="Make partial ${index + 1} the root">${index + 1}</button></th>
@@ -383,12 +367,13 @@ export function mount(root) {
       const dy = point.y - state.gesture.y;
       if (!state.gesture.moved && Math.hypot(dx, dy) < 3) return;
       state.gesture.moved = true;
-      state.cameraGoal = null;
+      state.cameraAim = null;
+      const span = Math.max(canvas.clientWidth || 320, 240);
       state.camera = clampCamera({
-        yaw: state.gesture.yaw - dx * 0.0065,
-        pitch: state.gesture.pitch + dy * 0.0045,
+        yaw: state.gesture.yaw - dx * (Math.PI * 2) / span,
+        pitch: state.gesture.pitch + dy * 0.0048,
       });
-      draw(canvas, state.drawPartials || state.partials, state);
+      draw(canvas, state.partials, state);
       return;
     }
     const travel = Math.hypot(point.x - state.gesture.x, point.y - state.gesture.y);
@@ -407,12 +392,13 @@ export function mount(root) {
       if (!state.gesture.moved) {
         const point = canvasPoint(canvas, event);
         state.selectedPartial = hitPartial(
-          state.drawPartials || state.partials,
+          sampleSlices(state.slices, performance.now()),
           state.camera,
           canvas.clientWidth,
           canvas.clientHeight,
           point.x,
           point.y,
+          state.detune || 0,
         );
         render();
       }
@@ -428,8 +414,13 @@ export function mount(root) {
   canvas.addEventListener('pointercancel', () => { state.gesture = null; });
   canvas.addEventListener('dblclick', () => {
     if (canvas.dataset.view !== 'zebra') return;
-    state.cameraGoal = defaultCamera();
-    beginEase();
+    state.cameraAim = {
+      from: { ...state.camera },
+      to: defaultCamera(),
+      t0: performance.now(),
+      dur: MORPH_MS,
+    };
+    kickView();
   });
   const styleSelect = root.querySelector('[data-draw-style]');
   if (styleSelect) {
@@ -439,13 +430,20 @@ export function mount(root) {
       draw(canvas, state.partials, state);
     });
   }
+  let knobDown = false;
   for (const name of ['absorb', 'disperse', 'modal-decay', 'density', 'tune', 'normalize', 'decay-kf']) {
     const slider = root.querySelector(`[data-${name}]`);
     if (!slider) continue;
+    slider.addEventListener('pointerdown', () => { knobDown = true; });
+    slider.addEventListener('pointerup', () => { knobDown = false; });
+    slider.addEventListener('pointercancel', () => { knobDown = false; });
     slider.addEventListener('input', () => {
       const out = root.querySelector(`[data-${name}-out]`);
       if (out) out.textContent = slider.value;
-      publishShape();
+      // Density changes the count, so slices grow and shrink over the morph.
+      // The other knobs lock to the drag and ease only when set from the keyboard.
+      const duration = name === 'density' ? MORPH_MS : (knobDown ? 0 : MORPH_MS);
+      publishShape(duration);
       render();
       pushModes();
     });
@@ -456,7 +454,7 @@ export function mount(root) {
       const out = root.querySelector('[data-detune-out]');
       if (out) out.textContent = detune.value;
       state.detune = Number(detune.value) / 100;
-      draw(canvas, state.drawPartials || state.partials, state);
+      draw(canvas, state.partials, state);
     });
   }
   tableBody.addEventListener('focusin', (event) => {
@@ -978,8 +976,7 @@ function drawZebra(canvas, partials, state) {
     colors,
     selected: state.selectedPartial,
     detune: state.detune || 0,
-    // frameMotion reads this. Leave it at rest until the motion pass.
-    time: 0,
+    slices: state.slicesReady ? sampleSlices(state.slices, performance.now()) : undefined,
   });
 }
 

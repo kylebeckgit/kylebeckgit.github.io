@@ -1,104 +1,183 @@
-// Straight wedge of the modal face, matched to the Zebra 3 frame at 00:12.
+// Each partial is its own wireframe right triangle. Nothing connects them.
 //
-// The bright face is a triangle, not the spectrum outline. Its left edge is
-// the low-frequency end, its top and bottom edges are straight, and they
-// meet at a sharp tip. Inside it, rung spacing follows log ratio on a fixed
-// window, so a profile or a Tune sweep slides the lines. Length and brightness
-// follow level.
-// Cyan lines stack along the top edge. The lid is two lines that leave that
-// edge about a third and a half of the way along and rise up-right, with a
-// short right-angle hook at the far end.
+//   x  frequency, left to right
+//   y  level, up from the floor
+//   z  decay, front to back
 //
-// WEDGE is the look and the drag limits. Retune numbers here.
+// A triangle is three lines: the vertical on the front plane, the floor line
+// running back, and the sloping top that joins them. The lid is those tops
+// seen together. Eco draws only the tops. Glow is Fast plus a bloom.
+//
+// Motion lives in aimSlices / sampleSlices. Match by index. A profile change
+// eases for MORPH_MS with ease-out. New indices grow from zero height. Indices
+// that leave shrink and fade. Detune is not part of that tween: paint applies
+// it live, spreading or bunching frequency while height and depth stay put.
 
-export const WEDGE = {
-  // Default camera. The left edge projects vertical and the long axis
-  // runs down-right, with the tip left of the right side of the box.
-  yaw: -0.56,
-  pitch: 0.6,
-  focal: 10,
-  perspective: 0.4,
-  yawMin: -1.7,
-  yawMax: 2.25,
-  pitchMin: 0.08,
-  pitchMax: 1.35,
-  span: 6,
-  leftH: 4,
-  tipY: 0.8,
-  tipZ: 0.5,
-  // Resting placement in the box. The top-left corner sits at a quarter of
-  // the height, the left edge is tall, and a 45 degree top edge lands the
-  // tip near the horizontal middle at about 80 percent of the height.
-  originX: 0.05,
-  originY: 0.25,
-  leftScreen: 0.393,
-  stackCount: 4,
-  stackGap: 0.012,
-  stackEnd: 0.97,
-  lidFrom: 0.33,
-  lidTo: 0.5,
-  lidReach: 0.78,
-  rungAlpha: 0.55,
+export const MORPH_MS = 260;
+
+export const PLANE = {
+  yaw: -0.62,
+  pitch: 0.58,
+  focal: 9.5,
+  perspective: 0.34,
+  pitchMin: 0.2,
+  pitchMax: 1.15,
+  span: 7.2,
+  height: 2.7,
+  depth: 3.4,
   ratioLo: 0.35,
   ratioHi: 48,
-  tipSize: 0.055,
-  bottomWire: 0.42,
-  wireAlpha: 0.92,
   styles: {
-    eco: { width: 0.75, alpha: 0.55, halo: 0, haloAlpha: 0, solid: false },
-    fast: { width: 1.15, alpha: 0.85, halo: 0, haloAlpha: 0, solid: true },
-    glow: { width: 1.45, alpha: 0.95, halo: 18, haloAlpha: 0.62, solid: true },
+    eco: { width: 1.15, alpha: 0.9, halo: 0 },
+    fast: { width: 1.2, alpha: 0.92, halo: 0 },
+    glow: { width: 1.35, alpha: 1, halo: 7, haloAlpha: 0.45 },
   },
 };
 
 export function defaultCamera() {
-  return { yaw: WEDGE.yaw, pitch: WEDGE.pitch, distance: WEDGE.focal };
-}
-
-// Motion is a later pass. paintModalView draws whatever this returns, so
-// that pass can move the camera or the modes from `time` (milliseconds)
-// without reworking the wedge. Resting motion leaves both alone.
-export function frameMotion({ partials, camera, time = 0 }) {
-  return { partials, camera, time };
+  return { yaw: PLANE.yaw, pitch: PLANE.pitch, distance: PLANE.focal };
 }
 
 export function clampCamera(camera) {
   const base = camera || defaultCamera();
+  let yaw = Number(base.yaw);
+  if (!Number.isFinite(yaw)) yaw = PLANE.yaw;
+  yaw = Math.atan2(Math.sin(yaw), Math.cos(yaw));
+  let pitch = Number(base.pitch);
+  if (!Number.isFinite(pitch)) pitch = PLANE.pitch;
   return {
-    yaw: clamp(base.yaw, WEDGE.yawMin, WEDGE.yawMax),
-    pitch: clamp(base.pitch, WEDGE.pitchMin, WEDGE.pitchMax),
-    distance: WEDGE.focal,
+    yaw,
+    pitch: clamp(pitch, PLANE.pitchMin, PLANE.pitchMax),
+    distance: PLANE.focal,
   };
 }
 
-export function paintModalView(ctx, partials, options) {
-  const { width, height, style = 'fast', colors, selected = -1, detune = 0, time = 0 } = options;
-  const framed = frameMotion({ partials, camera: options.camera, time });
-  const look = WEDGE.styles[style] || WEDGE.styles.fast;
-  const scene = layoutScene(framed.partials, framed.camera, width, height);
+// Camera stays put. Slice motion is aimSlices, not this function.
+export function frameMotion({ partials, camera, time = 0 }) {
+  return { partials, camera, time };
+}
+
+export function sliceFromPartial(partial, alpha = 1) {
+  return {
+    t: frequencyT(partial?.ratio),
+    height: levelHeight(partial?.gainDb),
+    depth: decayDepth(partial?.decay),
+    alpha,
+  };
+}
+
+export function frequencyT(ratio) {
+  const value = Math.max(Number(ratio) || PLANE.ratioLo, 1e-6);
+  const logLo = Math.log2(PLANE.ratioLo);
+  const logHi = Math.log2(PLANE.ratioHi);
+  return clamp((Math.log2(value) - logLo) / (logHi - logLo), 0, 1);
+}
+
+export function levelHeight(gainDb) {
+  const number = Number(gainDb);
+  const db = clamp(Number.isFinite(number) ? number : -60, -60, 0);
+  return (db + 60) / 60;
+}
+
+export function decayDepth(decay) {
+  const seconds = clamp(Number(decay) || 0, 0, 24);
+  return Math.pow(seconds / 8, 0.7);
+}
+
+// Positive detune spreads frequency away from the low end. Negative bunches
+// it. Height and depth are left alone.
+export function detuneT(t, detune) {
+  const spread = 1 + clamp(Number(detune) || 0, -1, 1) * 0.72;
+  const pivot = 0.28;
+  return pivot + (t - pivot) * spread;
+}
+
+export function createSliceMotion() {
+  return { from: [], to: [], t0: 0, dur: 0 };
+}
+
+export function aimSlices(motion, partials, now, duration = MORPH_MS) {
+  const shown = sampleSlices(motion, now);
+  const next = partials.map((partial) => sliceFromPartial(partial, 1));
+  const count = Math.max(shown.length, next.length);
+  const from = [];
+  const to = [];
+  for (let i = 0; i < count; i++) {
+    const target = next[i] || { ...(shown[i] || sliceFromPartial(null, 0)), height: 0, depth: 0, alpha: 0 };
+    if (shown[i]) from.push(shown[i]);
+    else from.push({ t: target.t, height: 0, depth: 0, alpha: 0 });
+    to.push(target);
+  }
+  motion.from = from;
+  motion.to = to;
+  motion.t0 = now;
+  motion.dur = duration > 0 ? duration : 0;
+  return motion;
+}
+
+export function sampleSlices(motion, now) {
+  const count = Math.max(motion?.from?.length || 0, motion?.to?.length || 0);
+  if (!count) return [];
+  const dur = motion.dur || 0;
+  const t = dur <= 0 ? 1 : clamp((now - motion.t0) / dur, 0, 1);
+  const eased = 1 - (1 - t) ** 3;
+  const out = [];
+  for (let i = 0; i < count; i++) {
+    out.push(lerpSlice(motion.from[i], motion.to[i], eased));
+  }
+  if (t >= 1) {
+    while (out.length && out[out.length - 1].alpha <= 0.02) out.pop();
+  }
+  return out;
+}
+
+export function slicesMoving(motion, now) {
+  if (!motion?.dur) return false;
+  return now < motion.t0 + motion.dur;
+}
+
+export function paintModalView(ctx, partials, options = {}) {
+  const { width, height, style = 'fast', colors, selected = -1, detune = 0 } = options;
+  const camera = clampCamera(options.camera);
+  const slices = options.slices || (partials || []).map((partial) => sliceFromPartial(partial, 1));
+  const look = PLANE.styles[style] || PLANE.styles.fast;
   const palette = sitePalette(colors);
+  const place = placement(width, height);
   ctx.clearRect(0, 0, width, height);
   ctx.fillStyle = palette.panel;
   ctx.fillRect(0, 0, width, height);
-  ctx.lineCap = 'butt';
-  ctx.lineJoin = 'miter';
-  const smear = Math.max(-1, Math.min(1, detune)) * 7;
-  if (smear) drawSheet(ctx, scene, look, palette, selected, smear, 0.45);
-  drawSheet(ctx, scene, look, palette, selected, 0, 1);
-  if (selected >= 0 && scene.modes[selected]) {
-    const mode = scene.modes[selected];
-    strokeRung(ctx, mode, { width: look.width + 1.1, alpha: 1, halo: 3, haloAlpha: 0.35 }, palette.wire);
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  const order = slices.map((slice, index) => ({ slice, index }));
+  order.sort((a, b) => worldOf(b.slice, detune).z - worldOf(a.slice, detune).z);
+  for (const item of order) {
+    if (item.index === selected) continue;
+    strokeTriangle(ctx, item.slice, detune, place, camera, look, palette, style, 1);
   }
-  return scene.modes.map((mode) => mode.base);
+  if (selected >= 0 && slices[selected]) {
+    strokeTriangle(ctx, slices[selected], detune, place, camera, { ...look, width: look.width + 0.8, halo: Math.max(look.halo, 3), haloAlpha: 0.4 }, palette, style, 1);
+  }
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
+  return slices.map((slice) => projectSlice(slice, detune, place, camera).crest);
 }
 
-export function hitPartial(partials, camera, width, height, x, y) {
-  const scene = layoutScene(partials, camera, width, height);
+export function hitPartial(partials, camera, width, height, x, y, detune = 0) {
+  const slices = partials?.[0] && 't' in partials[0]
+    ? partials
+    : (partials || []).map((partial) => sliceFromPartial(partial, 1));
+  const place = placement(width, height);
+  const view = clampCamera(camera);
   let best = -1;
-  let score = 12;
-  for (let i = 0; i < scene.modes.length; i++) {
-    const mode = scene.modes[i];
-    const distance = distanceToSegment(x, y, mode.base.x, mode.base.y, mode.crest.x, mode.crest.y);
+  let score = 14;
+  for (let i = 0; i < slices.length; i++) {
+    if (slices[i].alpha < 0.2) continue;
+    const tri = projectSlice(slices[i], detune, place, view);
+    const distance = Math.min(
+      distanceToSegment(x, y, tri.foot.x, tri.foot.y, tri.crest.x, tri.crest.y),
+      distanceToSegment(x, y, tri.crest.x, tri.crest.y, tri.back.x, tri.back.y),
+      distanceToSegment(x, y, tri.foot.x, tri.foot.y, tri.back.x, tri.back.y),
+    );
     if (distance < score) {
       score = distance;
       best = i;
@@ -107,79 +186,97 @@ export function hitPartial(partials, camera, width, height, x, y) {
   return best;
 }
 
-export function layoutScene(partials, camera, width, height) {
-  const view = clampCamera(camera);
-  const place = placement(width, height);
-  const rawTl = place(view, 0, WEDGE.leftH, 0);
-  const rawBl = place(view, 0, 0, 0);
-  const rawTip = place(view, WEDGE.span, WEDGE.tipY, WEDGE.tipZ);
-  const fit = contain([rawTl, rawBl, rawTip, ...lidEnds(rawTl, rawBl, rawTip)], width, height);
-  const tl = fit(rawTl);
-  const bl = fit(rawBl);
-  const tip = fit(rawTip);
-  const logLo = Math.log2(WEDGE.ratioLo);
-  const logHi = Math.log2(WEDGE.ratioHi);
-  const modes = partials.map((partial) => {
-    const ratio = Math.max(Number(partial.ratio) || WEDGE.ratioLo, 1e-6);
-    const t = clamp((Math.log2(ratio) - logLo) / (logHi - logLo), 0, 1);
-    const amp = 10 ** (Math.max(-72, Math.min(0, Number(partial.gainDb) || 0)) / 20);
-    const reach = 0.22 + 0.78 * Math.sqrt(amp);
-    const foot = lerp(bl, tip, t);
-    const head = lerp(tl, tip, t);
-    return {
-      base: foot,
-      crest: lerp(foot, head, reach),
-      t,
-      amp,
-    };
-  });
-  return { modes, tl, bl, tip, project: (x, y, z) => place(view, x, y, z) };
-}
-
-// Pin the resting left edge, then keep that same screen scale while dragging.
-function placement(width, height) {
-  const home = clampCamera(defaultCamera());
-  const origin = screenOf(home, 0, WEDGE.leftH, 0);
-  const foot = screenOf(home, 0, 0, 0);
-  const scale = (height * WEDGE.leftScreen) / (Math.hypot(foot.x - origin.x, foot.y - origin.y) || 1);
-  const ox = width * WEDGE.originX - origin.x * scale;
-  const oy = height * WEDGE.originY - origin.y * scale;
-  return (camera, x, y, z) => {
-    const point = screenOf(camera, x, y, z);
-    return { x: point.x * scale + ox, y: point.y * scale + oy };
+export function worldOf(slice, detune = 0) {
+  const t = detuneT(slice.t, detune);
+  return {
+    x: (t - 0.5) * PLANE.span,
+    y: clamp(slice.height, 0, 1.2) * PLANE.height,
+    z: clamp(slice.depth, 0, 1.6) * PLANE.depth,
   };
 }
 
-function screenOf(camera, x, y, z) {
-  const point = rawProject(x, y, z, camera);
-  return { x: point.x, y: -point.y };
+function strokeTriangle(ctx, slice, detune, place, camera, look, palette, style, alphaScale) {
+  if (!slice || slice.alpha < 0.015) return;
+  const tri = projectSlice(slice, detune, place, camera);
+  const fade = slice.alpha * alphaScale;
+  const topsOnly = style === 'eco';
+  if (look.halo > 0) {
+    ctx.save();
+    ctx.globalCompositeOperation = palette.bloom;
+    ctx.strokeStyle = palette.wire;
+    ctx.globalAlpha = look.haloAlpha * fade;
+    ctx.lineWidth = look.halo;
+    line(ctx, tri.crest, tri.back);
+    if (!topsOnly) {
+      line(ctx, tri.foot, tri.crest);
+      line(ctx, tri.foot, tri.back);
+    }
+    ctx.restore();
+  }
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.lineWidth = look.width;
+  ctx.globalAlpha = look.alpha * fade;
+  ctx.strokeStyle = palette.wire;
+  line(ctx, tri.crest, tri.back);
+  if (!topsOnly) {
+    ctx.strokeStyle = palette.ink;
+    ctx.globalAlpha = 0.72 * fade;
+    line(ctx, tri.foot, tri.crest);
+    line(ctx, tri.foot, tri.back);
+  }
 }
 
-function lidEnds(tl, bl, tip) {
-  const edge = norm(sub(tip, tl));
-  let normal = { x: edge.y, y: -edge.x };
-  if (dot(normal, sub(bl, tl)) > 0) normal = { x: -normal.x, y: -normal.y };
-  const reach = (Math.hypot(bl.x - tl.x, bl.y - tl.y) || 1) * WEDGE.lidReach;
-  return [WEDGE.lidFrom, WEDGE.lidTo].map((t) => add(lerp(tl, tip, t), scale(normal, reach)));
+function projectSlice(slice, detune, place, camera) {
+  const world = worldOf(slice, detune);
+  return {
+    foot: place(camera, world.x, 0, 0),
+    crest: place(camera, world.x, world.y, 0),
+    back: place(camera, world.x, 0, world.z),
+  };
 }
 
-function contain(points, width, height) {
-  const pad = 6;
+function placement(width, height) {
+  const home = defaultCamera();
+  const margin = 16;
+  const corners = fieldCorners();
   let minX = Infinity;
   let maxX = -Infinity;
   let minY = Infinity;
   let maxY = -Infinity;
-  for (const point of points) {
+  for (const corner of corners) {
+    const point = screenOf(home, corner.x, corner.y, corner.z);
     if (point.x < minX) minX = point.x;
     if (point.x > maxX) maxX = point.x;
     if (point.y < minY) minY = point.y;
     if (point.y > maxY) maxY = point.y;
   }
-  if (minX >= pad && minY >= pad && maxX <= width - pad && maxY <= height - pad) return (point) => point;
-  const zoom = Math.min((width - pad * 2) / Math.max(1, maxX - minX), (height - pad * 2) / Math.max(1, maxY - minY));
+  const scale = Math.min(
+    (width - margin * 2) / Math.max(0.001, maxX - minX),
+    (height - margin * 2) / Math.max(0.001, maxY - minY),
+  );
   const cx = (minX + maxX) / 2;
   const cy = (minY + maxY) / 2;
-  return (point) => ({ x: width / 2 + (point.x - cx) * zoom, y: height / 2 + (point.y - cy) * zoom });
+  return (camera, x, y, z) => {
+    const point = screenOf(camera, x, y, z);
+    return {
+      x: width / 2 + (point.x - cx) * scale,
+      y: height / 2 + (point.y - cy) * scale,
+    };
+  };
+}
+
+function fieldCorners() {
+  const xs = [-PLANE.span * 0.62, PLANE.span * 0.62];
+  const ys = [0, PLANE.height];
+  const zs = [0, PLANE.depth];
+  const corners = [];
+  for (const x of xs) for (const y of ys) for (const z of zs) corners.push({ x, y, z });
+  return corners;
+}
+
+function screenOf(camera, x, y, z) {
+  const point = rawProject(x, y, z, camera);
+  return { x: point.x, y: -point.y };
 }
 
 function rawProject(x, y, z, camera) {
@@ -191,150 +288,41 @@ function rawProject(x, y, z, camera) {
   const z1 = -x * sy + z * cy;
   const y2 = y * cp - z1 * sp;
   const z2 = y * sp + z1 * cp;
-  const denom = camera.distance + z2 * WEDGE.perspective;
-  const persp = clamp(camera.distance / Math.max(0.25, denom), 0.25, 2.4);
+  const denom = camera.distance + z2 * PLANE.perspective;
+  const persp = clamp(camera.distance / Math.max(0.3, denom), 0.3, 2.2);
   return { x: x1 * persp, y: y2 * persp, depth: z2 };
 }
 
 function sitePalette(colors) {
+  const panel = colors?.bg || '#f2ede3';
   return {
-    panel: colors?.bg || '#f2ede3',
-    face: colors?.ink || '#1a1916',
+    panel,
+    ink: colors?.ink || '#1a1916',
     wire: colors?.accent || '#d4421c',
+    bloom: luminance(panel) < 90 ? 'lighter' : 'source-over',
   };
 }
 
-function drawSheet(ctx, scene, look, palette, selected, shift, alphaScale) {
-  const { modes, tl, bl, tip } = scene;
-  if (!tl || !bl || !tip) return;
-  const fuse = modes.length >= 64 && look.solid;
-  ctx.fillStyle = palette.face;
-  ctx.strokeStyle = palette.face;
-  if (fuse) {
-    ctx.globalAlpha = (modes.length > 96 ? 0.72 : 0.9) * alphaScale;
-    fillTriangle(ctx, tl, bl, tip, shift);
-  }
-  ctx.strokeStyle = palette.wire;
-  const rungWidth = modes.length > 160 ? 0.7 : modes.length > 48 ? 1.15 : look.width;
-  for (let i = 0; i < modes.length; i++) {
-    if (i === selected) continue;
-    const mode = modes[i];
-    const presence = 0.35 + 0.65 * mode.amp;
-    if (look.halo > 0) {
-      ctx.globalAlpha = look.haloAlpha * presence * alphaScale;
-      ctx.lineWidth = look.halo * (0.45 + 0.55 * mode.amp);
-      line(ctx, shiftPoint(mode.base, shift), shiftPoint(mode.crest, shift));
-    }
-    ctx.globalAlpha = (fuse ? WEDGE.rungAlpha : Math.min(0.85, look.alpha)) * presence * alphaScale;
-    ctx.lineWidth = rungWidth;
-    line(ctx, shiftPoint(mode.base, shift), shiftPoint(mode.crest, shift));
-  }
-  strokeEdges(ctx, tl, bl, tip, palette, shift, alphaScale);
-  drawTopWire(ctx, tl, bl, tip, look, palette, shift, alphaScale);
-  drawTip(ctx, tl, bl, tip, palette, shift, alphaScale);
-  ctx.globalAlpha = 1;
+function luminance(color) {
+  const hex = String(color || '').trim();
+  const match = /^#([0-9a-f]{6})$/i.exec(hex);
+  if (!match) return 180;
+  const value = parseInt(match[1], 16);
+  const r = (value >> 16) & 255;
+  const g = (value >> 8) & 255;
+  const b = value & 255;
+  return (r + g + b) / 3;
 }
 
-function drawTopWire(ctx, tl, bl, tip, look, palette, shift, alphaScale) {
-  const edge = norm(sub(tip, tl));
-  let normal = { x: edge.y, y: -edge.x };
-  const down = sub(bl, tl);
-  if (dot(normal, down) > 0) normal = { x: -normal.x, y: -normal.y };
-  const left = Math.hypot(bl.x - tl.x, bl.y - tl.y) || 1;
-  const gap = left * WEDGE.stackGap;
-  ctx.strokeStyle = palette.wire;
-  ctx.lineWidth = 1.15;
-  const end = lerp(tl, tip, WEDGE.stackEnd);
-  if (look.halo > 0) {
-    ctx.globalAlpha = look.haloAlpha * alphaScale;
-    ctx.lineWidth = look.halo;
-    strokeOffset(ctx, tl, end, normal, gap * 2, shift);
-    ctx.lineWidth = 1.15;
-  }
-  ctx.globalAlpha = WEDGE.wireAlpha * alphaScale;
-  for (let i = 1; i <= WEDGE.stackCount; i++) strokeOffset(ctx, tl, end, normal, gap * i, shift);
-  const reach = left * WEDGE.lidReach;
-  const startA = lerp(tl, tip, WEDGE.lidFrom);
-  const startB = lerp(tl, tip, WEDGE.lidTo);
-  const endA = add(startA, scale(normal, reach));
-  const endB = add(startB, scale(normal, reach));
-  if (look.halo > 0) {
-    ctx.globalAlpha = look.haloAlpha * alphaScale;
-    ctx.lineWidth = look.halo;
-    line(ctx, shiftPoint(startA, shift), shiftPoint(endA, shift));
-    line(ctx, shiftPoint(startB, shift), shiftPoint(endB, shift));
-    ctx.lineWidth = 1.15;
-  }
-  ctx.globalAlpha = WEDGE.wireAlpha * alphaScale;
-  line(ctx, shiftPoint(startA, shift), shiftPoint(endA, shift));
-  line(ctx, shiftPoint(startB, shift), shiftPoint(endB, shift));
-  line(ctx, shiftPoint(endA, shift), shiftPoint(endB, shift));
-}
-
-function drawTip(ctx, tl, bl, tip, palette, shift, alphaScale) {
-  const back = norm(sub(mid(tl, bl), tip));
-  const side = { x: -back.y, y: back.x };
-  const size = Math.hypot(bl.x - tl.x, bl.y - tl.y) * WEDGE.tipSize;
-  ctx.strokeStyle = palette.wire;
-  ctx.globalAlpha = WEDGE.wireAlpha * alphaScale;
-  ctx.lineWidth = 1;
-  for (let i = 1; i <= 3; i++) {
-    const d = (size * i) / 3;
-    const p = add(tip, scale(back, d));
-    const half = d * 0.42;
-    line(ctx, shiftPoint(add(p, scale(side, -half)), shift), shiftPoint(add(p, scale(side, half)), shift));
-  }
-  for (const s of [-0.28, 0.28]) {
-    const a = add(tip, scale(side, s * size));
-    line(ctx, shiftPoint(a, shift), shiftPoint(add(a, scale(back, size * 0.95)), shift));
-  }
-}
-
-function fillTriangle(ctx, tl, bl, tip, shift) {
-  const a = shiftPoint(tl, shift);
-  const b = shiftPoint(bl, shift);
-  const c = shiftPoint(tip, shift);
-  ctx.beginPath();
-  ctx.moveTo(a.x, a.y);
-  ctx.lineTo(c.x, c.y);
-  ctx.lineTo(b.x, b.y);
-  ctx.closePath();
-  ctx.fill();
-}
-
-function strokeEdges(ctx, tl, bl, tip, palette, shift, alphaScale) {
-  ctx.strokeStyle = palette.face;
-  ctx.globalAlpha = Math.min(1, 0.95 * alphaScale);
-  ctx.lineWidth = 1.35;
-  line(ctx, shiftPoint(tl, shift), shiftPoint(bl, shift));
-  line(ctx, shiftPoint(tip, shift), shiftPoint(tl, shift));
-  line(ctx, shiftPoint(bl, shift), shiftPoint(tip, shift));
-  const edge = norm(sub(tip, bl));
-  let outward = { x: edge.y, y: -edge.x };
-  if (dot(outward, sub(tl, bl)) > 0) outward = { x: -outward.x, y: -outward.y };
-  const offset = scale(outward, 1.6);
-  ctx.strokeStyle = palette.wire;
-  ctx.globalAlpha = WEDGE.bottomWire * alphaScale;
-  ctx.lineWidth = 1.05;
-  line(ctx, shiftPoint(add(bl, offset), shift), shiftPoint(add(tip, offset), shift));
-}
-
-function strokeOffset(ctx, a, b, normal, distance, shift) {
-  const o = scale(normal, distance);
-  line(ctx, shiftPoint(add(a, o), shift), shiftPoint(add(b, o), shift));
-}
-
-function strokeRung(ctx, mode, look, color) {
-  ctx.strokeStyle = color;
-  if (look.halo) {
-    ctx.globalAlpha = look.haloAlpha;
-    ctx.lineWidth = look.halo;
-    line(ctx, mode.base, mode.crest);
-  }
-  ctx.globalAlpha = look.alpha;
-  ctx.lineWidth = look.width;
-  line(ctx, mode.base, mode.crest);
-  ctx.globalAlpha = 1;
+function lerpSlice(from, to, eased) {
+  const a = from || { t: to?.t || 0, height: 0, depth: 0, alpha: 0 };
+  const b = to || { t: a.t, height: 0, depth: 0, alpha: 0 };
+  return {
+    t: a.t + (b.t - a.t) * eased,
+    height: a.height + (b.height - a.height) * eased,
+    depth: a.depth + (b.depth - a.depth) * eased,
+    alpha: a.alpha + (b.alpha - a.alpha) * eased,
+  };
 }
 
 function line(ctx, a, b) {
@@ -342,39 +330,6 @@ function line(ctx, a, b) {
   ctx.moveTo(a.x, a.y);
   ctx.lineTo(b.x, b.y);
   ctx.stroke();
-}
-
-function shiftPoint(point, shift) {
-  return shift ? { x: point.x + shift, y: point.y } : point;
-}
-
-function lerp(a, b, t) {
-  return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
-}
-
-function add(a, b) {
-  return { x: a.x + b.x, y: a.y + b.y };
-}
-
-function sub(a, b) {
-  return { x: a.x - b.x, y: a.y - b.y };
-}
-
-function scale(v, k) {
-  return { x: v.x * k, y: v.y * k };
-}
-
-function dot(a, b) {
-  return a.x * b.x + a.y * b.y;
-}
-
-function mid(a, b) {
-  return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-}
-
-function norm(v) {
-  const len = Math.hypot(v.x, v.y) || 1;
-  return { x: v.x / len, y: v.y / len };
 }
 
 function clamp(value, lo, hi) {

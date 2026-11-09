@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { performance } from 'node:perf_hooks';
-import { clampCamera, defaultCamera, frameMotion, paintModalView } from './modal-view.js';
+import { aimSlices, clampCamera, createSliceMotion, defaultCamera, detuneT, frameMotion, paintModalView, PLANE, sampleSlices, sliceFromPartial, worldOf } from './modal-view.js';
 import { shapePartials } from './shape.js';
 
 function stubContext() {
@@ -47,13 +47,46 @@ test('resting motion leaves the camera and the partials for a later pass', () =>
   assert.equal(frame.time, 0);
 });
 
-test('the prism stays inside the canvas at the default angle and a drag', () => {
+test('yaw can turn a full circle and pitch stays off the poles', () => {
+  const turned = clampCamera({ yaw: 4, pitch: 0.5 });
+  assert.ok(Math.abs(turned.yaw - 4) > 0.2);
+  assert.ok(Math.abs(turned.yaw) <= Math.PI);
+  assert.equal(clampCamera({ yaw: 0, pitch: 0 }).pitch, PLANE.pitchMin);
+  assert.equal(clampCamera({ yaw: 0, pitch: 2 }).pitch, PLANE.pitchMax);
+  assert.ok(PLANE.pitchMax < Math.PI / 2);
+  assert.ok(PLANE.pitchMin > 0);
+});
+
+test('each partial is its own triangle and eco draws only the tops', () => {
+  const list = partials(8);
+  const quiet = worldOf(sliceFromPartial(list[7]));
+  const loud = worldOf(sliceFromPartial(list[0]));
+  assert.ok(loud.y > quiet.y);
+  assert.ok(loud.x < quiet.x);
+  const long = worldOf(sliceFromPartial({ ratio: 2, gainDb: -6, decay: 8 }));
+  const short = worldOf(sliceFromPartial({ ratio: 2, gainDb: -6, decay: 0.3 }));
+  assert.ok(long.z > short.z * 2);
+  assert.equal(long.y, short.y);
+  const spread = detuneT(0.9, 1) - detuneT(0.2, 1);
+  const rest = detuneT(0.9, 0) - detuneT(0.2, 0);
+  assert.ok(spread > rest);
+  assert.equal(worldOf(sliceFromPartial(list[3]), 1).y, worldOf(sliceFromPartial(list[3]), 0).y);
+
+  const eco = stubContext();
+  const fast = stubContext();
+  paintModalView(eco, list, { width: 960, height: 460, style: 'eco', colors, camera: defaultCamera() });
+  paintModalView(fast, list, { width: 960, height: 460, style: 'fast', colors, camera: defaultCamera() });
+  assert.equal(eco.strokes, list.length);
+  assert.equal(fast.strokes, list.length * 3);
+});
+
+test('the triangles stay inside the canvas at the resting angle and a full turn', () => {
   const ctx = stubContext();
   const list = partials(64);
   const points = [];
   ctx.lineTo = (x, y) => { points.push({ x, y }); };
   ctx.moveTo = (x, y) => { points.push({ x, y }); };
-  for (const camera of [defaultCamera(), clampCamera({ yaw: 1.8, pitch: 0.3, distance: 3.6 })]) {
+  for (const camera of [defaultCamera(), clampCamera({ yaw: Math.PI, pitch: 0.4 }), clampCamera({ yaw: 1.8, pitch: 0.9 })]) {
     points.length = 0;
     paintModalView(ctx, list, { width: 960, height: 460, style: 'fast', colors, camera });
     assert.ok(points.length > 30);
@@ -62,6 +95,32 @@ test('the prism stays inside the canvas at the default angle and a drag', () => 
       assert.ok(point.y >= -1 && point.y <= 461, `y ${point.y}`);
     }
   }
+});
+
+test('a density change eases by index, growing the new slices from zero', () => {
+  const motion = createSliceMotion();
+  const before = partials(4);
+  aimSlices(motion, before, 0, 0);
+  const atRest = sampleSlices(motion, 0);
+  assert.equal(atRest.length, 4);
+  aimSlices(motion, partials(7), 1000, 260);
+  const born = sampleSlices(motion, 1000);
+  assert.equal(born.length, 7);
+  assert.equal(born[6].height, 0);
+  assert.equal(born[6].alpha, 0);
+  assert.ok(Math.abs(born[0].t - atRest[0].t) < 1e-6);
+  const mid = sampleSlices(motion, 1000 + 130);
+  assert.ok(mid[6].height > 0 && mid[6].height < sliceFromPartial(partials(7)[6]).height);
+  assert.ok(mid[0].height > Math.min(atRest[0].height, sliceFromPartial(partials(7)[0]).height) - 1e-6);
+  const done = sampleSlices(motion, 1000 + 260);
+  assert.ok(Math.abs(done[6].height - sliceFromPartial(partials(7)[6]).height) < 1e-6);
+  assert.equal(done[6].alpha, 1);
+  aimSlices(motion, partials(2), 2000, 260);
+  const leaving = sampleSlices(motion, 2000);
+  assert.ok(leaving.length >= 7);
+  assert.equal(leaving[6].alpha, 1);
+  const gone = sampleSlices(motion, 2000 + 260);
+  assert.equal(gone.length, 2);
 });
 
 test('256 modes in the glow style draw at 60 fps', () => {
