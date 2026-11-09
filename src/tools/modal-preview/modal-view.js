@@ -27,6 +27,9 @@ export const PLANE = {
   span: 2.72,
   height: 1.29,
   depth: 3.15,
+  // Seconds represented by a full trip along the depth axis. Every slice
+  // draws its envelope out to this same time.
+  timeWindow: 8,
   // Short floor depth, straight back along the decay axis. Same length on every slice.
   floorZ: 0.28,
   ratioLo: 0.35,
@@ -69,6 +72,7 @@ export function sliceFromPartial(partial, alpha = 1) {
     gainDb: Number.isFinite(gainDb) ? gainDb : 0,
     height: levelHeight(partial?.gainDb),
     depth: decayDepth(partial?.decay),
+    seconds: clamp(Number(partial?.decay) || 0.05, 0.05, 40),
     alpha,
   };
 }
@@ -210,7 +214,7 @@ export function measureFit(slices, camera, width, height, detune = 0) {
       { x: world.x, y: 0, z: 0 },
       { x: world.x, y: world.y, z: 0 },
       floorBack(world),
-      ...tailWorld(world),
+      ...tailWorld(slice, world),
     ];
     for (const sample of samples) {
       const point = screenOf(view, sample.x, sample.y, sample.z);
@@ -365,17 +369,19 @@ function floorBack(world) {
   return { x: world.x, y: 0, z: PLANE.floorZ };
 }
 
-function tailWorld(world) {
-  const steps = 12;
+function tailWorld(slice, world) {
+  const steps = 18;
+  const seconds = Math.max(0.05, Number(slice?.seconds) || 1);
   const points = [];
   for (let i = 0; i <= steps; i++) {
     const u = i / steps;
-    // A small sag as the line leaves the crest, then a nearly straight run
-    // along the decay axis. Short decays never get far enough to show.
-    // Gentle along a long ring, then a quicker fall if this partial's
-    // decay actually finishes inside the drawn depth.
-    const env = 1 - 0.1 * u;
-    points.push({ x: world.x, y: world.y * env, z: world.z * u });
+    const time = u * PLANE.timeWindow;
+    // height(t) = level * exp(-t / decay). Every slice travels the same depth.
+    // Once the ring has fallen out, the curve stops on the floor instead of
+    // riding it to the far edge.
+    const env = Math.exp(-time / seconds);
+    points.push({ x: world.x, y: world.y * env, z: u * PLANE.depth });
+    if (i > 2 && env < 0.16) break;
   }
   return points;
 }
@@ -407,17 +413,14 @@ function strokeStructure(ctx, slice, detune, place, camera, look, palette, alpha
 }
 
 function strokeTail(ctx, slice, detune, place, camera, look, palette, alphaScale) {
-  // Every slice gets its decay line. A long ring is still loud at the edge of
-  // the drawn depth, so the line ends in the air. A short ring falls inside
-  // that depth and the last segment drops toward the floor, the step on the
-  // walkthrough profiles. No extra tick is added at the tip.
-  if (!slice || slice.alpha < 0.04 || slice.depth < 0.08 || slice.height < 0.02) return;
+  if (!slice || slice.alpha < 0.04 || slice.height < 0.02) return;
   const tri = projectSlice(slice, detune, place, camera);
-  const faint = slice.depth < 0.55;
-  const lookTail = faint
-    ? { ...look, width: Math.max(0.65, look.width * 0.5), halo: look.halo * 0.4, haloAlpha: look.haloAlpha * 0.35 }
-    : look;
-  glow(ctx, tri.curve, palette.wire, lookTail, slice.alpha * alphaScale * (faint ? 0.5 : 1));
+  const end = Math.exp(-PLANE.timeWindow / Math.max(0.05, slice.seconds || 1));
+  const bright = end > 0.22;
+  const lookTail = bright
+    ? look
+    : { ...look, width: Math.max(0.65, look.width * 0.55), halo: look.halo * 0.45, haloAlpha: look.haloAlpha * 0.4 };
+  glow(ctx, tri.curve, palette.wire, lookTail, slice.alpha * alphaScale * (bright ? 1 : 0.62));
 }
 
 export function layoutTriangles(slices, camera, width, height, detune = 0) {
@@ -431,7 +434,7 @@ export function layoutTriangles(slices, camera, width, height, detune = 0) {
 function projectSlice(slice, detune, place, camera) {
   const world = worldOf(slice, detune);
   const rear = floorBack(world);
-  const curve = tailWorld(world).map((point) => place(camera, point.x, point.y, point.z));
+  const curve = tailWorld(slice, world).map((point) => place(camera, point.x, point.y, point.z));
   return {
     foot: place(camera, world.x, 0, 0),
     crest: place(camera, world.x, world.y, 0),
@@ -500,6 +503,7 @@ function lerpSlice(from, to, eased) {
     gainDb: (a.gainDb || 0) + ((b.gainDb || 0) - (a.gainDb || 0)) * eased,
     height: a.height + (b.height - a.height) * eased,
     depth: a.depth + (b.depth - a.depth) * eased,
+    seconds: (a.seconds || b.seconds || 0.2) + ((b.seconds || a.seconds || 0.2) - (a.seconds || b.seconds || 0.2)) * eased,
     alpha: a.alpha + (b.alpha - a.alpha) * eased,
   };
 }
