@@ -402,11 +402,9 @@ function drawShape(seconds, maxSeconds) {
     // octave is shorter than the fundamental and still ends in the air.
     return { reach: 0.34 + 0.66 * rel, drop: PLANE.sag, floor: false };
   }
-  // Only decays close to the knee still cross the comb. Much shorter
-  // ones would draw a second copy of the bar, so they stay in the front.
-  const t = rel / 0.4;
-  const reach = Math.min(0.17, 0.16 * Math.max(t, 0) ** 2.2);
-  return { reach: reach < 0.055 ? 0 : reach, drop: 2.35, floor: true };
+  // About one floor-rung. The landing stays in the gap beside the bar,
+  // so the curve reads as fill inside the comb rather than a second bar.
+  return { reach: 0.09, drop: 2.45, floor: true };
 }
 
 function tailWorld(slice, world, maxSeconds) {
@@ -457,24 +455,13 @@ function strokeTail(ctx, slice, detune, place, camera, look, palette, alphaScale
     glow(ctx, tri.curve, palette.wire, look, slice.alpha * alphaScale);
     return;
   }
-  if (shape.reach < 0.05) return;
-  // Bright near the crest, quiet at the floor, so the short decays pile up
-  // as a haze in the comb instead of a row of hard scallops.
   const lookTail = {
     ...look,
-    width: Math.max(0.9, look.width * 0.85),
-    halo: look.halo * 2.1,
-    haloAlpha: Math.min(0.72, look.haloAlpha * 1.8),
+    width: Math.max(1.15, look.width),
+    halo: Math.max(6, look.halo * 1.3),
+    haloAlpha: Math.min(0.6, look.haloAlpha * 1.5),
   };
-  const points = tri.curve;
-  const chunks = 4;
-  const last = points.length - 1;
-  for (let c = 0; c < chunks; c++) {
-    const i0 = Math.floor(c * last / chunks);
-    const i1 = Math.ceil((c + 1) * last / chunks);
-    const fade = 1 - (c / chunks) * 0.55;
-    glow(ctx, points.slice(i0, i1 + 1), palette.wire, lookTail, slice.alpha * alphaScale * fade);
-  }
+  glow(ctx, tri.curve, palette.wire, lookTail, slice.alpha * alphaScale);
 }
 
 export function layoutTriangles(slices, camera, width, height, detune = 0) {
