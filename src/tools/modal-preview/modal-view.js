@@ -66,6 +66,7 @@ export function sliceFromPartial(partial, alpha = 1) {
   const gainDb = Number(partial?.gainDb);
   return {
     t: frequencyT(partial?.ratio),
+    ratio: Math.max(0, Number(partial?.ratio) || 0),
     gainDb: Number.isFinite(gainDb) ? gainDb : 0,
     height: levelHeight(partial?.gainDb),
     depth: decayDepth(partial?.decay),
@@ -118,6 +119,29 @@ function evenT(index, count) {
   return index / (count - 1);
 }
 
+// A log of harmonic number spreads the first octave and packs the highs.
+// The string picture does the other thing: bars 1–5 sit closer than the
+// rest, so the floor position is ratio^1.35, normalized across the set.
+// Detune still spreads whatever spacing this produces.
+export function spaceByLog(slices) {
+  const usable = slices.filter((slice) => slice && Number(slice.ratio) > 0);
+  if (usable.length < 2) {
+    slices.forEach((slice, index) => { if (slice) slice.t = evenT(index, slices.length); });
+    return slices;
+  }
+  const power = 1.35;
+  const bent = usable.map((slice) => slice.ratio ** power);
+  const lo = Math.min(...bent);
+  const hi = Math.max(...bent);
+  const span = hi - lo;
+  if (span < 1e-6) {
+    usable.forEach((slice, index) => { slice.t = evenT(index, usable.length); });
+    return slices;
+  }
+  usable.forEach((slice, index) => { slice.t = (bent[index] - lo) / span; });
+  return slices;
+}
+
 // Positive detune spreads frequency away from the low end. Negative bunches
 // it. Height and depth are left alone.
 export function detuneT(t, detune) {
@@ -133,14 +157,14 @@ export function createSliceMotion() {
 export function aimSlices(motion, partials, now, duration = MORPH_MS) {
   const shown = sampleSlices(motion, now);
   const next = partials.map((partial) => sliceFromPartial(partial, 1));
+  spaceByLog(next);
   const count = Math.max(shown.length, next.length);
   const from = [];
   const to = [];
   for (let i = 0; i < count; i++) {
     const target = next[i] || { ...(shown[i] || sliceFromPartial(null, 0)), height: 0, depth: 0, alpha: 0 };
-    target.t = evenT(i, count);
     if (shown[i]) from.push(shown[i]);
-    else from.push({ t: target.t, height: 0, depth: 0, alpha: 0 });
+    else from.push({ t: target.t, height: 0, depth: 0, alpha: 0, ratio: target.ratio, gainDb: target.gainDb });
     to.push(target);
   }
   motion.from = from;
@@ -188,6 +212,7 @@ export function measureFit(slices, camera, width, height, detune = 0) {
       { x: world.x, y: world.y, z: 0 },
       floorBack(world),
       ...tailWorld(world),
+      { x: world.x, y: Math.max(0, world.y * 0.82 - PLANE.height * 0.22), z: world.z },
     ];
     for (const sample of samples) {
       const point = screenOf(view, sample.x, sample.y, sample.z);
@@ -243,7 +268,7 @@ export function paintModalView(ctx, partials, options = {}) {
   const { width, height, style = 'fast', colors, selected = -1, detune = 0 } = options;
   const camera = clampCamera(options.camera);
   const rawSlices = options.slices || spaceSlices(partials);
-  const slices = combHeights(rawSlices, options.position);
+  const slices = showDecay(combHeights(rawSlices, options.position));
   const look = PLANE.styles[style] || PLANE.styles.fast;
   const palette = sitePalette(colors);
   const ideal = measureFit(slices, camera, width, height, detune);
@@ -318,8 +343,13 @@ export function worldOf(slice, detune = 0) {
 
 function spaceSlices(partials) {
   const slices = (partials || []).map((partial) => sliceFromPartial(partial, 1));
-  for (let i = 0; i < slices.length; i++) slices[i].t = evenT(i, slices.length);
-  return slices;
+  return spaceByLog(slices);
+}
+
+function showDecay(slices) {
+  const max = Math.max(0, ...slices.map((slice) => slice?.depth || 0));
+  if (max < 1e-4) return slices;
+  return slices.map((slice) => ({ ...slice, depth: (slice?.depth || 0) / max }));
 }
 
 function drawRails(ctx, slices, detune, place, camera, palette, look) {
@@ -333,9 +363,9 @@ function drawRails(ctx, slices, detune, place, camera, palette, look) {
     front.push(place(camera, world.x, 0, 0));
     back.push(place(camera, rear.x, rear.y, rear.z));
   }
-  const rail = { ...look, width: look.width * 0.7, halo: look.halo * 0.45, haloAlpha: look.haloAlpha * 0.35 };
-  glow(ctx, back, palette.ink, rail, 0.38);
-  glow(ctx, front, palette.ink, rail, 0.5);
+  const rail = { ...look, width: look.width * 1.05, halo: look.halo * 0.9, haloAlpha: look.haloAlpha * 0.75 };
+  glow(ctx, back, palette.ink, rail, 0.78);
+  glow(ctx, front, palette.ink, rail, 0.9);
 }
 
 function floorBack(world) {
@@ -376,9 +406,9 @@ function strokeStructure(ctx, slice, detune, place, camera, look, palette, alpha
   const tri = projectSlice(slice, detune, place, camera);
   const fade = slice.alpha * alphaScale;
   const front = { ...look, width: look.width * 1.4, halo: look.halo * 1.45, haloAlpha: Math.min(0.5, look.haloAlpha * 1.25) };
-  const rung = { ...look, width: look.width * 0.6, halo: 0, haloAlpha: 0 };
+  const rung = { ...look, width: look.width * 0.9, halo: look.halo * 0.55, haloAlpha: look.haloAlpha * 0.45 };
   glow(ctx, [tri.foot, tri.crest], palette.ink, front, fade);
-  strokePath(ctx, [tri.foot, tri.floor], palette.ink, rung.width, fade * 0.3);
+  glow(ctx, [tri.foot, tri.floor], palette.ink, rung, fade * 0.82);
 }
 
 function strokeDiagonal(ctx, slice, detune, place, camera, look, palette, alphaScale, index = 0) {
@@ -394,11 +424,16 @@ function strokeTail(ctx, slice, detune, place, camera, look, palette, alphaScale
   if (!slice || slice.alpha < 0.04 || slice.depth < 0.36) return;
   const tri = projectSlice(slice, detune, place, camera);
   glow(ctx, tri.curve, palette.wire, look, slice.alpha * alphaScale);
+  const end = tri.curve[tri.curve.length - 1];
+  const world = worldOf(slice, detune);
+  const env = 1 - 0.18;
+  const stub = place(camera, world.x, Math.max(0, world.y * env - PLANE.height * 0.22), world.z);
+  glow(ctx, [end, stub], palette.wire, look, slice.alpha * alphaScale);
 }
 
 export function layoutTriangles(slices, camera, width, height, detune = 0) {
   const view = clampCamera(camera);
-  const spaced = slices.map((slice, index) => ({ ...slice, t: evenT(index, slices.length) }));
+  const spaced = spaceByLog(slices.map((slice) => ({ ...slice })));
   const fit = measureFit(spaced, view, width, height, detune);
   const place = placement(fit, width, height);
   return spaced.map((slice) => projectSlice(slice, detune, place, view));
