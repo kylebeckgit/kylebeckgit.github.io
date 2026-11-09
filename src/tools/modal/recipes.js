@@ -5,6 +5,10 @@
 import { sanitizeControls } from './engine.js';
 
 const FAMILIES = [
+  { test: /rubber/, preset: 'string', stiffness: 0.01, brightness: -0.4, damping: 0.82, oddEven: 0, exciter: 'click', hardness: 0.3 },
+  { test: /mug|ceramic|porcelain|\bcup\b/, preset: 'bell', stiffness: 0.2, brightness: -0.05, damping: 0.4, oddEven: 0, exciter: 'mallet', hardness: 0.45 },
+  { test: /\bcan\b|\btin\b/, preset: 'plate', stiffness: 0.12, brightness: 0.15, damping: 0.55, oddEven: 0, exciter: 'mallet', hardness: 0.7 },
+  { test: /tube|aluminium|aluminum/, preset: 'open-pipe', stiffness: 0.04, brightness: 0.18, damping: 0.22, oddEven: 0, exciter: 'mallet', hardness: 0.55 },
   { test: /gamelan|bonang|gender|gangsa/, preset: 'bell', stiffness: 0.62, brightness: 0.12, damping: 0.3, oddEven: 0.05, exciter: 'mallet', hardness: 0.45 },
   { test: /clarinett?|closed pipe/, preset: 'closed-pipe', stiffness: 0.02, brightness: -0.05, damping: 0.42, oddEven: 0.85, exciter: 'burst', hardness: 0.4 },
   { test: /flute|shakuhachi|panpipe|open pipe/, preset: 'open-pipe', stiffness: 0.02, brightness: 0.1, damping: 0.48, oddEven: 0.1, exciter: 'burst', hardness: 0.35 },
@@ -79,9 +83,20 @@ export function objectName(text) {
   return '';
 }
 
+function mentions(text, test) {
+  const re = new RegExp(test.source, test.flags.includes('g') ? test.flags : `${test.flags}g`);
+  let match;
+  while ((match = re.exec(text))) {
+    const before = text.slice(Math.max(0, match.index - 64), match.index);
+    if (/\bnot\b|\bno\b|n't\b/.test(before)) continue;
+    return true;
+  }
+  return false;
+}
+
 function familyOf(text) {
   for (const family of FAMILIES) {
-    if (family.test.test(text)) return family;
+    if (mentions(text, family.test)) return family;
   }
   return null;
 }
@@ -139,6 +154,10 @@ function applyWords(recipe, text, refine) {
   if (/detun|beating|imperfect|chorus|out of tune/.test(text)) {
     controls.stiffness += refine ? 0.14 : 0.12;
     controls.seed = hashString(text) % 900000;
+  }
+  if (/nylon/.test(text)) {
+    controls.brightness -= 0.16;
+    controls.damping += 0.14;
   }
   if (/\bbow(?:ed|ing)?\b/.test(text)) recipe.exciter = 'bow';
   else if (/pluck|picked/.test(text)) recipe.exciter = 'click';

@@ -889,16 +889,17 @@ function setPlayError(root, message) {
 }
 
 function capAudible(partials) {
+  // Drop partials above ratio 48 instead of folding them under a neighbor.
+  // Folding made the list unsorted and pulled real string and bar modes off
+  // their textbook ratios. What remains is still positive, sorted, and audible
+  // at A4.
   const limit = 48;
-  let peak = 0;
-  for (const partial of partials) if (partial.ratio > peak) peak = partial.ratio;
-  if (!(peak > limit)) return partials;
-  const span = Math.log2(peak / limit) || 1;
-  return partials.map((partial) => {
-    if (!(partial.ratio > limit)) return partial;
-    const over = Math.log2(partial.ratio / limit) / span;
-    return { ...partial, ratio: limit * 2 ** (over * 0.5 - 0.5) };
-  });
+  const kept = partials
+    .filter((partial) => partial.ratio > 0 && partial.ratio <= limit)
+    .sort((a, b) => a.ratio - b.ratio);
+  if (kept.length) return kept;
+  const lowest = [...partials].sort((a, b) => a.ratio - b.ratio)[0];
+  return lowest ? [{ ...lowest, ratio: Math.min(lowest.ratio, limit) }] : [];
 }
 
 function heardPartials(partials, fundamental, sampleRate) {
