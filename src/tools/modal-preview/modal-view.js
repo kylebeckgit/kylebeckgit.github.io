@@ -55,6 +55,13 @@ export function defaultCamera() {
   return { yaw: WEDGE.yaw, pitch: WEDGE.pitch, distance: WEDGE.focal };
 }
 
+// Motion is a later pass. paintModalView draws whatever this returns, so
+// that pass can move the camera or the modes from `time` (milliseconds)
+// without reworking the wedge. Resting motion leaves both alone.
+export function frameMotion({ partials, camera, time = 0 }) {
+  return { partials, camera, time };
+}
+
 export function clampCamera(camera) {
   const base = camera || defaultCamera();
   return {
@@ -65,9 +72,10 @@ export function clampCamera(camera) {
 }
 
 export function paintModalView(ctx, partials, options) {
-  const { width, height, style = 'fast', colors, selected = -1, camera, detune = 0 } = options;
+  const { width, height, style = 'fast', colors, selected = -1, detune = 0, time = 0 } = options;
+  const framed = frameMotion({ partials, camera: options.camera, time });
   const look = WEDGE.styles[style] || WEDGE.styles.fast;
-  const scene = layoutScene(partials, camera, width, height);
+  const scene = layoutScene(framed.partials, framed.camera, width, height);
   const palette = sitePalette(colors);
   ctx.clearRect(0, 0, width, height);
   ctx.fillStyle = palette.panel;

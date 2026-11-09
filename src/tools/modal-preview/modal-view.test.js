@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { performance } from 'node:perf_hooks';
-import { clampCamera, defaultCamera, paintModalView } from './modal-view.js';
+import { clampCamera, defaultCamera, frameMotion, paintModalView } from './modal-view.js';
 import { shapePartials } from './shape.js';
 
 function stubContext() {
@@ -37,6 +37,15 @@ function partials(count) {
 }
 
 const colors = { accent: '#d4421c' };
+
+test('resting motion leaves the camera and the partials for a later pass', () => {
+  const list = partials(4);
+  const camera = defaultCamera();
+  const frame = frameMotion({ partials: list, camera, time: 0 });
+  assert.equal(frame.partials, list);
+  assert.equal(frame.camera, camera);
+  assert.equal(frame.time, 0);
+});
 
 test('the prism stays inside the canvas at the default angle and a drag', () => {
   const ctx = stubContext();

@@ -978,6 +978,8 @@ function drawZebra(canvas, partials, state) {
     colors,
     selected: state.selectedPartial,
     detune: state.detune || 0,
+    // frameMotion reads this. Leave it at rest until the motion pass.
+    time: 0,
   });
 }
 
