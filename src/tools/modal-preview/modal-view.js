@@ -17,6 +17,10 @@
 
 export const MORPH_MS = 260;
 
+// Sheet between neighboring envelopes. `under` fills down to the floor too.
+const SHEET = { alpha: 0.9, under: 0.22 };
+const SHEET_STEPS = 16;
+
 export const PLANE = {
   // Resting view. The floor run is about five bar-heights long.
   yaw: 0,
@@ -287,28 +291,41 @@ export function paintModalView(ctx, partials, options = {}) {
   const order = slices.map((slice, index) => ({ slice, index }));
   order.sort((a, b) => a.slice.t - b.slice.t);
   const clock = longestSeconds(slices);
-  const haze = [];
-  const flying = [];
-  for (const item of order) {
-    if (item.index === selected) continue;
-    const shape = drawShape(item.slice.seconds, clock);
-    (shape.floor ? haze : flying).push(item);
-  }
-  // Short decays are the haze inside the comb. The fronts paint over
-  // them so the pickets stay the bright edge.
-  for (const item of haze) strokeTail(ctx, item.slice, detune, place, camera, look, palette, 1, clock, 1);
+  const ribbons = order
+    .filter((item) => item.slice && item.slice.alpha > 0.04 && item.slice.height > 0.02)
+    .map((item) => ribbonOf(item.slice, detune, place, camera, clock));
+  // The sheet is the decay surface: a strip between each pair of envelopes.
+  // Overlaps near the front sum into one block. A single strip between two
+  // long tails stays faint. 'lighter' on the cream panel washes out, so the
+  // overlaps stack with source-over, which is what reads as additive here.
   if (style !== 'eco') {
     for (const item of order) {
       if (item.index === selected) continue;
-      strokeStructure(ctx, item.slice, detune, place, camera, look, palette, 1);
+      strokeStructure(ctx, item.slice, detune, place, camera, look, palette, 1, false, order.length);
     }
     drawRails(ctx, order.map((item) => item.slice), detune, place, camera, palette, look);
   }
-  for (const item of flying) strokeTail(ctx, item.slice, detune, place, camera, look, palette, 1, clock);
+  if (SHEET.under > 0) fillUnderCurves(ctx, ribbons, palette.wire, SHEET.under);
+  ctx.save();
+  if (style !== 'eco') ctx.filter = 'blur(1.6px)';
+  fillSheet(ctx, ribbons, palette.wire, SHEET.alpha, place, camera);
+  ctx.restore();
+  for (const item of order) {
+    if (item.index === selected) continue;
+    strokeTail(ctx, item.slice, detune, place, camera, look, palette, 1, clock);
+  }
+  // Cores sit on the sheet so the pickets stay sharp and a dense comb
+  // does not bury the surface in halo.
+  if (style !== 'eco') {
+    for (const item of order) {
+      if (item.index === selected) continue;
+      strokeStructure(ctx, item.slice, detune, place, camera, look, palette, 1, true, order.length);
+    }
+  }
   if (selected >= 0 && slices[selected]) {
     const chosen = { ...look, width: look.width + 0.4, halo: Math.max(look.halo, 3.5), haloAlpha: Math.max(look.haloAlpha, 0.4) };
     if (style !== 'eco') strokeStructure(ctx, slices[selected], detune, place, camera, chosen, palette, 1);
-    strokeTail(ctx, slices[selected], detune, place, camera, chosen, palette, 1, clock);
+    strokeTail(ctx, slices[selected], detune, place, camera, chosen, palette, 1.15, clock);
   }
   ctx.globalAlpha = 1;
   ctx.globalCompositeOperation = 'source-over';
@@ -437,34 +454,145 @@ function glow(ctx, points, color, look, alpha) {
   strokePath(ctx, points, color, look.width, look.alpha * alpha);
 }
 
-function strokeStructure(ctx, slice, detune, place, camera, look, palette, alphaScale) {
+function strokeStructure(ctx, slice, detune, place, camera, look, palette, alphaScale, coreOnly, count = 16) {
   if (!slice || slice.alpha < 0.04 || slice.height < 0.02) return;
   const tri = projectSlice(slice, detune, place, camera);
   const fade = slice.alpha * alphaScale;
-  const front = { ...look, width: look.width * 1.4, halo: look.halo * 1.45, haloAlpha: Math.min(0.5, look.haloAlpha * 1.25) };
-  const rung = { ...look, width: Math.max(0.6, look.width * 0.4), halo: look.halo * 0.3, haloAlpha: look.haloAlpha * 0.25 };
+  const crowd = Math.max(0.34, Math.min(1, 22 / Math.max(count, 1)));
+  const front = coreOnly
+    ? { ...look, width: look.width * 1.25 * crowd, halo: 0, haloAlpha: 0 }
+    : { ...look, width: look.width * 1.4 * Math.max(crowd, 0.7), halo: look.halo * 1.45 * crowd, haloAlpha: Math.min(0.5, look.haloAlpha * 1.25) };
+  const rung = coreOnly
+    ? { ...look, width: Math.max(0.55, look.width * 0.35), halo: 0, haloAlpha: 0 }
+    : { ...look, width: Math.max(0.6, look.width * 0.4), halo: look.halo * 0.3, haloAlpha: look.haloAlpha * 0.25 };
   glow(ctx, [tri.foot, tri.crest], palette.ink, front, fade);
-  glow(ctx, [tri.foot, tri.floor], palette.ink, rung, fade * 0.38);
+  glow(ctx, [tri.foot, tri.floor], palette.ink, rung, coreOnly ? fade * 0.55 : fade * 0.38);
 }
 
-function strokeTail(ctx, slice, detune, place, camera, look, palette, alphaScale, maxSeconds, weight = 1) {
+function envelopeSamples(slice, world, maxSeconds, steps) {
+  const seconds = Math.max(0.05, Number(slice?.seconds) || 0.2);
+  const { reach, drop } = drawShape(seconds, maxSeconds || seconds);
+  const samples = [];
+  let landed = null;
+  for (let i = 0; i <= steps; i++) {
+    const u = i / steps;
+    const env = Math.exp(-drop * u);
+    const point = { x: world.x, y: world.y * env, z: u * reach * PLANE.depth };
+    const live = !(i > 2 && env < 0.1);
+    if (!live && !landed) landed = point;
+    const held = landed && !live ? landed : point;
+    samples.push({ ...held, live });
+  }
+  return samples;
+}
+
+function ribbonOf(slice, detune, place, camera, clock) {
+  const world = worldOf(slice, detune);
+  const seconds = Math.max(0.05, Number(slice.seconds) || 0.2);
+  const shape = drawShape(seconds, clock);
+  const samples = envelopeSamples(slice, world, clock, SHEET_STEPS);
+  return {
+    alpha: slice.alpha,
+    reach: shape.reach,
+    floor: shape.floor,
+    world,
+    shape,
+    foot: place(camera, world.x, 0, 0),
+    pts: samples.map((sample) => {
+      const at = place(camera, sample.x, sample.y, sample.z);
+      const floor = place(camera, sample.x, 0, sample.z);
+      return { x: at.x, y: at.y, fx: floor.x, fy: floor.y, live: sample.live };
+    }),
+  };
+}
+
+function projectHeight(ribbon, place, camera, zNorm) {
+  const { world, shape } = ribbon;
+  if (zNorm > shape.reach + 1e-4) return null;
+  const u = shape.reach < 1e-4 ? 1 : zNorm / shape.reach;
+  const env = Math.exp(-shape.drop * Math.min(1, u));
+  return place(camera, world.x, world.y * env, zNorm * PLANE.depth);
+}
+
+function fillQuad(ctx, a, b, c, d) {
+  ctx.beginPath();
+  ctx.moveTo(a.x, a.y);
+  ctx.lineTo(b.x, b.y);
+  ctx.lineTo(c.x, c.y);
+  ctx.lineTo(d.x, d.y);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function fillSheet(ctx, ribbons, color, alpha, place, camera) {
+  if (ribbons.length < 2 || alpha <= 0) return;
+  ctx.save();
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.fillStyle = color;
+  const steps = SHEET_STEPS;
+  for (let i = 0; i < ribbons.length - 1; i++) {
+    const a = ribbons[i];
+    const b = ribbons[i + 1];
+    // The gap between two long tails stays empty. The sheet is the short
+    // decays, plus the root of a long tail where it meets a short neighbor.
+    if (!a.floor && !b.floor) continue;
+    const zMax = Math.min(a.reach, b.reach);
+    if (zMax < 0.012) continue;
+    const fade = Math.min(a.alpha, b.alpha);
+    for (let s = 0; s < steps; s++) {
+      const z0 = (s / steps) * zMax;
+      const z1 = ((s + 1) / steps) * zMax;
+      const a0 = projectHeight(a, place, camera, z0);
+      const a1 = projectHeight(a, place, camera, z1);
+      const b1 = projectHeight(b, place, camera, z1);
+      const b0 = projectHeight(b, place, camera, z0);
+      if (!a0 || !a1 || !b0 || !b1) continue;
+      const along = (1 - s / steps) ** 1.35;
+      // Very short partials only cap their own bar. The block is the ones
+      // that actually cross a rung or two.
+      const body = Math.min(1, zMax / 0.16);
+      ctx.globalAlpha = alpha * fade * along * (0.2 + 0.8 * body);
+      fillQuad(ctx, a0, a1, b1, b0);
+    }
+  }
+  ctx.restore();
+}
+
+function fillUnderCurves(ctx, ribbons, color, alpha) {
+  if (alpha <= 0) return;
+  ctx.save();
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.fillStyle = color;
+  for (const ribbon of ribbons) {
+    if (!ribbon.floor) continue;
+    const pts = ribbon.pts;
+    ctx.globalAlpha = alpha * ribbon.alpha;
+    for (let s = 0; s < pts.length - 1; s++) {
+      if (!pts[s].live && !pts[s + 1].live) continue;
+      fillQuad(
+        ctx,
+        pts[s],
+        pts[s + 1],
+        { x: pts[s + 1].fx, y: pts[s + 1].fy },
+        { x: pts[s].fx, y: pts[s].fy },
+      );
+    }
+  }
+  ctx.restore();
+}
+
+function strokeTail(ctx, slice, detune, place, camera, look, palette, alphaScale, maxSeconds) {
   if (!slice || slice.alpha < 0.04 || slice.height < 0.02) return;
   const tri = projectSlice(slice, detune, place, camera, maxSeconds);
-  const shape = drawShape(slice.seconds, maxSeconds || slice.seconds);
-  if (!shape.floor) {
-    glow(ctx, tri.curve, palette.wire, look, slice.alpha * alphaScale);
-    return;
-  }
-  // A curve that barely leaves its bar just doubles the front. Keep the
-  // ones that cross the comb; those are what pile into the block.
-  if (shape.reach < 0.02) return;
-  const lookTail = {
+  const edge = {
     ...look,
-    width: Math.max(1.45, look.width * 1.2) * weight,
-    halo: Math.max(13, look.halo * 2.4) * weight,
-    haloAlpha: Math.min(0.9, Math.max(look.haloAlpha, 0.42) * 2),
+    width: Math.max(0.85, look.width * 0.7),
+    halo: look.halo * 0.55,
+    haloAlpha: look.haloAlpha * 0.7,
   };
-  glow(ctx, tri.curve, palette.wire, lookTail, slice.alpha * alphaScale * weight);
+  const shape = drawShape(slice.seconds, maxSeconds || slice.seconds);
+  const strand = shape.floor ? 0.5 : 1;
+  glow(ctx, tri.curve, palette.wire, edge, strand * slice.alpha * alphaScale);
 }
 
 export function layoutTriangles(slices, camera, width, height, detune = 0) {
