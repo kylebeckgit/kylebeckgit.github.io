@@ -37,11 +37,13 @@ export const PLANE = {
   // line beside the bar. The two longest (string: fundamental and octave)
   // are the only tails.
   airRel: 0.46,
-  // Back rail, a short depth behind the front, full width. The accent
-  // vertical lands on it, so each picket has a little base.
-  ribbonZ: 0.24,
-  // Further floor rails. Only the longer left-hand rungs reach these.
-  latticeZ: [0.46, 0.68, 0.90],
+  // Back rail, close enough that the glow fuses it with the front into
+  // one heavy ribbon. The accent vertical uses the same depth, so each
+  // right-hand pair reads as one bright line.
+  ribbonZ: 0.012,
+  // Floor hatch under bars 1 to about 6. Short depths, so the crossings
+  // stay in the lower left and the glow melts them into the bars.
+  latticeZ: [0.12, 0.20, 0.30],
   ratioLo: 0.35,
   ratioHi: 48,
   styles: {
@@ -296,12 +298,19 @@ export function paintModalView(ctx, partials, options = {}) {
   ctx.lineJoin = 'round';
   const clock = longestSeconds(slices);
   const weight = lineWeight(fit.scale) * (style === 'eco' ? 0.85 : style === 'glow' ? 1.12 : 1);
-  const blur = weight * (style === 'eco' ? 1.8 : 3.8);
+  // Two stacked blooms. The wide one fills the gaps between close lines.
+  // The tighter one brightens the mesh those overlaps make.
+  const wide = Math.max(7, weight * (style === 'eco' ? 2.4 : 5.2));
+  const tight = Math.max(3.5, weight * (style === 'eco' ? 1.3 : 2.6));
   ctx.save();
-  ctx.filter = `blur(${blur}px)`;
-  drawSlices(ctx, slices, detune, place, camera, look, palette, clock, style, selected, true, weight);
+  ctx.filter = `blur(${wide}px)`;
+  drawSlices(ctx, slices, detune, place, camera, look, palette, clock, style, selected, true, weight, 4.6, 0.38);
   ctx.restore();
-  drawSlices(ctx, slices, detune, place, camera, look, palette, clock, style, selected, false, weight);
+  ctx.save();
+  ctx.filter = `blur(${tight}px)`;
+  drawSlices(ctx, slices, detune, place, camera, look, palette, clock, style, selected, true, weight, 2.8, 0.78);
+  ctx.restore();
+  drawSlices(ctx, slices, detune, place, camera, look, palette, clock, style, selected, false, weight, 1, 1);
   ctx.globalAlpha = 1;
   ctx.globalCompositeOperation = 'source-over';
   const air = airFrame(slices, clock, detune);
@@ -410,6 +419,39 @@ function airFrame(slices, clock, detune) {
   return { anchorX: head.x, anchorY: head.y, rankOf: (slice) => rank.get(slice) ?? 0 };
 }
 
+// Resting-camera slope of the tail, in degrees above the screen horizontal.
+// A smooth sag down across the next crests, then a blend into one straight rise.
+function tailSlope(u) {
+  if (u < 0.10) {
+    const t = u / 0.10;
+    return -26 + (-18 * Math.sin(t * Math.PI / 2));
+  }
+  if (u < 0.32) {
+    const t = (u - 0.10) / 0.22;
+    return -44 + (82 * Math.sin(t * Math.PI / 2));
+  }
+  return 38;
+}
+
+function tailSpline(x, y0, steps) {
+  const rawY = y0 + (x * -0.625);
+  let sx = x;
+  let sy = -rawY;
+  const length = y0 * 2.85;
+  const points = [{ x, y: y0, z: 0 }];
+  for (let i = 1; i <= steps; i++) {
+    const deg = tailSlope(i / steps);
+    const rad = deg * Math.PI / 180;
+    const ds = length / steps;
+    sx += Math.cos(rad) * ds;
+    sy -= Math.sin(rad) * ds;
+    const z = (sx - x) / 0.78;
+    const y = (-sy) - (x * -0.625) - (z * 0.6375);
+    points.push({ x, y, z });
+  }
+  return points;
+}
+
 function tailWorld(slice, world, maxSeconds, air) {
   const seconds = Math.max(0.05, Number(slice?.seconds) || 0.2);
   const shape = drawShape(seconds, maxSeconds || seconds);
@@ -418,48 +460,25 @@ function tailWorld(slice, world, maxSeconds, air) {
     const top = world.y;
     return [
       { x: world.x, y: top, z: 0 },
-      { x: world.x, y: top * 0.98, z },
+      { x: world.x, y: top * 0.97, z },
       { x: world.x, y: top * 0.02, z },
     ];
   }
   const rank = air?.rankOf(slice) ?? 0;
   const x = air?.anchorX ?? world.x;
   const y0 = air?.anchorY ?? world.y;
-  // Sag only as far as the fourth crest, then a straight rise. Tuned so the
-  // low point sits on bar 4's screen height and the tip stays above bar 1.
-  const sagZ = 0.47;
-  const sagY = y0 * 0.44;
-  const tipZ = 2.86;
-  // Constant height after the sag, so the rise is a straight line and the
-  // curve eases into it instead of kinking.
-  const tipY = sagY;
-  if (rank === 0) {
-    const points = [];
-    const dip = 8;
-    for (let i = 0; i <= dip; i++) {
-      const u = i / dip;
-      // Drop immediately so the line sags down across the next crests,
-      // then level out into the straight rise. A late drop reads as a hook.
-      const eased = Math.sin(u * Math.PI / 2);
-      points.push({ x, y: y0 + (sagY - y0) * eased, z: sagZ * u });
-    }
-    const rise = 10;
-    for (let i = 1; i <= rise; i++) {
-      const v = i / rise;
-      points.push({ x, y: sagY + (tipY - sagY) * v, z: sagZ + (tipZ - sagZ) * v });
-    }
-    return points;
-  }
-  // Octave is about 40% of the fundamental and starts at the sag, near bar 4.
-  // Further tails step down and stop sooner, still on the same line.
-  const drop = 0.08 + (rank - 1) * 0.06;
-  const y1 = sagY - drop;
-  // The octave ends at about 40% of the fundamental. Later tails stop sooner.
-  const endZ = tipZ * Math.max(0.18, 0.40 - (rank - 1) * 0.1);
-  return [
-    { x, y: y1, z: sagZ },
-    { x, y: y1, z: Math.max(sagZ + 0.08, endZ) },
-  ];
+  const full = tailSpline(x, y0, 32);
+  if (rank === 0) return full;
+  // The octave is the same sag, tucked just underneath, and it stops near
+  // 40% of the fundamental. Later tails stop sooner. They leave together.
+  const stop = Math.max(0.16, 0.40 - (rank - 1) * 0.1);
+  const last = Math.max(2, Math.round(stop * (full.length - 1)));
+  const tuck = 0.022 + (rank - 1) * 0.03;
+  return full.slice(0, last + 1).map((point, index) => ({
+    x: point.x,
+    y: point.y - tuck * (index / last),
+    z: point.z,
+  }));
 }
 
 function strokePath(ctx, points, color, width, alpha) {
@@ -478,14 +497,18 @@ function glow(ctx, points, color, look, alpha) {
   strokePath(ctx, points, color, look.width, look.alpha * alpha);
 }
 
-function drawSlices(ctx, slices, detune, place, camera, look, palette, clock, style, selected, bloom, weight) {
-  // The bloom pass is the same lines, wider and softer, in the real ink and
-  // accent. It is strong on a single stroke, not only where lines pile up.
-  const bulk = bloom ? 3.3 : 1;
-  const alpha = bloom ? 0.68 : 1;
+function hatchLimit(placed, detune) {
+  const xs = placed.map((item) => worldOf(item.slice, detune).x).sort((a, b) => a - b);
+  if (xs.length < 2) return Infinity;
+  return xs[0] + 0.27 * (xs[xs.length - 1] - xs[0]);
+}
+
+function drawSlices(ctx, slices, detune, place, camera, look, palette, clock, style, selected, bloom, weight, bulk = 1, alpha = 1) {
   const ink = { width: weight * bulk, alpha, halo: 0, haloAlpha: 0 };
   const accent = { width: weight * bulk, alpha, halo: 0, haloAlpha: 0 };
-  const rail = { width: weight * 2.15 * bulk, alpha, halo: 0, haloAlpha: 0 };
+  // The two rails are a ribbon. On the sharp pass they are heavier; the
+  // bloom passes are what fuse them.
+  const rail = { width: weight * (bloom ? bulk : 2.4), alpha, halo: 0, haloAlpha: 0 };
   const air = airFrame(slices, clock, detune);
   const visible = [];
   for (let index = 0; index < slices.length; index++) {
@@ -499,22 +522,27 @@ function drawSlices(ctx, slices, detune, place, camera, look, palette, clock, st
     shape: drawShape(Math.max(0.05, Number(slice.seconds) || 0.2), clock),
   }));
   placed.sort((a, b) => worldOf(a.slice, detune).x - worldOf(b.slice, detune).x);
+  const limit = hatchLimit(placed, detune);
+  const hatched = placed.filter((item) => worldOf(item.slice, detune).x <= limit);
   if (style !== 'eco') {
-    const atDepth = (z) => placed.map((item) => {
+    const atDepth = (group, z) => group.map((item) => {
       const world = worldOf(item.slice, detune);
       return place(camera, world.x, 0, z);
     });
-    glow(ctx, atDepth(0), palette.ink, rail, 1);
-    glow(ctx, atDepth(PLANE.ribbonZ), palette.ink, rail, 1);
+    glow(ctx, atDepth(placed, 0), palette.ink, rail, 1);
+    glow(ctx, atDepth(placed, PLANE.ribbonZ), palette.ink, rail, 1);
     for (const z of PLANE.latticeZ) {
-      const line = placed.filter((item) => item.shape.longRung).map((item) => {
-        const world = worldOf(item.slice, detune);
-        return place(camera, world.x, 0, z);
-      });
-      glow(ctx, line, palette.ink, ink, 1);
+      // Sharp pass stays faint so the bloom is what shows, and the hatch
+      // melts into the bars instead of reading as its own grid.
+      glow(ctx, atDepth(hatched, z), palette.ink, { ...ink, width: ink.width * 0.9 }, bloom ? 1 : 0.08);
     }
     for (const item of placed) {
-      glow(ctx, [item.tri.foot, item.tri.floor], palette.ink, ink, item.slice.alpha);
+      const world = worldOf(item.slice, detune);
+      const inHatch = world.x <= limit;
+      const rungZ = inHatch ? PLANE.latticeZ[PLANE.latticeZ.length - 1] : PLANE.ribbonZ;
+      const far = place(camera, world.x, 0, rungZ);
+      const rungAlpha = inHatch && !bloom ? 0.12 : 1;
+      glow(ctx, [item.tri.foot, far], palette.ink, ink, item.slice.alpha * rungAlpha);
       glow(ctx, [item.tri.foot, item.tri.crest], palette.ink, ink, item.slice.alpha);
     }
   }
