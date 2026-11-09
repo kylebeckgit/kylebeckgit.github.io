@@ -370,12 +370,13 @@ export function previewPartials(rawControls) {
     const fundSeconds = 11 * (1 - 0.62 * controls.damping);
     tuned = partials.map((partial) => {
       const harm = Math.max(1, partial.ratio / fundRatio);
-      // String.csv rolls off about 1/n. That is −20 dB per decade, not the
-      // steeper default tilt, which drew the second partial as a cliff.
+      // Factory String is 1/n in both columns: level −20 dB per decade, and
+      // decay proportional to 1/n. The fundamental stays a few seconds so the
+      // note still rings; the picture only uses the ratios.
       return {
         ...partial,
         gainDb: clamp(-20 * Math.log10(harm), -96, 0),
-        decay: clamp(fundSeconds / harm ** 0.85, 0.08, 30),
+        decay: clamp(fundSeconds / harm, 0.05, 30),
       };
     });
   }

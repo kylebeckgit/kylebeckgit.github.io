@@ -27,13 +27,12 @@ export const PLANE = {
   span: 2.72,
   height: 1.29,
   depth: 3.15,
-  // Drawing-only envelope. The stored T60 is the sound and is not changed.
-  // A shared linear clock cannot separate the string's second partial (~0.55
-  // of the longest) from the third (~0.39): the second would die with the
-  // third, or both would cross the comb. The picture keeps decays near the
-  // longest in the air and drops the rest inside a rung or two.
-  sag: 0.72,
-  knee: 0.5,
+  // Depth is the decay divided by the longest decay in the picture.
+  // Factory String is 1, 1/2, 1/3, … so the octave is a long tail and the
+  // third partial is already down at one third. Below the octave the length
+  // falls off faster than that, and those curves land inside the comb.
+  sag: 0.82,
+  airRel: 0.46,
   // Short floor depth, straight back along the decay axis. Same length on every slice.
   floorZ: 0.28,
   ratioLo: 0.35,
@@ -295,9 +294,9 @@ export function paintModalView(ctx, partials, options = {}) {
     const shape = drawShape(item.slice.seconds, clock);
     (shape.floor ? haze : flying).push(item);
   }
-  // Short decays are the haze inside the comb. The fronts paint over them
-  // so the pickets stay the bright edge and the accent reads as fill.
-  for (const item of haze) strokeTail(ctx, item.slice, detune, place, camera, look, palette, 1, clock);
+  // Short decays are the haze inside the comb. The fronts paint over
+  // them so the pickets stay the bright edge.
+  for (const item of haze) strokeTail(ctx, item.slice, detune, place, camera, look, palette, 1, clock, 1);
   if (style !== 'eco') {
     for (const item of order) {
       if (item.index === selected) continue;
@@ -393,18 +392,19 @@ function longestSeconds(slices) {
 }
 
 // Reach is how far along the depth axis the curve travels. Drop is the
-// exponent at that tip, so height = level * exp(-drop * u). Long decays
-// stay in the air. Shorter ones reach the floor inside the comb.
+// exponent at that tip, so height = level * exp(-drop * u).
 function drawShape(seconds, maxSeconds) {
-  const rel = Math.max(0.02, Math.max(0.05, seconds) / Math.max(0.05, maxSeconds));
-  if (rel >= PLANE.knee) {
-    // Same gentle sag on every long tail. Length follows the decay, so the
-    // octave is shorter than the fundamental and still ends in the air.
-    return { reach: 0.34 + 0.66 * rel, drop: PLANE.sag, floor: false };
+  const rel = Math.max(0.02, Math.max(0.02, seconds) / Math.max(0.05, maxSeconds));
+  if (rel >= PLANE.airRel) {
+    return { reach: rel ** 0.72, drop: PLANE.sag, floor: false };
   }
-  // About one floor-rung. The landing stays in the gap beside the bar,
-  // so the curve reads as fill inside the comb rather than a second bar.
-  return { reach: 0.09, drop: 2.45, floor: true };
+  // floorZ / depth is one rung. Two rungs is the far edge of the haze.
+  const twoRungs = (PLANE.floorZ * 2) / PLANE.depth;
+  const t = rel / 0.34;
+  // Partial 3 sits on that far edge. Higher partials shrink quickly, so the
+  // right-hand bars stay pickets and the left ones overlap into the block.
+  const reach = Math.min(twoRungs, twoRungs * Math.max(t, 0) ** 1.55);
+  return { reach: Math.max(0.018, reach), drop: 1.55, floor: true };
 }
 
 function tailWorld(slice, world, maxSeconds) {
@@ -416,7 +416,7 @@ function tailWorld(slice, world, maxSeconds) {
     const u = i / steps;
     const env = Math.exp(-drop * u);
     points.push({ x: world.x, y: world.y * env, z: u * reach * PLANE.depth });
-    if (i > 2 && env < 0.07) break;
+    if (i > 2 && env < 0.1) break;
   }
   return points;
 }
@@ -447,7 +447,7 @@ function strokeStructure(ctx, slice, detune, place, camera, look, palette, alpha
   glow(ctx, [tri.foot, tri.floor], palette.ink, rung, fade * 0.38);
 }
 
-function strokeTail(ctx, slice, detune, place, camera, look, palette, alphaScale, maxSeconds) {
+function strokeTail(ctx, slice, detune, place, camera, look, palette, alphaScale, maxSeconds, weight = 1) {
   if (!slice || slice.alpha < 0.04 || slice.height < 0.02) return;
   const tri = projectSlice(slice, detune, place, camera, maxSeconds);
   const shape = drawShape(slice.seconds, maxSeconds || slice.seconds);
@@ -455,13 +455,16 @@ function strokeTail(ctx, slice, detune, place, camera, look, palette, alphaScale
     glow(ctx, tri.curve, palette.wire, look, slice.alpha * alphaScale);
     return;
   }
+  // A curve that barely leaves its bar just doubles the front. Keep the
+  // ones that cross the comb; those are what pile into the block.
+  if (shape.reach < 0.02) return;
   const lookTail = {
     ...look,
-    width: Math.max(1.15, look.width),
-    halo: Math.max(6, look.halo * 1.3),
-    haloAlpha: Math.min(0.6, look.haloAlpha * 1.5),
+    width: Math.max(1.45, look.width * 1.2) * weight,
+    halo: Math.max(13, look.halo * 2.4) * weight,
+    haloAlpha: Math.min(0.9, Math.max(look.haloAlpha, 0.42) * 2),
   };
-  glow(ctx, tri.curve, palette.wire, lookTail, slice.alpha * alphaScale);
+  glow(ctx, tri.curve, palette.wire, lookTail, slice.alpha * alphaScale * weight);
 }
 
 export function layoutTriangles(slices, camera, width, height, detune = 0) {

@@ -84,7 +84,7 @@ test('the resting wedge is a dense comb with short up-right tails', () => {
   const fund = 8.6;
   for (let i = 0; i < 16; i++) {
     const harm = i + 1;
-    list.push({ ratio: harm, gainDb: -20 * Math.log10(harm), decay: fund / harm ** 0.85 });
+    list.push({ ratio: harm, gainDb: -20 * Math.log10(harm), decay: fund / harm });
   }
   const tris = layoutTriangles(list.map((partial) => sliceFromPartial(partial)), defaultCamera(), 800, 520, 0);
   const first = tris[0];
