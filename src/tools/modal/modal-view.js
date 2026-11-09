@@ -1,49 +1,83 @@
-// Perspective view of a modal profile.
-// Frequency, level, and relative decay follow the Zebra 3 user guide.
-// The camera is far enough that the modes stay nearly vertical, then the
-// whole scene is fitted into the canvas so nothing is clipped.
+// Fixed-camera wedge of a modal profile.
+//
+// Axis inference from the Zebra 3 reference shots (Factory Chaotic Bell, 64
+// modes, 150% GUI) and the user guide:
+//   Frequency runs along the spine of the wedge. Disperse at 100 spreads the
+//   modes apart along that spine and opens the fan.
+//   Amplitude is where each line sits off the spine, so the outline is the
+//   spectrum.
+//   Relative decay is the length of each line. Absorb at 100 damps the modes,
+//   high ones first, and the sheet collapses into a short ridge.
+// The guide calls the graphic a 3D view of frequency, amplitude, and relative
+// decay. The shots show one fixed steep camera, no floor, and no axis names.
+// Each mode is one line. Stacked, the lines read as a sheet. Eco thins that
+// sheet, fast draws every line, glow blooms it.
+//
+// WEDGE is the whole look. A later recording of a knob can retune these
+// numbers without changing how a mode is placed or stroked.
+
+export const WEDGE = {
+  yaw: 0.7,
+  pitch: 0.66,
+  focal: 3.4,
+  perspective: 0.62,
+  span: 5.4,
+  amp: 1.85,
+  length: 2.8,
+  dirX: 0.08,
+  dirY: -0.12,
+  dirZ: 1,
+  freqOctaves: 5.6,
+  decayLo: 0.04,
+  decayHi: 6,
+  marginX: 0.06,
+  marginY: 0.1,
+  panel: '#1c1a17',
+  line: '#f2ede3',
+  styles: {
+    eco: { stride: 2, width: 0.85, alpha: 0.55, halo: 0, haloAlpha: 0, composite: 'source-over' },
+    fast: { stride: 1, width: 1.05, alpha: 0.72, halo: 0, haloAlpha: 0, composite: 'source-over' },
+    glow: { stride: 1, width: 1.35, alpha: 0.95, halo: 8, haloAlpha: 0.34, composite: 'source-over' },
+  },
+};
 
 export function defaultCamera() {
-  return { yaw: 0.48, pitch: 0.22, distance: 8.5 };
+  return { yaw: WEDGE.yaw, pitch: WEDGE.pitch, distance: WEDGE.focal };
 }
-
-const FLOOR = { x: 2.55, z: 0.95 };
 
 export function paintModalView(ctx, partials, options) {
-  const { width, height, camera, style = 'fast', colors, selected = -1 } = options;
-  const scene = layoutScene(partials, camera || defaultCamera(), width, height);
+  const { width, height, style = 'fast', colors, selected = -1 } = options;
+  const look = WEDGE.styles[style] || WEDGE.styles.fast;
+  const scene = layoutScene(partials, width, height);
   ctx.clearRect(0, 0, width, height);
-  ctx.fillStyle = colors.bg || colors.card;
+  ctx.fillStyle = WEDGE.panel;
   ctx.fillRect(0, 0, width, height);
-  const eco = style === 'eco';
-  const glow = style === 'glow';
-  drawFloor(ctx, scene.project, colors, eco);
-  const order = scene.placed.map((item, index) => ({
-    item,
-    index,
-    depth: scene.project(item.x, item.y, item.z).depth,
-  }));
-  order.sort((a, b) => b.depth - a.depth);
+  ctx.lineCap = 'butt';
+  const accent = colors?.accent || '#d4421c';
+  const order = scene.modes
+    .map((mode, index) => ({ mode, index }))
+    .sort((a, b) => b.mode.depth - a.mode.depth);
+  ctx.save();
+  ctx.globalCompositeOperation = look.composite;
   for (const entry of order) {
     if (entry.index === selected) continue;
-    strokePartial(ctx, scene.project, entry.item, colors, glow, false);
+    if (look.stride > 1 && entry.index % look.stride !== 0) continue;
+    strokeMode(ctx, entry.mode, look, WEDGE.line, false);
   }
-  if (selected >= 0 && scene.placed[selected]) {
-    strokePartial(ctx, scene.project, scene.placed[selected], colors, glow, true);
+  ctx.restore();
+  if (selected >= 0 && scene.modes[selected]) {
+    strokeMode(ctx, scene.modes[selected], { ...look, width: look.width + 1.1, alpha: 1, halo: Math.max(look.halo, 4), haloAlpha: 0.35 }, accent, true);
   }
-  labelAxes(ctx, scene, colors, width, height);
-  return scene.feet;
+  return scene.modes.map((mode) => mode.a);
 }
 
-export function hitPartial(partials, camera, width, height, x, y) {
-  const scene = layoutScene(partials, camera || defaultCamera(), width, height);
+export function hitPartial(partials, _camera, width, height, x, y) {
+  const scene = layoutScene(partials, width, height);
   let best = -1;
-  let score = 16;
-  for (let i = 0; i < scene.placed.length; i++) {
-    const item = scene.placed[i];
-    const foot = scene.project(item.x, 0, item.z);
-    const head = scene.project(item.x, item.y, item.z);
-    const distance = distanceToSegment(x, y, foot.x, foot.y, head.x, head.y);
+  let score = 14;
+  for (let i = 0; i < scene.modes.length; i++) {
+    const mode = scene.modes[i];
+    const distance = distanceToSegment(x, y, mode.a.x, mode.a.y, mode.b.x, mode.b.y);
     if (distance < score) {
       score = distance;
       best = i;
@@ -52,91 +86,75 @@ export function hitPartial(partials, camera, width, height, x, y) {
   return best;
 }
 
-export function layoutScene(partials, camera, width, height) {
-  const placed = placePartials(partials);
-  const samples = [];
-  const maxY = Math.max(0.15, ...placed.map((item) => item.y));
-  for (const x of [-FLOOR.x, FLOOR.x]) {
-    for (const z of [-FLOOR.z, FLOOR.z]) {
-      samples.push(rawProject(x, 0, z, camera));
-      samples.push(rawProject(x, maxY, z, camera));
-    }
-  }
-  samples.push(rawProject(0, 0, -FLOOR.z - 0.42, camera));
-  samples.push(rawProject(FLOOR.x + 0.5, 0, -FLOOR.z, camera));
-  samples.push(rawProject(-FLOOR.x - 0.55, maxY, FLOOR.z, camera));
-  for (const item of placed) {
-    samples.push(rawProject(item.x, 0, item.z, camera));
-    samples.push(rawProject(item.x, item.y, item.z, camera));
+export function layoutScene(partials, width, height) {
+  const placed = placeModes(partials);
+  const samples = frameCorners(placed).map((point) => rawProject(point.x, point.y, point.z));
+  for (const mode of placed) {
+    samples.push(rawProject(mode.x0, mode.y0, mode.z0));
+    samples.push(rawProject(mode.x1, mode.y1, mode.z1));
   }
   const fit = fitTransform(samples, width, height);
-  const project = (x, y, z) => fit(rawProject(x, y, z, camera));
-  return {
-    placed,
-    project,
-    feet: placed.map((item) => project(item.x, 0, item.z)),
-    ratioOf: (ratio) => {
-      const x = ratioToX(ratio, placed.meta);
-      return x == null ? null : project(x, 0, -FLOOR.z);
-    },
-  };
+  const modes = placed.map((mode) => {
+    const a = fit(rawProject(mode.x0, mode.y0, mode.z0));
+    const b = fit(rawProject(mode.x1, mode.y1, mode.z1));
+    return { a, b, depth: (a.depth + b.depth) / 2, amp: mode.amp };
+  });
+  return { modes, placed };
 }
 
-function placePartials(partials) {
-  const meta = { logMin: 0, logSpan: 1, decayMin: 0, decaySpan: 1 };
-  if (!partials.length) return Object.assign([], { meta });
-  const logs = [];
-  const decays = [];
-  for (const partial of partials) {
-    logs.push(Math.log2(Math.max(partial.ratio, 1e-3)));
-    decays.push(Math.log(Math.max(0.02, Number(partial.decay) || 0.02)));
-  }
-  meta.logMin = Math.min(...logs);
-  meta.logSpan = Math.max(...logs) - meta.logMin || 1;
-  meta.decayMin = Math.min(...decays);
-  meta.decaySpan = Math.max(...decays) - meta.decayMin || 1;
-  const placed = partials.map((partial, index) => {
-    const log = logs[index];
-    const gain = Math.max(-80, Math.min(0, Number(partial.gainDb) || 0));
-    // Pure log2 packs every ratio above about 8 into the last fifth of the floor.
-    // The axis stays in log-frequency order; a power above 1 gives the upper
-    // octaves enough width to separate, and the same idea opens up short decays.
-    const ratioT = Math.pow((log - meta.logMin) / meta.logSpan, 1.65);
-    const decayT = Math.pow((decays[index] - meta.decayMin) / meta.decaySpan, 0.55);
+function placeModes(partials) {
+  if (!partials.length) return [];
+  const fund = Math.min(...partials.map((partial) => partial.ratio));
+  const lo = Math.log(WEDGE.decayLo);
+  const hi = Math.log(WEDGE.decayHi);
+  return partials.map((partial) => {
+    const oct = Math.log2(Math.max(partial.ratio, 1e-6) / fund);
+    const x = (oct / WEDGE.freqOctaves) * WEDGE.span;
+    const amp = 10 ** (Math.max(-80, Math.min(0, Number(partial.gainDb) || 0)) / 20);
+    const decayT = clamp((Math.log(Math.max(WEDGE.decayLo, Number(partial.decay) || WEDGE.decayLo)) - lo) / (hi - lo), 0, 1.4);
+    const len = Math.max(0.03, decayT) * WEDGE.length;
+    const y = amp * WEDGE.amp;
     return {
-      x: ratioT * (FLOOR.x * 2) - FLOOR.x,
-      y: ((gain + 80) / 80) * 0.42,
-      z: decayT * (FLOOR.z * 2) - FLOOR.z,
-      ratio: partial.ratio,
+      x0: x,
+      y0: y,
+      z0: 0,
+      x1: x + len * WEDGE.dirX,
+      y1: y + len * WEDGE.dirY,
+      z1: len * WEDGE.dirZ,
+      amp,
     };
   });
-  placed.meta = meta;
-  return placed;
 }
 
-function ratioToX(ratio, meta) {
-  if (!meta) return null;
-  const log = Math.log2(Math.max(ratio, 1e-3));
-  const t = (log - meta.logMin) / meta.logSpan;
-  if (t < -0.02 || t > 1.02) return null;
-  return Math.pow(Math.max(0, Math.min(1, t)), 1.65) * (FLOOR.x * 2) - FLOOR.x;
+function frameCorners(placed) {
+  // A full-level, full-decay mode at either end of the modes actually shown.
+  // The frame stays put when Absorb shortens the lines, and it grows when
+  // Disperse pushes a mode further along the spine.
+  const len = WEDGE.length;
+  const xs = placed.length ? placed.map((mode) => mode.x0) : [0, WEDGE.span];
+  const minX = Math.min(...xs);
+  const maxX = Math.max(minX + WEDGE.span * 0.5, ...xs);
+  const points = [];
+  for (const x of [minX, maxX]) {
+    points.push({ x, y: WEDGE.amp * 0.15, z: 0 });
+    points.push({ x, y: WEDGE.amp, z: 0 });
+    points.push({ x: x + len * WEDGE.dirX, y: WEDGE.amp + len * WEDGE.dirY, z: len * WEDGE.dirZ });
+  }
+  return points;
 }
 
-function rawProject(x, y, z, camera) {
-  const yaw = camera.yaw;
-  const pitch = camera.pitch;
-  const cy = Math.cos(yaw);
-  const sy = Math.sin(yaw);
-  const cp = Math.cos(pitch);
-  const sp = Math.sin(pitch);
+function rawProject(x, y, z) {
+  const cy = Math.cos(WEDGE.yaw);
+  const sy = Math.sin(WEDGE.yaw);
+  const cp = Math.cos(WEDGE.pitch);
+  const sp = Math.sin(WEDGE.pitch);
   const x1 = x * cy + z * sy;
   const z1 = -x * sy + z * cy;
   const y2 = y * cp - z1 * sp;
   const z2 = y * sp + z1 * cp;
-  // Long focal length: depth barely changes the scale, so a vertical mode stays upright.
-  const focal = 16;
-  const persp = focal / (focal + z2 * 0.35);
-  return { x: x1 * persp, y: y2 * persp, depth: z2 };
+  const denom = WEDGE.focal + z2 * WEDGE.perspective;
+  const persp = clamp(WEDGE.focal / Math.max(0.45, denom), 0.45, 1.65);
+  return { x: x1 * persp, y: y2 * persp, depth: z2, persp };
 }
 
 function fitTransform(samples, width, height) {
@@ -150,80 +168,35 @@ function fitTransform(samples, width, height) {
     if (sample.y < minY) minY = sample.y;
     if (sample.y > maxY) maxY = sample.y;
   }
-  const marginX = Math.max(36, width * 0.045);
-  const marginTop = Math.max(22, height * 0.08);
-  const marginBottom = Math.max(26, height * 0.1);
-  const spanX = Math.max(0.08, maxX - minX);
-  const spanY = Math.max(0.08, maxY - minY);
-  const fit = Math.min((width - marginX * 2) / spanX, (height - marginTop - marginBottom) / spanY);
-  const zoom = Math.min(fit, Math.max(width, height) * 2.2);
+  const marginX = width * WEDGE.marginX;
+  const marginY = height * WEDGE.marginY;
+  const spanX = Math.max(0.05, maxX - minX);
+  const spanY = Math.max(0.05, maxY - minY);
+  const zoom = Math.min((width - marginX * 2) / spanX, (height - marginY * 2) / spanY);
   const midX = (minX + maxX) / 2;
   const midY = (minY + maxY) / 2;
-  const targetY = marginTop + (height - marginTop - marginBottom) / 2;
   return (sample) => ({
     x: width / 2 + (sample.x - midX) * zoom,
-    y: targetY - (sample.y - midY) * zoom,
+    y: height / 2 - (sample.y - midY) * zoom,
     depth: sample.depth,
+    persp: sample.persp,
   });
 }
 
-function drawFloor(ctx, project, colors, eco) {
-  const corners = [
-    project(-FLOOR.x, 0, -FLOOR.z),
-    project(FLOOR.x, 0, -FLOOR.z),
-    project(FLOOR.x, 0, FLOOR.z),
-    project(-FLOOR.x, 0, FLOOR.z),
-  ];
-  ctx.beginPath();
-  ctx.moveTo(corners[0].x, corners[0].y);
-  for (let i = 1; i < corners.length; i++) ctx.lineTo(corners[i].x, corners[i].y);
-  ctx.closePath();
-  ctx.fillStyle = colors.card;
-  ctx.globalAlpha = eco ? 0.35 : 0.72;
-  ctx.fill();
-  ctx.globalAlpha = eco ? 0.28 : 0.55;
-  ctx.strokeStyle = colors.line;
-  ctx.lineWidth = 1;
-  const steps = eco ? 3 : 6;
-  for (let i = 0; i <= steps; i++) {
-    const x = -FLOOR.x + (FLOOR.x * 2 * i) / steps;
-    strokeWorld(ctx, project, x, 0, -FLOOR.z, x, 0, FLOOR.z);
+function strokeMode(ctx, mode, look, color, accent) {
+  const persp = Math.max(mode.a.persp || 1, mode.b.persp || 1);
+  const weight = accent ? 1 : 0.28 + 0.72 * Math.sqrt(Math.max(0, Math.min(1, mode.amp)));
+  if (look.halo > 0) {
+    ctx.globalAlpha = look.haloAlpha * weight;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = Math.min(look.halo, 5);
+    line(ctx, mode.a, mode.b);
   }
-  const depthSteps = eco ? 2 : 4;
-  for (let i = 0; i <= depthSteps; i++) {
-    const z = -FLOOR.z + (FLOOR.z * 2 * i) / depthSteps;
-    strokeWorld(ctx, project, -FLOOR.x, 0, z, FLOOR.x, 0, z);
-  }
-  ctx.globalAlpha = 1;
-}
-
-function strokeWorld(ctx, project, x0, y0, z0, x1, y1, z1) {
-  const a = project(x0, y0, z0);
-  const b = project(x1, y1, z1);
-  ctx.beginPath();
-  ctx.moveTo(a.x, a.y);
-  ctx.lineTo(b.x, b.y);
-  ctx.stroke();
-}
-
-function strokePartial(ctx, project, item, colors, glow, selected) {
-  const foot = project(item.x, 0, item.z);
-  const head = project(item.x, item.y, item.z);
-  const color = selected || item.y > 0.78 ? colors.accent : colors.ink;
-  if (glow) {
-    ctx.strokeStyle = colors.accent;
-    ctx.globalAlpha = selected ? 0.4 : 0.16;
-    ctx.lineWidth = selected ? 7 : 5;
-    line(ctx, foot, head);
-    ctx.globalAlpha = selected ? 0.65 : 0.32;
-    ctx.lineWidth = selected ? 3.5 : 2.4;
-    line(ctx, foot, head);
-    ctx.globalAlpha = 1;
-  }
+  ctx.globalAlpha = look.alpha * weight;
   ctx.strokeStyle = color;
-  ctx.lineWidth = selected ? 2.4 : 1.2;
-  line(ctx, foot, head);
-  ctx.lineWidth = 1;
+  ctx.lineWidth = look.width * (0.8 + 0.35 * clamp(persp, 0.45, 1.65));
+  line(ctx, mode.a, mode.b);
+  ctx.globalAlpha = 1;
 }
 
 function line(ctx, a, b) {
@@ -233,73 +206,15 @@ function line(ctx, a, b) {
   ctx.stroke();
 }
 
-function labelAxes(ctx, scene, colors, width, height) {
-  ctx.font = `500 12px ${colors.font}`;
-  ctx.textBaseline = 'top';
-  const taken = [];
-  const ratioAnchor = scene.project(FLOOR.x, 0, -FLOOR.z);
-  const decayAnchor = scene.project(-FLOOR.x, 0, FLOOR.z);
-  const peak = Math.max(0.2, ...scene.placed.map((item) => item.y));
-  const levelAnchor = scene.project(-FLOOR.x - 0.35, peak, FLOOR.z);
-  placeLabel(ctx, 'Ratio', ratioAnchor, width, height, taken, colors, 1, 1);
-  placeLabel(ctx, 'Decay', decayAnchor, width, height, taken, colors, -1, 1);
-  placeLabel(ctx, 'Level', levelAnchor, width, height, taken, colors, -1, -1);
-  ctx.globalAlpha = 0.72;
-  ctx.fillStyle = colors.muted;
-  ctx.font = `500 11px ${colors.font}`;
-  const meta = scene.placed.meta;
-  if (!meta) return;
-  for (const ratio of [0.5, 1, 2, 4, 8, 16, 32]) {
-    const x = ratioToX(ratio, meta);
-    if (x == null) continue;
-    const tick = scene.project(x, 0, -FLOOR.z - 0.22);
-    const label = String(ratio);
-    const box = { x: tick.x - ctx.measureText(label).width / 2, y: tick.y + 16, w: ctx.measureText(label).width, h: 12 };
-    if (box.x < 4 || box.x + box.w > width - 4 || box.y + box.h > height - 2) continue;
-    if (taken.some((item) => overlaps(item, box))) continue;
-    ctx.fillText(label, box.x, box.y);
-    taken.push(box);
-  }
-  ctx.globalAlpha = 1;
+function clamp(value, lo, hi) {
+  return Math.min(hi, Math.max(lo, value));
 }
 
-function placeLabel(ctx, text, anchor, width, height, taken, colors, preferX, preferY) {
-  const w = ctx.measureText(text).width;
-  const h = 14;
-  const gaps = [10, 18, 28, 40];
-  const tries = [];
-  for (const gap of gaps) {
-    tries.push({ x: anchor.x + preferX * gap - (preferX < 0 ? w : 0), y: anchor.y + preferY * gap });
-    tries.push({ x: anchor.x - w / 2, y: anchor.y + preferY * (gap + 6) });
-    tries.push({ x: anchor.x + preferX * (gap + w * 0.2) - w / 2, y: anchor.y + 4 });
-  }
-  let choice = tries[tries.length - 1];
-  for (const candidate of tries) {
-    const box = { x: candidate.x, y: candidate.y, w, h };
-    if (box.x < 4 || box.y < 2 || box.x + box.w > width - 4 || box.y + box.h > height - 4) continue;
-    if (taken.some((item) => overlaps(item, box))) continue;
-    choice = candidate;
-    break;
-  }
-  const box = {
-    x: Math.max(4, Math.min(choice.x, width - w - 4)),
-    y: Math.max(2, Math.min(choice.y, height - h - 2)),
-    w,
-    h,
-  };
-  ctx.fillStyle = colors.muted;
-  ctx.fillText(text, box.x, box.y);
-  taken.push(box);
-}
-
-function overlaps(a, b) {
-  return a.x < b.x + b.w + 6 && a.x + a.w + 6 > b.x && a.y < b.y + b.h + 4 && a.y + a.h + 4 > b.y;
-}
-
-function distanceToSegment(px, py, ax, ay, bx, by) {
-  const dx = bx - ax;
-  const dy = by - ay;
-  const len = dx * dx + dy * dy || 1;
-  const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / len));
-  return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+function distanceToSegment(px, py, x0, y0, x1, y1) {
+  const dx = x1 - x0;
+  const dy = y1 - y0;
+  const len = dx * dx + dy * dy;
+  if (len < 1e-6) return Math.hypot(px - x0, py - y0);
+  const t = Math.max(0, Math.min(1, ((px - x0) * dx + (py - y0) * dy) / len));
+  return Math.hypot(px - (x0 + t * dx), py - (y0 + t * dy));
 }

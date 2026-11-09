@@ -1,78 +1,96 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { performance } from 'node:perf_hooks';
-import { defaultCamera, paintModalView } from './modal-view.js';
+import { paintModalView } from './modal-view.js';
+import { shapePartials } from './shape.js';
 
 function stubContext() {
-  return {
+  const ctx = {
+    strokes: 0,
     beginPath() {},
     moveTo() {},
     lineTo() {},
     closePath() {},
-    stroke() {},
+    stroke() { ctx.strokes += 1; },
     fill() {},
     fillRect() {},
     fillText() {},
     clearRect() {},
+    save() {},
+    restore() {},
     measureText(text) { return { width: String(text).length * 7 }; },
     lineWidth: 1,
     strokeStyle: '',
     fillStyle: '',
     globalAlpha: 1,
+    globalCompositeOperation: 'source-over',
+    lineCap: 'butt',
     font: '',
     textBaseline: '',
   };
+  return ctx;
 }
 
 function partials(count) {
   const out = [];
   for (let i = 0; i < count; i++) {
-    out.push({ ratio: (i + 1) / 4, gainDb: -((i * 17) % 70), decay: (i % 12) * 0.4 });
+    out.push({ ratio: i + 1, gainDb: -i * 1.1, decay: 2.2 / 2 ** (i * 0.12) });
   }
   return out;
 }
 
-test('the scene stays inside the canvas and the modes stay upright', () => {
+const colors = { accent: '#d4421c' };
+
+test('the fixed wedge stays inside the canvas', () => {
   const ctx = stubContext();
-  ctx.measureText = (text) => ({ width: String(text).length * 7 });
   const list = partials(64);
-  const colors = { card: '#24211d', bg: '#161513', line: '#3a362f', accent: '#d4421c', ink: '#f2ede3', muted: '#c4bdb2', font: 'Figtree' };
   const points = [];
-  const original = ctx.lineTo;
-  ctx.lineTo = (x, y) => { points.push({ x, y }); original.call(ctx, x, y); };
+  ctx.lineTo = (x, y) => { points.push({ x, y }); };
   ctx.moveTo = (x, y) => { points.push({ x, y }); };
-  for (const yaw of [-0.8, 0.2, 0.55, 1.4]) {
-    points.length = 0;
-    paintModalView(ctx, list, {
-      width: 900,
-      height: 320,
-      camera: { ...defaultCamera(), yaw, pitch: 0.35 + Math.abs(yaw) * 0.1 },
-      style: 'fast',
-      colors,
-    });
-    assert.ok(points.length > 10);
-    for (const point of points) {
-      assert.ok(point.x >= -1 && point.x <= 901, `x ${point.x} at yaw ${yaw}`);
-      assert.ok(point.y >= -1 && point.y <= 321, `y ${point.y} at yaw ${yaw}`);
-    }
+  paintModalView(ctx, list, { width: 900, height: 420, style: 'fast', colors });
+  assert.ok(points.length > 20);
+  for (const point of points) {
+    assert.ok(point.x >= -1 && point.x <= 901, `x ${point.x}`);
+    assert.ok(point.y >= -1 && point.y <= 421, `y ${point.y}`);
   }
 });
 
-test('256 partials in the glow style draw at 60 fps', () => {
-  const ctx = stubContext();
-  const list = partials(256);
-  const colors = { card: '#fbf8f2', bg: '#f2ede3', line: '#d8d0c1', accent: '#d4421c', ink: '#1a1916', muted: '#6a655c', font: 'Figtree' };
+test('eco draws fewer strokes than fast, and glow stays cheap at 256 modes', () => {
+  const list = partials(64);
+  const eco = stubContext();
+  const fast = stubContext();
+  paintModalView(eco, list, { width: 900, height: 420, style: 'eco', colors });
+  paintModalView(fast, list, { width: 900, height: 420, style: 'fast', colors });
+  assert.ok(eco.strokes < fast.strokes);
+
+  const glow = stubContext();
+  const many = partials(256);
   const start = performance.now();
   for (let frame = 0; frame < 60; frame++) {
-    paintModalView(ctx, list, {
-      width: 900,
-      height: 320,
-      camera: { ...defaultCamera(), yaw: frame * 0.01 },
-      style: 'glow',
-      colors,
-      selected: frame % 256,
-    });
+    paintModalView(glow, many, { width: 900, height: 420, style: 'glow', colors, selected: frame % 256 });
   }
   const elapsed = performance.now() - start;
   assert.ok(elapsed < 1000, `60 glow frames took ${elapsed.toFixed(1)} ms`);
+});
+
+test('absorb, disperse, and density rewrite the partial list', () => {
+  const list = partials(16);
+  const same = shapePartials(list, { absorb: 0, disperse: 0, decay: 0, density: 16 });
+  assert.equal(same.length, 16);
+  assert.ok(Math.abs(same[0].ratio - list[0].ratio) < 1e-9);
+  assert.ok(Math.abs(same[0].decay - list[0].decay) < 1e-9);
+  assert.ok(Math.abs(same[15].ratio - list[15].ratio) < 1e-6);
+
+  const absorbed = shapePartials(list, { absorb: 1, density: 16 });
+  assert.ok(absorbed[15].decay < list[15].decay * 0.2);
+  assert.ok(absorbed[15].decay / list[15].decay < absorbed[0].decay / list[0].decay);
+  assert.ok(absorbed[15].gainDb < list[15].gainDb);
+
+  const spread = shapePartials(list, { disperse: 1, density: 16 });
+  assert.ok(Math.abs(spread[0].ratio - list[0].ratio) < 1e-9);
+  assert.ok(spread[15].ratio > list[15].ratio * 1.5);
+
+  const thin = shapePartials(list, { density: 8 });
+  assert.equal(thin.length, 8);
+  assert.ok(thin[7].ratio < list[15].ratio);
 });

@@ -1,7 +1,8 @@
 import { PRESETS, NOTE_BUTTONS, buildPartials, toCsv, fromCsv, noteFrequency, defaultControls, sanitizeControls } from './engine.js';
 import { analyzeSamples, decodeRecording, resampleMono, parseRoot, frequencyToNote } from './analyze.js';
 import { renderPreview, scaleToPeak } from './resonator.js';
-import { defaultCamera, hitPartial, paintModalView } from './modal-view.js';
+import { hitPartial, paintModalView } from './modal-view.js';
+import { shapePartials } from './shape.js';
 import { fileSlug } from './recipes.js';
 import { mountStudio } from './studio.js';
 
@@ -32,9 +33,9 @@ export function mount(root) {
     userHolding: false,
     autoHearToken: 0,
     autoHearTimer: 0,
-    camera: defaultCamera(),
     drawStyle: 'fast',
     selectedPartial: -1,
+    profilePartials: null,
   };
 
   root.querySelector('[data-presets]').innerHTML = PRESETS.map((preset) => `<option value="${preset.id}">${preset.label}</option>`).join('');
@@ -101,7 +102,37 @@ export function mount(root) {
   }
 
   function snapshot() {
-    return state.partials.map((partial) => ({ ...partial }));
+    const list = state.profilePartials || state.partials;
+    return list.map((partial) => ({ ratio: partial.ratio, gainDb: partial.gainDb, decay: partial.decay }));
+  }
+
+  function readShape() {
+    const absorb = root.querySelector('[data-absorb]');
+    if (!absorb) return null;
+    return {
+      absorb: Number(absorb.value) / 100,
+      disperse: Number(root.querySelector('[data-disperse]').value) / 100,
+      decay: Number(root.querySelector('[data-modal-decay]').value) / 100,
+      density: Number(root.querySelector('[data-density]').value),
+    };
+  }
+
+  function publishShape() {
+    const shape = readShape();
+    if (!shape || !state.profilePartials) return;
+    const identity = shape.absorb === 0 && shape.disperse === 0 && shape.decay === 0 && shape.density >= state.profilePartials.length;
+    state.partials = identity ? state.profilePartials : shapePartials(state.profilePartials, shape);
+  }
+
+  function adopt(partials, custom) {
+    const copy = partials.map((partial) => ({ ratio: partial.ratio, gainDb: partial.gainDb, decay: partial.decay }));
+    if (root.querySelector('[data-absorb]')) {
+      state.profilePartials = copy;
+      publishShape();
+    } else {
+      state.partials = copy;
+    }
+    if (custom != null) state.custom = custom;
   }
 
   function pushHistory() {
@@ -112,8 +143,7 @@ export function mount(root) {
   }
 
   function restore(partials) {
-    state.partials = partials.map((partial) => ({ ...partial }));
-    state.custom = true;
+    adopt(partials, true);
     render();
     pushModes();
   }
@@ -141,8 +171,7 @@ export function mount(root) {
 
   function rebuild() {
     readControls();
-    state.partials = buildPartials(state.controls);
-    state.custom = false;
+    adopt(buildPartials(state.controls), false);
     render();
     pushModes();
   }
@@ -208,9 +237,15 @@ export function mount(root) {
       state.beforeEdit = null;
       updateHistoryButtons();
     }
-    state.partials[index][field] = value;
+    const shown = state.partials[index];
+    const source = shown?.sourceIndex != null && state.profilePartials
+      ? state.profilePartials[shown.sourceIndex]
+      : shown;
+    if (!source) return;
+    source[field] = value;
     state.custom = true;
-    draw(canvas, state.partials, state);
+    if (state.profilePartials && state.partials !== state.profilePartials) publishShape();
+    render();
     pushModes();
   });
 
@@ -253,14 +288,7 @@ export function mount(root) {
     canvas.setPointerCapture?.(event.pointerId);
     const point = canvasPoint(canvas, event);
     if (canvas.dataset.view === 'zebra') {
-      state.gesture = {
-        orbit: true,
-        x: point.x,
-        y: point.y,
-        yaw: state.camera.yaw,
-        pitch: state.camera.pitch,
-        moved: false,
-      };
+      state.gesture = { pick: true, x: point.x, y: point.y };
       return;
     }
     state.gesture = {
@@ -276,15 +304,7 @@ export function mount(root) {
   canvas.addEventListener('pointermove', (event) => {
     if (!state.gesture) return;
     const point = canvasPoint(canvas, event);
-    if (state.gesture.orbit) {
-      const travel = Math.hypot(point.x - state.gesture.x, point.y - state.gesture.y);
-      if (travel < 3) return;
-      state.gesture.moved = true;
-      state.camera.yaw = state.gesture.yaw - (point.x - state.gesture.x) * 0.008;
-      state.camera.pitch = clamp(state.gesture.pitch + (point.y - state.gesture.y) * 0.006, 0.18, 1.2);
-      scheduleDraw(canvas, state);
-      return;
-    }
+    if (state.gesture.pick) return;
     const travel = Math.hypot(point.x - state.gesture.x, point.y - state.gesture.y);
     if (!state.gesture.moved && travel < 5) return;
     if (!state.gesture.moved) {
@@ -297,13 +317,10 @@ export function mount(root) {
     state.gesture.lastY = point.y;
   });
   canvas.addEventListener('pointerup', (event) => {
-    if (state.gesture?.orbit) {
-      if (!state.gesture.moved) {
-        const point = canvasPoint(canvas, event);
-        const index = hitPartial(state.partials, state.camera, canvas.clientWidth, canvas.clientHeight, point.x, point.y);
-        state.selectedPartial = index;
-        render();
-      }
+    if (state.gesture?.pick) {
+      const point = canvasPoint(canvas, event);
+      state.selectedPartial = hitPartial(state.partials, null, canvas.clientWidth, canvas.clientHeight, point.x, point.y);
+      render();
       state.gesture = null;
       return;
     }
@@ -314,17 +331,24 @@ export function mount(root) {
     state.gesture = null;
   });
   canvas.addEventListener('pointercancel', () => { state.gesture = null; });
-  canvas.addEventListener('dblclick', () => {
-    if (canvas.dataset.view !== 'zebra') return;
-    state.camera = defaultCamera();
-    draw(canvas, state.partials, state);
-  });
   const styleSelect = root.querySelector('[data-draw-style]');
   if (styleSelect) {
     state.drawStyle = styleSelect.value || 'fast';
     styleSelect.addEventListener('change', () => {
       state.drawStyle = styleSelect.value;
       draw(canvas, state.partials, state);
+    });
+  }
+  for (const name of ['absorb', 'disperse', 'modal-decay', 'density']) {
+    const slider = root.querySelector(`[data-${name}]`);
+    if (!slider) continue;
+    slider.addEventListener('input', () => {
+      const outName = name === 'modal-decay' ? 'modal-decay' : name;
+      const out = root.querySelector(`[data-${outName}-out]`);
+      if (out) out.textContent = slider.value;
+      publishShape();
+      render();
+      pushModes();
     });
   }
   tableBody.addEventListener('focusin', (event) => {
@@ -354,8 +378,7 @@ export function mount(root) {
     try {
       const partials = fromCsv(await file.text());
       pushHistory();
-      state.partials = partials;
-      state.custom = true;
+      adopt(partials, true);
       render();
       pushModes();
       setAnalyze('');
@@ -420,8 +443,7 @@ export function mount(root) {
         maxPartials,
       });
       pushHistory();
-      state.partials = result.partials;
-      state.custom = true;
+      adopt(result.partials, true);
       state.rootHz = result.fundamental;
       state.rootConfidence = result.confidence;
       state.rootManual = result.confidence === 'set';
@@ -526,7 +548,9 @@ export function mount(root) {
       const factor = nextHz / state.rootHz;
       if (Math.abs(factor - 1) > 1e-6) {
         pushHistory();
-        for (const partial of state.partials) partial.ratio = Math.min(64, Math.max(0.02, partial.ratio / factor));
+        const list = state.profilePartials || state.partials;
+        for (const partial of list) partial.ratio = Math.min(64, Math.max(0.02, partial.ratio / factor));
+        if (state.profilePartials && state.partials !== state.profilePartials) publishShape();
         state.custom = true;
         render();
         pushModes();
@@ -540,12 +564,16 @@ export function mount(root) {
   }
 
   function makeRoot(index) {
-    const ratio = state.partials[index]?.ratio;
+    const shown = state.partials[index];
+    const ratio = shown?.sourceIndex != null && state.profilePartials
+      ? state.profilePartials[shown.sourceIndex].ratio
+      : shown?.ratio;
     if (!(ratio > 0)) return;
     if (state.rootHz > 0) retargetRoot(state.rootHz * ratio);
     else {
       pushHistory();
-      for (const partial of state.partials) partial.ratio /= ratio;
+      for (const partial of (state.profilePartials || state.partials)) partial.ratio /= ratio;
+      if (state.profilePartials && state.partials !== state.profilePartials) publishShape();
       state.custom = true;
       render();
       pushModes();
@@ -580,8 +608,7 @@ export function mount(root) {
     rebuild();
     readPlayControls();
     if (partials?.length) {
-      state.partials = partials.map((partial) => ({ ...partial }));
-      state.custom = true;
+      adopt(partials, true);
       render();
       pushModes();
     }
@@ -805,14 +832,6 @@ function playHeard(state, recipe) {
   }).catch(() => setPlayError(root, 'The browser blocked audio. Click Hear again.'));
 }
 
-function scheduleDraw(canvas, state) {
-  if (state.drawFrame) return;
-  state.drawFrame = requestAnimationFrame(() => {
-    state.drawFrame = 0;
-    draw(canvas, state.partials, state);
-  });
-}
-
 function drawZebra(canvas, partials, state) {
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   const width = canvas.clientWidth || 640;
@@ -826,7 +845,6 @@ function drawZebra(canvas, partials, state) {
   paintModalView(ctx, partials, {
     width,
     height,
-    camera: state.camera || defaultCamera(),
     style: state.drawStyle || 'fast',
     colors,
     selected: state.selectedPartial,
