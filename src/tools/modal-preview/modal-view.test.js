@@ -109,7 +109,9 @@ test('the resting wedge is a dense comb with short up-right tails', () => {
   assert.ok(lipY > 0, `rear rail should sit above the front, ${lipY}`);
   const lip = Math.hypot(lipX, first.floor.y - first.foot.y);
   const lastLip = Math.hypot(last.floor.x - last.foot.x, last.floor.y - last.foot.y);
-  assert.ok(lip / lastLip > 3, `the first rung should cross much further than the last, ${lip / lastLip}`);
+  const step = Math.hypot(tris[1].foot.x - first.foot.x, tris[1].foot.y - first.foot.y);
+  assert.ok(lip / step > 0.55 && lip / step < 1.7, `rail gap / bar step ${lip / step}`);
+  assert.ok(Math.abs(lip - lastLip) / lip < 0.35, `rails stay parallel ${lip / lastLip}`);
 });
 
 test('the triangles stay inside the canvas at the resting angle and a full turn', () => {

@@ -76,9 +76,8 @@ export const PLANE = {
   // Accent sits just beside the ink bar. Close enough to glow into it,
   // far enough that the bar stays the ink colour.
   accentZ: 0.05,
-  // Back rail, close enough that the glow fuses it with the front into
-  // one heavy ribbon.
-  ribbonZ: 0.14,
+  // Back rail, about one bar-step behind the front so the floor is a band.
+  ribbonZ: 0.68,
   // Floor hatch under bars 1 to about 6. Evenly spaced, and tall enough
   // that the crossings run up through those bars, not only along the floor.
   latticeZ: [0.5, 1.0, 1.5, 2.0],
@@ -252,18 +251,26 @@ export function measureFit(slices, camera, width, height, detune = 0) {
   let minY = Infinity;
   let maxY = -Infinity;
   const list = slices?.length ? slices : [sliceFromPartial({ ratio: 1, gainDb: 0, decay: 1 })];
-    const clock = longestSeconds(list);
-    const air = airFrame(list, clock, detune);
-    for (const slice of list) {
-      if (!slice || (slice.alpha < 0.04 && slice.height < 0.02 && slice.depth < 0.02)) continue;
-      const world = worldOf(slice, detune);
-      const shape = drawShape(Math.max(0.05, Number(slice.seconds) || 0.2), clock);
-      const samples = [
-        { x: world.x, y: 0, z: 0 },
-        { x: world.x, y: world.y, z: 0 },
-        floorBack(world, landingDepth(shape)),
-        ...tailWorld(slice, world, clock, air),
-      ];
+  const clock = longestSeconds(list);
+  const air = airFrame(list, clock, detune);
+  let bend = null;
+  for (const slice of list) {
+    if (!slice || (slice.alpha < 0.04 && slice.height < 0.02 && slice.depth < 0.02)) continue;
+    const world = worldOf(slice, detune);
+    const shape = drawShape(Math.max(0.05, Number(slice.seconds) || 0.2), clock);
+    const tail = tailWorld(slice, world, clock, air);
+    if (shape.air && air.rankOf(slice) === 0) {
+      for (const sample of tail) {
+        const point = screenOf(view, sample.x, sample.y, sample.z);
+        if (!bend || point.y > bend.y) bend = point;
+      }
+    }
+    const samples = [
+      { x: world.x, y: 0, z: 0 },
+      { x: world.x, y: world.y, z: 0 },
+      floorBack(world, landingDepth(shape)),
+      ...tail,
+    ];
     for (const sample of samples) {
       const point = screenOf(view, sample.x, sample.y, sample.z);
       if (point.x < minX) minX = point.x;
@@ -278,19 +285,20 @@ export function measureFit(slices, camera, width, height, detune = 0) {
     minY = -1;
     maxY = 1;
   }
-  // At rest, pin the floor ends to the crop: left 5%, 56% and right 97%, 94%.
-  if (Math.abs(view.yaw) < 1e-3 && Math.abs(view.pitch - PLANE.pitch) < 1e-3 && !detune) {
-    const span = PLANE.span;
+  // At rest, fit the figure, then slide it so the bend sits near 27% across
+  // and 41% down. The floor angle comes from the projection, not from pinning
+  // the rail ends to percentages.
+  if (bend && Math.abs(view.yaw) < 1e-3 && Math.abs(view.pitch - PLANE.pitch) < 1e-3 && !detune) {
+    const spanX = Math.max(0.001, maxX - minX);
     const spanY = Math.max(0.001, maxY - minY);
-    const scale = Math.min((width * 0.92) / span, (height * 0.9) / spanY);
-    const sxL = -span / 2;
-    const syL = FLOOR_SHEAR * sxL;
-    const cx = sxL - ((0.05 * width) - width / 2) / scale;
-    let cy = syL - ((0.56 * height) - height / 2) / scale;
-    const top = height / 2 + (minY - cy) * scale;
-    if (top < 8) cy -= (8 - top) / scale;
-    const bottom = height / 2 + (maxY - cy) * scale;
-    if (bottom > height - 8) cy += (bottom - (height - 8)) / scale;
+    const scale = Math.min((width - 16) / spanX, (height - 16) / spanY);
+    const clampShift = (want, lo, hi, edge) => {
+      const minC = hi - ((edge - 8) - edge / 2) / scale;
+      const maxC = lo - (8 - edge / 2) / scale;
+      return Math.min(maxC, Math.max(minC, want));
+    };
+    const cx = clampShift(bend.x - ((0.27 * width) - width / 2) / scale, minX, maxX, width);
+    const cy = clampShift(bend.y - ((0.41 * height) - height / 2) / scale, minY, maxY, height);
     return { scale, cx, cy };
   }
   const spanX = Math.max(0.001, maxX - minX);
@@ -434,10 +442,8 @@ function lineWeight(panelWidth) {
   return panel * 0.0125;
 }
 
-// Short rungs stop at the back rail. The left-hand ones run out to the
-// furthest floor line so they cross the hatch.
-function landingDepth(shape) {
-  if (shape.longRung) return PLANE.latticeZ[PLANE.latticeZ.length - 1];
+// Every bar's tie stops on the back rail. The two rails stay a bar-step apart.
+function landingDepth() {
   return PLANE.ribbonZ;
 }
 
@@ -491,13 +497,25 @@ function airFrame(slices, clock, detune) {
   };
 }
 
-// Floor slope at rest, screen-y down per world-x. Steeper than the old 0.625
-// so the comb's run matches the crop, and short enough that the figure is compact.
-const FLOOR_SHEAR = 0.333;
+// On-screen floor angle at rest. Zebra's rail measures 28 degrees on the crop;
+// tan of that is the shear, so the wide panel draws the same pixel angle.
+const FLOOR_SHEAR = Math.tan(28 * Math.PI / 180);
 const DEPTH_X = 0.78;
 
 function depthRise(pitch = PLANE.pitch) {
   return 0.75 * (0.85 + (pitch - PLANE.pitch) * 1.15);
+}
+
+// A decay strand in rest-screen space, from a crest down-right onto the front rail.
+function strandOnFloor(x, y, angle) {
+  const start = restScreen(x, y, 0);
+  const denom = Math.sin(angle) - FLOOR_SHEAR * Math.cos(angle);
+  if (Math.abs(denom) < 1e-3) return null;
+  const t = (FLOOR_SHEAR * start.sx - start.sy) / denom;
+  if (!(t > 0.05)) return null;
+  const sx = start.sx + Math.cos(angle) * t;
+  const sy = start.sy + Math.sin(angle) * t;
+  return fromRestScreen(x, sx, sy);
 }
 
 function fromRestScreen(x, sx, sy) {
@@ -513,53 +531,43 @@ function restScreen(x, y, z) {
   };
 }
 
-// Along the crests of bars 1 to 5, nearly straight, then a long straight rise.
-// The rounded bowl sat above the bars instead of on them.
+// Sag from bar 1 down to a low point near bar 5, then rise at the crop's angle.
+// A straight run along the crests read as a flat arc with the bend too far right.
 function tailSpline(x, y0, crests, railRight, steps) {
   const guides = (crests && crests.length) ? crests : [{ x, y: y0 }];
   const screens = guides.map((crest, index) => (
     index === 0 ? restScreen(x, y0, 0) : restScreen(crest.x, crest.y, 0)
   ));
+  const start = screens[0];
+  const bendAt = screens[Math.min(4, screens.length - 1)];
+  const barScreen = Math.max(0.2, (FLOOR_SHEAR * start.sx) - start.sy);
+  const drop = barScreen * 0.56;
+  let bendSx = bendAt.sx;
+  let bendSy = start.sy + drop;
+  const localFloor = FLOOR_SHEAR * bendSx;
+  bendSy = Math.min(bendSy, localFloor - barScreen * 0.16);
   const points = [];
-  // Ride the crests only through bar 3. The bend itself covers bars 3 to 6.
-  const hold = Math.min(2, Math.max(0, screens.length - 1));
-  const sagN = Math.max(6, Math.round((steps || 24) * 0.3));
-  if (hold <= 0) {
-    points.push(fromRestScreen(x, screens[0].sx, screens[0].sy));
-  } else {
-    for (let i = 0; i <= sagN; i++) {
-      const t = (i / sagN) * hold;
-      const index = Math.min(hold - 1, Math.floor(t));
-      const u = t - index;
-      const a = screens[index];
-      const b = screens[Math.min(hold, index + 1)];
-      const sx = a.sx + (b.sx - a.sx) * u;
-      const sy = a.sy + (b.sy - a.sy) * u;
-      points.push(fromRestScreen(x, sx, sy));
-    }
-  }
-  const last = screens[hold];
-  const prev = screens[Math.max(0, hold - 1)];
-  // Rise about 33 degrees and stop above the last bar, not past the comb.
-  const riseRad = 24 * Math.PI / 180;
-  const arrive = { x: last.sx - prev.sx, y: last.sy - prev.sy };
-  const depart = { x: Math.cos(riseRad), y: -Math.sin(riseRad) };
-  const floorSpan = Math.max(0.4, railRight - screens[0].sx);
-  const step = floorSpan / 42;
-  let sx = last.sx;
-  let sy = last.sy;
-  const tipSx = railRight - floorSpan * 0.01;
-  // Wide radius: the turn starts at bar 3 and finishes just after bar 5.
-  let ang = Math.atan2(arrive.y, arrive.x);
-  const target = Math.atan2(depart.y, depart.x);
-  const arcSteps = 18;
-  for (let i = 1; i <= arcSteps; i++) {
-    const t = i / arcSteps;
-    const a = ang + (target - ang) * t;
-    sx += Math.cos(a) * step * 0.72;
-    sy += Math.sin(a) * step * 0.72;
+  const sagN = Math.max(10, Math.round((steps || 24) * 0.45));
+  for (let i = 0; i <= sagN; i++) {
+    const t = i / sagN;
+    const sx = start.sx + (bendSx - start.sx) * t;
+    const sy = start.sy + (bendSy - start.sy) * Math.sin(t * Math.PI / 2);
     points.push(fromRestScreen(x, sx, sy));
   }
+  const riseRad = 34 * Math.PI / 180;
+  const floorSpan = Math.max(0.4, railRight - start.sx);
+  const step = floorSpan / 42;
+  let sx = bendSx;
+  let sy = bendSy;
+  const arcSteps = 10;
+  for (let i = 1; i <= arcSteps; i++) {
+    const theta = -riseRad * (i / arcSteps);
+    sx += Math.cos(theta) * step * 0.85;
+    sy += Math.sin(theta) * step * 0.85;
+    points.push(fromRestScreen(x, sx, sy));
+  }
+  const depart = { x: Math.cos(riseRad), y: -Math.sin(riseRad) };
+  const tipSx = railRight - floorSpan * 0.02;
   let guard = 0;
   while (sx < tipSx && guard < 48) {
     sx += depart.x * step;
@@ -658,9 +666,8 @@ function drawSlices(ctx, slices, detune, place, camera, look, palette, clock, st
   const tail = { width: tailW, alpha: 1, halo: 0, haloAlpha: 0 };
   const octave = { width: tailW * 0.74, alpha: 1, halo: 0, haloAlpha: 0 };
   const rail = { width: weight * bulk, alpha, halo: 0, haloAlpha: 0 };
-  // Thin accent lines. The bars stay the wide strokes.
-  const rungW = weight * (bloom ? 0.55 : 0.4);
-  const rung = { width: rungW, alpha: bloom ? tune().hatchGlow : tune().hatchAlpha, halo: 0, haloAlpha: 0 };
+  // Decay strands are the same width as a bar. The bloom passes supply the faint glow.
+  const strand = { width: weight, alpha: 1, halo: 0, haloAlpha: 0 };
   const meshTint = mixHex(palette.wire, palette.paper, 0.62);
   const tailColor = mixHex(palette.wire, palette.paper, tune().tailCream);
   const octaveColor = mixHex(palette.wire, palette.paper, tune().octaveCream);
@@ -701,51 +708,49 @@ function drawSlices(ctx, slices, detune, place, camera, look, palette, clock, st
         }
         return null;
       };
-      // Bars 1 to 7 grow up until their tops sit on the fundamental.
-      // The bend is near bar 5, so the reach runs two bar steps past it.
-      const floorL = placed[0].tri.foot.x;
-      const floorR = placed[placed.length - 1].tri.foot.x;
-      const reach = bend.x + ((floorR - floorL) * 2) / Math.max(1, placed.length - 1);
+      // Tops on the way down to the bend follow the sag. The rise leaves the later bars.
       for (const item of placed) {
-        if (item.shape.air || item.tri.crest.x > reach) continue;
+        item.baseCrest = item.tri.crest.y;
+        if (item.shape.air || item.tri.crest.x > bend.x) continue;
         const y = tailAt(item.tri.crest.x);
-        if (y != null && y < item.tri.crest.y) item.tri.crest = { x: item.tri.crest.x, y };
+        if (y != null) item.tri.crest = { x: item.tri.crest.x, y };
       }
     }
     const hatched = placed.filter((item) => worldOf(item.slice, detune).x <= limit);
-    if (bloom && bulk > 1.1) {
-      for (let i = 0; i < hatched.length - 1; i++) {
-        const a = hatched[i];
-        const b = hatched[i + 1];
-        const aw = worldOf(a.slice, detune);
-        const bw = worldOf(b.slice, detune);
-        fillPoly(ctx, [
-          a.tri.crest,
-          b.tri.crest,
-          b.tri.foot,
-          a.tri.foot,
-        ], meshTint, 0.25);
+    const frontRail = atDepth(placed, 0);
+    const backRail = atDepth(placed, PLANE.ribbonZ);
+    for (let i = 0; i < placed.length; i++) {
+      glow(ctx, [frontRail[i], backRail[i]], palette.ink, rail, 1);
+      if (i + 1 < placed.length) {
+        glow(ctx, [frontRail[i], backRail[i + 1]], palette.ink, rail, 1);
+        glow(ctx, [frontRail[i + 1], backRail[i]], palette.ink, rail, 1);
       }
     }
-    // Steep accent lines: each crest down to the floor one or two bars over.
-    for (let i = 0; i < hatched.length; i++) {
-      const item = hatched[i];
-      const world = worldOf(item.slice, detune);
-      const from = item.tri.crest;
-      for (const skip of [1, 2]) {
-        const other = hatched[i + skip];
-        if (!other) continue;
-        glow(ctx, [from, other.tri.foot], meshTint, rung, item.slice.alpha);
+    // One strand per left-hand bar: from the crest, down-right, until the floor.
+    // Sharp strands, plus one soft pass under 10% so the blur does not fill the gaps.
+    if (!bloom || bulk > 1.12) {
+      const strandAng = 52 * Math.PI / 180;
+      for (const item of hatched) {
+        const world = worldOf(item.slice, detune);
+        const origH = item.tri.foot.y - (item.baseCrest ?? item.tri.crest.y);
+        const shownH = item.tri.foot.y - item.tri.crest.y;
+        const frac = origH > 1 ? shownH / origH : 1;
+        const end = strandOnFloor(world.x, world.y * frac, strandAng);
+        if (!end) continue;
+        glow(ctx, [item.tri.crest, place(camera, end.x, end.y, end.z)], meshTint, strand, (bloom ? 0.08 : 0.9) * item.slice.alpha);
       }
     }
-    for (const item of placed) {
+    for (let index = 0; index < placed.length; index++) {
+      const item = placed[index];
       const world = worldOf(item.slice, detune);
-      const back = place(camera, world.x, world.y, 0.26);
-      const backFoot = place(camera, world.x, 0, 0.26);
-      glow(ctx, [backFoot, back], palette.ink, ink, item.slice.alpha * (bloom ? 0.04 : 0.15));
-      if (world.x > limit) {
-        const far = place(camera, world.x, 0, PLANE.ribbonZ);
-        glow(ctx, [item.tri.foot, far], palette.ink, ink, item.slice.alpha);
+      // Zebra doubles only the left-hand bars. The right-hand row stays single.
+      if (index < 7) {
+        const backFoot = place(camera, world.x, 0, 0.26);
+        const ghostTop = {
+          x: item.tri.crest.x + (backFoot.x - item.tri.foot.x),
+          y: item.tri.crest.y + (backFoot.y - item.tri.foot.y),
+        };
+        glow(ctx, [backFoot, ghostTop], palette.ink, ink, item.slice.alpha * (bloom ? 0.04 : 0.15));
       }
       glow(ctx, [item.tri.foot, item.tri.crest], palette.ink, ink, item.slice.alpha);
     }
@@ -770,11 +775,12 @@ function drawSlices(ctx, slices, detune, place, camera, look, palette, clock, st
       continue;
     }
     const left = world.x <= limit;
-    const width = weight * (left ? (bloom ? 0.9 : tune().leftWidth) : 0.5) * (left ? 1 : bulk);
-    const strength = left
-      ? (bloom ? tune().leftGlow : tune().leftSharp)
-      : (bloom ? accentAlpha * 1.8 : tune().rightSharp);
-    glow(ctx, item.tri.curve, left ? meshTint : palette.wire, { ...accent, width }, Math.min(1, strength));
+    // The left block is the separate strands drawn above. A second curve here
+    // stacked into the peach sheet.
+    if (left) continue;
+    const width = weight * 0.5 * bulk;
+    const strength = bloom ? accentAlpha * 1.8 : tune().rightSharp;
+    glow(ctx, item.tri.curve, palette.wire, { ...accent, width }, Math.min(1, strength));
   }
   if (bloom || selected < 0 || !slices[selected]) return;
   const slice = slices[selected];
