@@ -185,23 +185,7 @@ export function spaceByLog(slices) {
     return slices;
   }
   const ordered = [...usable].sort((a, b) => a.ratio - b.ratio);
-  const count = ordered.length;
-  // Seven posts from bar 1 through the bend, which stays 4/15 along the floor
-  // so the tail does not move. The right-hand posts spread a little wider.
-  const bendT = 4 / 15;
-  const leftPosts = Math.max(2, Math.min(count, Math.round(count * 7 / 16)));
-  ordered.forEach((slice, index) => {
-    if (count < 2) {
-      slice.t = 0.5;
-      return;
-    }
-    if (index <= leftPosts - 1) {
-      slice.t = bendT * (index / (leftPosts - 1));
-      return;
-    }
-    const rightSteps = count - leftPosts;
-    slice.t = bendT + (1 - bendT) * ((index - (leftPosts - 1)) / rightSteps);
-  });
+  ordered.forEach((slice, index) => { slice.t = index / (ordered.length - 1); });
   return slices;
 }
 
@@ -743,26 +727,17 @@ function drawSlices(ctx, slices, detune, place, camera, look, palette, clock, st
         const y = tailAt(item.tri.crest.x);
         if (y != null) item.tri.crest = { x: item.tri.crest.x, y };
       }
-      // The post just past the bend reaches the tail. Later bars taper down.
-      const lead = placed[Math.min(7, placed.length - 1)];
-      const tailY = tailAt(lead.tri.crest.x);
-      if (tailY != null && lead.tri.foot.y > tailY) {
-        const leadH = (lead.tri.foot.y - tailY) * 0.96;
-        lead.tri.crest = { x: lead.tri.crest.x, y: lead.tri.foot.y - leadH };
-        const bar1H = Math.max(4, placed[0].tri.foot.y - placed[0].tri.crest.y);
-        const followers = placed.filter((item) => item.tri.foot.x > lead.tri.foot.x + 0.5);
-        followers.forEach((item, i) => {
-          const t = followers.length <= 1 ? 1 : i / (followers.length - 1);
-          // Zebra's posts after the tall one sit near 80% of bar 1 and ease toward 72%.
-          const h = bar1H * (0.82 + (0.72 - 0.82) * t);
-          item.tri.crest = { x: item.tri.crest.x, y: item.tri.foot.y - h };
-        });
-        for (const item of placed) {
-          if (item === lead || item.tri.foot.x >= lead.tri.foot.x) continue;
-          if (item.shape.air || item.tri.crest.x <= bend.x) continue;
-          const y = tailAt(item.tri.crest.x);
-          if (y != null) item.tri.crest = { x: item.tri.crest.x, y: y + 2 };
-        }
+      // Bars past the bend use the crop's measured lengths, and never rise through the tail.
+      const measured = { 6: 0.84, 7: 1, 8: 0.8, 9: 0.85, 10: 0.78, 11: 0.77, 12: 0.91, 13: 0.75, 14: 0.74, 15: 0.75, 16: 0.72 };
+      const bar1H = Math.max(4, placed[0].tri.foot.y - placed[0].tri.crest.y);
+      for (let i = 0; i < placed.length; i++) {
+        const frac = measured[i + 1];
+        if (frac == null) continue;
+        const item = placed[i];
+        let crestY = item.tri.foot.y - bar1H * frac;
+        const tailY = tailAt(item.tri.crest.x);
+        if (tailY != null) crestY = Math.max(crestY, tailY + 4);
+        item.tri.crest = { x: item.tri.crest.x, y: Math.min(crestY, item.tri.foot.y - 4) };
       }
     }
     const frontRail = atDepth(placed, 0);
@@ -784,7 +759,10 @@ function drawSlices(ctx, slices, detune, place, camera, look, palette, clock, st
     }
     // Strands cross the left posts and land on the floor under bars 3 to 8.
     if (!bloom || bulk > 1.12) {
-      const pairs = [[0, 3], [1, 4], [2, 5], [3, 5], [4, 6], [5, 7], [6, 7]];
+      const pairs = [
+        [0, 3], [1, 4], [2, 5], [3, 6], [4, 7], [5, 7],
+        [0, 6], [1, 7], [0, 7], [2, 7], [1, 6],
+      ];
       for (const [from, to] of pairs) {
         if (from >= placed.length || to >= placed.length) continue;
         const end = frontRail[to];
