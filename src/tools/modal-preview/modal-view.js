@@ -78,7 +78,7 @@ export const PLANE = {
   accentZ: 0.05,
   // Back rail, close enough that the glow fuses it with the front into
   // one heavy ribbon.
-  ribbonZ: 0.04,
+  ribbonZ: 0.14,
   // Floor hatch under bars 1 to about 6. Evenly spaced, and tall enough
   // that the crossings run up through those bars, not only along the floor.
   latticeZ: [0.5, 1.0, 1.5, 2.0],
@@ -157,14 +157,8 @@ export function levelHeight(gainDb) {
   const db = clamp(Number.isFinite(number) ? number : -60, -90, 0);
   // A wide window, so a large drop in level only shortens the bar a little.
   const floor = -78;
-  const linear = clamp((db - floor) / -floor, 0, 1);
-  // The first partials lose only a little height. A straight dB line drops
-  // them fast enough that the crests outrun the traced sag. Squaring the
-  // loss keeps those crests on the sag, and a full string still ends near
-  // three quarters of the fundamental.
-  const loss = 1 - linear;
-  const shown = loss <= 0 ? 0 : Math.min(0.82, ((loss / 0.309) ** 2) * 0.28);
-  return clamp(1 - shown, 0, 1);
+  // Linear in the wide window, so the sixteen bars taper smoothly.
+  return clamp((db - floor) / -floor, 0, 1);
 }
 
 export function decayDepth(decay) {
@@ -179,26 +173,16 @@ function evenT(index, count) {
   return index / (count - 1);
 }
 
-// Harmonic number, normalized across the set. A higher power packs the
-// lows and makes the crest line fall too steeply for the traced sag, so
-// the fourth crest misses the bottom of the tail. Detune still spreads
-// whatever spacing this produces.
+// Equal steps along the floor, in ratio order. A power of the ratio opens
+// a visible gap partway down the comb. Detune still spreads this spacing.
 export function spaceByLog(slices) {
   const usable = slices.filter((slice) => slice && Number(slice.ratio) > 0);
   if (usable.length < 2) {
     slices.forEach((slice, index) => { if (slice) slice.t = evenT(index, slices.length); });
     return slices;
   }
-  const power = 1;
-  const bent = usable.map((slice) => slice.ratio ** power);
-  const lo = Math.min(...bent);
-  const hi = Math.max(...bent);
-  const span = hi - lo;
-  if (span < 1e-6) {
-    usable.forEach((slice, index) => { slice.t = evenT(index, usable.length); });
-    return slices;
-  }
-  usable.forEach((slice, index) => { slice.t = (bent[index] - lo) / span; });
+  const ordered = [...usable].sort((a, b) => a.ratio - b.ratio);
+  ordered.forEach((slice, index) => { slice.t = index / (ordered.length - 1); });
   return slices;
 }
 
@@ -348,8 +332,14 @@ export function paintModalView(ctx, partials, options = {}) {
   // The tighter one brightens the mesh those overlaps make.
   // Cream bloom stays soft so neighbours keep a dark gap. Accent bloom
   // is softer still, a tint rather than a second set of bars.
-  const wide = Math.max(3.5, weight * (style === 'eco' ? 1.1 : 1.55));
-  const tight = Math.max(2, weight * (style === 'eco' ? 0.7 : 0.95));
+  const wide = Math.max(4.5, weight * (style === 'eco' ? 1.4 : 2.1));
+  const tight = Math.max(2.5, weight * (style === 'eco' ? 0.9 : 1.25));
+  const scene = Math.max(5, weight * 1.55);
+  ctx.save();
+  ctx.filter = `blur(${scene}px)`;
+  ctx.globalCompositeOperation = palette.bloom;
+  drawSlices(ctx, slices, detune, place, camera, look, palette, clock, style, selected, true, weight, 1.6, 0.2, 0.1, 0.14);
+  ctx.restore();
   ctx.save();
   ctx.filter = `blur(${wide}px)`;
   ctx.globalCompositeOperation = palette.bloom;
@@ -422,7 +412,7 @@ function floorBack(world, z = PLANE.ribbonZ) {
 // canvas and the full panel stay the same picture.
 function lineWeight(scale) {
   const graphic = Math.max(80, scale * PLANE.span);
-  return graphic / 52;
+  return graphic / 32;
 }
 
 // Short rungs stop at the back rail. The left-hand ones run out to the
@@ -478,33 +468,8 @@ function airFrame(slices, clock, detune) {
     crests: ordered.slice(0, 5),
     railRight: ordered.length ? ordered[ordered.length - 1].x : head.x + PLANE.span,
     // Bars 1–6. Same cut the floor hatch uses.
-    hatchX: ordered.length ? ordered[0].x + 0.36 * span : head.x,
+    hatchX: ordered.length ? ordered[0].x + 0.5 * span : head.x,
   };
-}
-
-// Fundamental centerline traced from zebra-crop.png, then smoothed so the
-// descent never kicks upward. t is the fraction of the screen-x run from
-// bar 1's crest to just past the rail. y is (screenY - startY) / that run,
-// with y downward. Saved as zebra-trace.json.
-const TRACE_TAIL = [
-  [0, 0], [0.0312, 0.0367], [0.0625, 0.0692], [0.0938, 0.0971], [0.125, 0.1167],
-  [0.1562, 0.1341], [0.1875, 0.145], [0.2188, 0.1501], [0.25, 0.1473], [0.2812, 0.14],
-  [0.3125, 0.1305], [0.3438, 0.1192], [0.375, 0.1078], [0.4062, 0.0955], [0.4375, 0.0815],
-  [0.4688, 0.064], [0.5, 0.0439], [0.5312, 0.0225], [0.5625, 0.0012], [0.5938, -0.0192],
-  [0.625, -0.0397], [0.6562, -0.0603], [0.6875, -0.082], [0.7188, -0.1037], [0.75, -0.1254],
-  [0.7812, -0.1464], [0.8125, -0.1673], [0.8438, -0.1883], [0.875, -0.2091], [0.9062, -0.2304],
-  [0.9375, -0.2507], [0.9688, -0.2695], [1, -0.2865],
-];
-
-function traceY(t) {
-  const u = clamp(t, 0, 1);
-  const row = TRACE_TAIL;
-  let hi = 1;
-  while (hi < row.length - 1 && row[hi][0] < u) hi += 1;
-  const lo = hi - 1;
-  const span = row[hi][0] - row[lo][0] || 1;
-  const f = (u - row[lo][0]) / span;
-  return row[lo][1] + (row[hi][1] - row[lo][1]) * f;
 }
 
 function fromRestScreen(x, sx, sy) {
@@ -520,32 +485,56 @@ function restScreen(x, y, z) {
   };
 }
 
-// Bar 1's crest, then the traced Zebra centerline out to just past the rail.
-// The table already holds the sag depth, the broad turn, and the rise bow.
+// Along the crests of bars 1 to 5, nearly straight, then a long straight rise.
+// The rounded bowl sat above the bars instead of on them.
 function tailSpline(x, y0, crests, railRight, steps) {
-  const crest = restScreen(x, y0, 0);
-  const span = Math.max(0.4, (railRight - crest.sx) * tune().tailReach);
-  const n = Math.max(32, steps);
+  const guides = (crests && crests.length) ? crests : [{ x, y: y0 }];
+  const screens = guides.map((crest, index) => (
+    index === 0 ? restScreen(x, y0, 0) : restScreen(crest.x, crest.y, 0)
+  ));
   const points = [];
-  for (let i = 0; i <= n; i++) {
-    const t = i / n;
-    points.push(fromRestScreen(x, crest.sx + t * span, crest.sy + traceY(t) * span));
+  const sagN = Math.max(8, Math.round((steps || 24) * 0.45));
+  const lastGuide = screens.length - 1;
+  if (lastGuide <= 0) {
+    points.push(fromRestScreen(x, screens[0].sx, screens[0].sy));
+  } else {
+    for (let i = 0; i <= sagN; i++) {
+      const t = (i / sagN) * lastGuide;
+      const index = Math.min(lastGuide - 1, Math.floor(t));
+      const u = t - index;
+      const a = screens[index];
+      const b = screens[index + 1];
+      const sx = a.sx + (b.sx - a.sx) * u;
+      const sy = a.sy + (b.sy - a.sy) * u;
+      points.push(fromRestScreen(x, sx, sy));
+    }
+  }
+  const last = screens[lastGuide];
+  const prev = screens[Math.max(0, lastGuide - 1)];
+  const riseRad = 32 * Math.PI / 180;
+  const span = Math.max(0.8, (railRight - last.sx) * tune().tailReach * 1.7);
+  const arrive = { x: last.sx - prev.sx, y: last.sy - prev.sy };
+  const aLen = Math.hypot(arrive.x, arrive.y) || 1;
+  const depart = { x: Math.cos(riseRad), y: -Math.sin(riseRad) };
+  let sx = last.sx;
+  let sy = last.sy;
+  const step = span / 28;
+  for (let i = 1; i <= 7; i++) {
+    const t = i / 7;
+    const dx = ((arrive.x / aLen) * (1 - t)) + (depart.x * t);
+    const dy = ((arrive.y / aLen) * (1 - t)) + (depart.y * t);
+    const len = Math.hypot(dx, dy) || 1;
+    sx += (dx / len) * step * 0.7;
+    sy += (dy / len) * step * 0.7;
+    points.push(fromRestScreen(x, sx, sy));
+  }
+  const riseN = 24;
+  for (let i = 1; i <= riseN; i++) {
+    sx += depart.x * step;
+    sy += depart.y * step;
+    points.push(fromRestScreen(x, sx, sy));
   }
   return points;
-}
-
-function screenArcEnd(points, fraction) {
-  const seen = points.map((point) => restScreen(point.x, point.y, point.z));
-  let total = 0;
-  const at = [0];
-  for (let i = 1; i < seen.length; i++) {
-    total += Math.hypot(seen[i].sx - seen[i - 1].sx, seen[i].sy - seen[i - 1].sy);
-    at.push(total);
-  }
-  const stop = total * fraction;
-  let end = 1;
-  while (end < at.length - 1 && at[end] < stop) end += 1;
-  return end;
 }
 
 function tailWorld(slice, world, maxSeconds, air) {
@@ -577,12 +566,18 @@ function tailWorld(slice, world, maxSeconds, air) {
   const y0 = air?.anchorY ?? world.y;
   const full = tailSpline(x, y0, air?.crests, air?.railRight ?? x + PLANE.span, 36);
   if (rank === 0) return full;
-  // Same curve, tucked just under the fundamental, ending at about 40% of
-  // its length. Later tails stop sooner.
-  const reach = Math.max(0.22, 0.40 - (rank - 1) * 0.08);
-  const end = screenArcEnd(full, reach);
-  const tuck = 0.1 + (rank - 1) * 0.04;
-  return full.slice(0, end + 1).map((point) => ({ x: point.x, y: point.y - tuck, z: point.z }));
+  // The octave leaves the fundamental around bar 4–5 and runs below it,
+  // parallel and shorter.
+  const seen = full.map((point) => restScreen(point.x, point.y, point.z));
+  let bottom = 0;
+  for (let i = 1; i < seen.length; i++) {
+    if (seen[i].sy > seen[bottom].sy) bottom = i;
+  }
+  const start = Math.max(0, bottom - 4);
+  const remain = full.length - start;
+  const end = Math.min(full.length, start + Math.max(6, Math.round(remain * (0.46 - (rank - 1) * 0.1))));
+  const tuck = 0.09 + (rank - 1) * 0.04;
+  return full.slice(start, end).map((point) => ({ x: point.x, y: point.y - tuck, z: point.z }));
 }
 
 function strokePath(ctx, points, color, width, alpha) {
@@ -604,7 +599,7 @@ function glow(ctx, points, color, look, alpha) {
 function hatchLimit(placed, detune) {
   const xs = placed.map((item) => worldOf(item.slice, detune).x).sort((a, b) => a - b);
   if (xs.length < 2) return Infinity;
-  return xs[0] + 0.36 * (xs[xs.length - 1] - xs[0]);
+  return xs[0] + 0.5 * (xs[xs.length - 1] - xs[0]);
 }
 
 function drawSlices(ctx, slices, detune, place, camera, look, palette, clock, style, selected, bloom, weight, bulk = 1, alpha = 1, accentAlpha = alpha, hatchAlpha = alpha) {
@@ -614,7 +609,7 @@ function drawSlices(ctx, slices, detune, place, camera, look, palette, clock, st
   const tailW = bloom ? weight * (bulk > 1.15 ? 2.7 : 1.7) : weight * 1.55;
   const tail = { width: tailW, alpha: 1, halo: 0, haloAlpha: 0 };
   const octave = { width: tailW * 0.74, alpha: 1, halo: 0, haloAlpha: 0 };
-  const rail = { width: weight * bulk, alpha, halo: 0, haloAlpha: 0 };
+  const rail = { width: weight * 2.6 * bulk, alpha, halo: 0, haloAlpha: 0 };
   // Bloom strokes are wide enough that neighbouring lines share one glow.
   const rungW = bloom ? weight * (bulk > 1.15 ? 1.15 : 0.85) : weight * 0.48;
   const rung = { width: rungW, alpha: bloom ? tune().hatchGlow : tune().hatchAlpha, halo: 0, haloAlpha: 0 };
@@ -643,34 +638,22 @@ function drawSlices(ctx, slices, detune, place, camera, look, palette, clock, st
     glow(ctx, atDepth(placed, 0), palette.ink, rail, 1);
     glow(ctx, atDepth(placed, PLANE.ribbonZ), palette.ink, rail, 1);
     const hatched = placed.filter((item) => worldOf(item.slice, detune).x <= limit);
-    // About two crossings per bar gap, both diagonals. The tight bloom is
-    // the shared glow. The wide bloom would fill the block solid.
-    if (!(bloom && bulk > 1.15)) {
-    const depths = [0.28, 0.5, 0.72, 0.94, 1.16, 1.38];
+    // Inside the first bars, from just under the crests down to the floor.
+    // Depth rays ran up-right and stuck out above the crest line.
     for (let i = 0; i < hatched.length; i++) {
       const item = hatched[i];
       const world = worldOf(item.slice, detune);
-      const cap = world.y / 0.72;
+      const under = place(camera, world.x, world.y * 0.78, 0);
+      glow(ctx, [under, item.tri.foot], meshTint, rung, item.slice.alpha);
       const next = hatched[i + 1];
-      const nxt = next ? worldOf(next.slice, detune) : null;
-      const skip = hatched[i + 2];
-      const farBar = skip ? worldOf(skip.slice, detune) : null;
-      for (let d = 0; d < depths.length; d++) {
-        const z = depths[d];
-        if (z > cap) continue;
-        const far = place(camera, world.x, 0, z);
-        glow(ctx, [item.tri.foot, far], palette.ink, rung, item.slice.alpha);
-        if (nxt) {
-          const across = place(camera, nxt.x, 0, z * 0.22);
-          const mid = place(camera, world.x, 0, z * 0.62);
-          glow(ctx, [mid, across], palette.ink, rung, item.slice.alpha);
-        }
-        if (farBar && d % 2 === 0) {
-          const over = place(camera, farBar.x, 0, 0.14);
-          glow(ctx, [far, over], palette.ink, rung, item.slice.alpha);
-        }
-      }
-    }
+      if (!next) continue;
+      const nxt = worldOf(next.slice, detune);
+      const midX = (world.x + nxt.x) / 2;
+      const midTop = place(camera, midX, Math.min(world.y, nxt.y) * 0.7, 0);
+      const midFoot = place(camera, midX, 0, 0);
+      glow(ctx, [midTop, midFoot], meshTint, rung, item.slice.alpha);
+      const drop = place(camera, world.x, world.y * 0.72, 0);
+      glow(ctx, [drop, next.tri.foot], meshTint, rung, item.slice.alpha);
     }
     for (const item of placed) {
       const world = worldOf(item.slice, detune);
