@@ -43,16 +43,16 @@ const TUNE = {
   // Tip sits just past the right end of the front rail.
   tailReach: 1.04,
   // Left accent is a tint in the mesh, not a separate stroke.
-  leftSharp: 0.28,
-  leftWidth: 0.7,
-  leftGlow: 0.38,
+  leftSharp: 0.72,
+  leftWidth: 0.85,
+  leftGlow: 0.55,
   // Right accent is a tint in the stroke, not a second edge.
   rightSharp: 0.14,
   accentZ: 0,
   accentZLeft: 0.04,
   rungZ: 1.7,
-  hatchAlpha: 0.4,
-  hatchGlow: 0.18,
+  hatchAlpha: 0.78,
+  hatchGlow: 0.36,
 };
 let activeTune = null;
 function tune() {
@@ -66,7 +66,7 @@ export const PLANE = {
   focal: 9.5,
   pitchMin: 0.35,
   pitchMax: 0.85,
-  span: 2.72,
+  span: 2.4,
   height: 1.29,
   depth: 3.15,
   // Below this fraction of the longest decay the accent stays a vertical
@@ -136,7 +136,8 @@ export function combHeights(slices, position) {
   const amps = slices.map((slice, index) => {
     const db = Number.isFinite(slice?.gainDb) ? slice.gainDb : -60;
     const weight = Math.abs(Math.sin(Math.PI * (index + 1) * placed));
-    return Math.pow(10, db / 20) * (0.08 + 0.92 * weight);
+    // A light comb. The old 8% floor turned the right-hand bars into a zigzag.
+    return Math.pow(10, db / 20) * (0.74 + 0.26 * weight);
   });
   const peak = Math.max(1e-6, ...amps);
   return slices.map((slice, index) => ({
@@ -332,23 +333,23 @@ export function paintModalView(ctx, partials, options = {}) {
   // The tighter one brightens the mesh those overlaps make.
   // Cream bloom stays soft so neighbours keep a dark gap. Accent bloom
   // is softer still, a tint rather than a second set of bars.
-  const wide = Math.max(4.5, weight * (style === 'eco' ? 1.4 : 2.1));
-  const tight = Math.max(2.5, weight * (style === 'eco' ? 0.9 : 1.25));
-  const scene = Math.max(5, weight * 1.55);
+  const wide = Math.max(2.4, weight * (style === 'eco' ? 0.7 : 1.05));
+  const tight = Math.max(1.4, weight * (style === 'eco' ? 0.45 : 0.62));
+  const scene = Math.max(3.5, weight * 0.9);
   ctx.save();
   ctx.filter = `blur(${scene}px)`;
   ctx.globalCompositeOperation = palette.bloom;
-  drawSlices(ctx, slices, detune, place, camera, look, palette, clock, style, selected, true, weight, 1.6, 0.2, 0.1, 0.14);
+  drawSlices(ctx, slices, detune, place, camera, look, palette, clock, style, selected, true, weight, 1.15, 0.1, 0.05, 0.08);
   ctx.restore();
   ctx.save();
   ctx.filter = `blur(${wide}px)`;
   ctx.globalCompositeOperation = palette.bloom;
-  drawSlices(ctx, slices, detune, place, camera, look, palette, clock, style, selected, true, weight, 1.25, 0.26, 0.12, 0.16);
+  drawSlices(ctx, slices, detune, place, camera, look, palette, clock, style, selected, true, weight, 1.12, 0.13, 0.06, 0.1);
   ctx.restore();
   ctx.save();
   ctx.filter = `blur(${tight}px)`;
   ctx.globalCompositeOperation = palette.bloom;
-  drawSlices(ctx, slices, detune, place, camera, look, palette, clock, style, selected, true, weight, 1.08, 0.2, 0.08, 0.12);
+  drawSlices(ctx, slices, detune, place, camera, look, palette, clock, style, selected, true, weight, 1.04, 0.1, 0.04, 0.08);
   ctx.restore();
   drawSlices(ctx, slices, detune, place, camera, look, palette, clock, style, selected, false, weight, 1, 1, 0.48, 0.55);
   ctx.globalAlpha = 1;
@@ -465,23 +466,32 @@ function airFrame(slices, clock, detune) {
     anchorX: head.x,
     anchorY: head.y,
     rankOf: (slice) => rank.get(slice) ?? 0,
-    crests: ordered.slice(0, 5),
+    crests: ordered.slice(0, 6),
     railRight: ordered.length ? ordered[ordered.length - 1].x : head.x + PLANE.span,
     // Bars 1–6. Same cut the floor hatch uses.
     hatchX: ordered.length ? ordered[0].x + 0.5 * span : head.x,
   };
 }
 
+// Floor slope at rest, screen-y down per world-x. Steeper than the old 0.625
+// so the comb's run matches the crop, and short enough that the figure is compact.
+const FLOOR_SHEAR = 0.74;
+const DEPTH_X = 0.78;
+
+function depthRise(pitch = PLANE.pitch) {
+  return 0.75 * (0.85 + (pitch - PLANE.pitch) * 1.15);
+}
+
 function fromRestScreen(x, sx, sy) {
-  const z = (sx - x) / 0.78;
-  const y = (-sy) - (x * -0.625) - (z * 0.6375);
+  const z = (sx - x) / DEPTH_X;
+  const y = (-sy) - (x * -FLOOR_SHEAR) - (z * depthRise());
   return { x, y, z };
 }
 
 function restScreen(x, y, z) {
   return {
-    sx: x + (z * 0.78),
-    sy: -(y + (x * -0.625) + (z * 0.6375)),
+    sx: x + (z * DEPTH_X),
+    sy: -(y + (x * -FLOOR_SHEAR) + (z * depthRise())),
   };
 }
 
@@ -511,28 +521,34 @@ function tailSpline(x, y0, crests, railRight, steps) {
   }
   const last = screens[lastGuide];
   const prev = screens[Math.max(0, lastGuide - 1)];
-  const riseRad = 32 * Math.PI / 180;
-  const span = Math.max(0.8, (railRight - last.sx) * tune().tailReach * 1.7);
+  const start = screens[0];
+  // Shallow rise. The tip sits only a little above bar 1, not a steep climb.
+  const riseRad = 18 * Math.PI / 180;
+  const tipSy = start.sy - y0 * 0.42;
+  const climb = Math.max(0.15, last.sy - tipSy);
+  const span = climb / Math.sin(riseRad);
   const arrive = { x: last.sx - prev.sx, y: last.sy - prev.sy };
   const aLen = Math.hypot(arrive.x, arrive.y) || 1;
   const depart = { x: Math.cos(riseRad), y: -Math.sin(riseRad) };
   let sx = last.sx;
   let sy = last.sy;
-  const step = span / 28;
-  for (let i = 1; i <= 7; i++) {
-    const t = i / 7;
-    const dx = ((arrive.x / aLen) * (1 - t)) + (depart.x * t);
-    const dy = ((arrive.y / aLen) * (1 - t)) + (depart.y * t);
-    const len = Math.hypot(dx, dy) || 1;
-    sx += (dx / len) * step * 0.7;
-    sy += (dy / len) * step * 0.7;
+  const step = span / 26;
+  // A circular bend from the crest slope up into the shallow rise.
+  let ang = Math.atan2(arrive.y, arrive.x);
+  const target = Math.atan2(depart.y, depart.x);
+  const arcSteps = 12;
+  for (let i = 1; i <= arcSteps; i++) {
+    const a = ang + (target - ang) * (i / arcSteps);
+    sx += Math.cos(a) * step * 0.55;
+    sy += Math.sin(a) * step * 0.55;
     points.push(fromRestScreen(x, sx, sy));
   }
-  const riseN = 24;
-  for (let i = 1; i <= riseN; i++) {
+  let guard = 0;
+  while (sy > tipSy && guard < 48) {
     sx += depart.x * step;
     sy += depart.y * step;
     points.push(fromRestScreen(x, sx, sy));
+    guard += 1;
   }
   return points;
 }
@@ -643,17 +659,25 @@ function drawSlices(ctx, slices, detune, place, camera, look, palette, clock, st
     for (let i = 0; i < hatched.length; i++) {
       const item = hatched[i];
       const world = worldOf(item.slice, detune);
-      const under = place(camera, world.x, world.y * 0.78, 0);
-      glow(ctx, [under, item.tri.foot], meshTint, rung, item.slice.alpha);
       const next = hatched[i + 1];
-      if (!next) continue;
-      const nxt = worldOf(next.slice, detune);
+      const nxt = next ? worldOf(next.slice, detune) : null;
+      // Several drops inside each bar, all starting below the crest.
+      for (const frac of [0.82, 0.55, 0.28]) {
+        const top = place(camera, world.x, world.y * frac, 0);
+        glow(ctx, [top, item.tri.foot], meshTint, rung, item.slice.alpha);
+      }
+      if (!nxt) continue;
+      const cap = Math.min(world.y, nxt.y);
       const midX = (world.x + nxt.x) / 2;
-      const midTop = place(camera, midX, Math.min(world.y, nxt.y) * 0.7, 0);
-      const midFoot = place(camera, midX, 0, 0);
-      glow(ctx, [midTop, midFoot], meshTint, rung, item.slice.alpha);
-      const drop = place(camera, world.x, world.y * 0.72, 0);
-      glow(ctx, [drop, next.tri.foot], meshTint, rung, item.slice.alpha);
+      glow(ctx, [place(camera, midX, cap * 0.8, 0), place(camera, midX, 0, 0)], meshTint, rung, item.slice.alpha);
+      glow(ctx, [place(camera, world.x, cap * 0.78, 0), next.tri.foot], meshTint, rung, item.slice.alpha);
+      glow(ctx, [item.tri.foot, place(camera, nxt.x, cap * 0.62, 0)], meshTint, rung, item.slice.alpha);
+      const skip = hatched[i + 2];
+      if (skip) {
+        const far = worldOf(skip.slice, detune);
+        const low = Math.min(cap, far.y);
+        glow(ctx, [place(camera, world.x, low * 0.7, 0), skip.tri.foot], meshTint, rung, item.slice.alpha);
+      }
     }
     for (const item of placed) {
       const world = worldOf(item.slice, detune);
@@ -747,8 +771,8 @@ function rawProject(x, y, z, camera) {
   const zr = -x * sy + z * cy;
   const rise = 0.85 + (camera.pitch - PLANE.pitch) * 1.15;
   return {
-    x: xr * 1 + zr * 0.78,
-    y: y + xr * -0.625 + zr * 0.75 * rise,
+    x: xr * 1 + zr * DEPTH_X,
+    y: y + xr * -FLOOR_SHEAR + zr * 0.75 * rise,
     depth: zr,
   };
 }
