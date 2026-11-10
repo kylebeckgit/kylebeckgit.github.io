@@ -66,8 +66,8 @@ export const PLANE = {
   focal: 9.5,
   pitchMin: 0.35,
   pitchMax: 0.85,
-  span: 6.4,
-  height: 2.05,
+  span: 6.9,
+  height: 1.68,
   depth: 3.15,
   // Below this fraction of the longest decay the accent stays a vertical
   // line beside the bar. The two longest (string: fundamental and octave)
@@ -280,7 +280,7 @@ export function measureFit(slices, camera, width, height, detune = 0) {
   }
   // A little room above the tip, so the floor sits down where the crop's rail does.
   const contentY = Math.max(0.001, maxY - minY);
-  minY -= contentY * 0.03;
+  maxY += contentY * 0.07;
   const spanX = Math.max(0.001, maxX - minX);
   const spanY = Math.max(0.001, maxY - minY);
   const fitScale = Math.min(
@@ -289,7 +289,7 @@ export function measureFit(slices, camera, width, height, detune = 0) {
   );
   // Don't blow a compact wedge up to the edges. Still shrink if a turn
   // or a detune spread would otherwise leave the canvas.
-  const capScale = Math.min((width * 0.92) / spanX, (height * 0.92) / spanY);
+  const capScale = Math.min((width * 0.94) / spanX, (height * 0.94) / spanY);
   const scale = Math.min(fitScale, capScale);
   return { scale, cx: (minX + maxX) / 2, cy: (minY + maxY) / 2 };
 }
@@ -481,7 +481,7 @@ function airFrame(slices, clock, detune) {
 
 // Floor slope at rest, screen-y down per world-x. Steeper than the old 0.625
 // so the comb's run matches the crop, and short enough that the figure is compact.
-const FLOOR_SHEAR = 0.34;
+const FLOOR_SHEAR = 0.333;
 const DEPTH_X = 0.78;
 
 function depthRise(pitch = PLANE.pitch) {
@@ -509,24 +509,25 @@ function tailSpline(x, y0, crests, railRight, steps) {
     index === 0 ? restScreen(x, y0, 0) : restScreen(crest.x, crest.y, 0)
   ));
   const points = [];
-  const sagN = Math.max(8, Math.round((steps || 24) * 0.45));
-  const lastGuide = screens.length - 1;
-  if (lastGuide <= 0) {
+  // Ride the crests only through bar 3. The bend itself covers bars 3 to 6.
+  const hold = Math.min(2, Math.max(0, screens.length - 1));
+  const sagN = Math.max(6, Math.round((steps || 24) * 0.3));
+  if (hold <= 0) {
     points.push(fromRestScreen(x, screens[0].sx, screens[0].sy));
   } else {
     for (let i = 0; i <= sagN; i++) {
-      const t = (i / sagN) * lastGuide;
-      const index = Math.min(lastGuide - 1, Math.floor(t));
+      const t = (i / sagN) * hold;
+      const index = Math.min(hold - 1, Math.floor(t));
       const u = t - index;
       const a = screens[index];
-      const b = screens[index + 1];
+      const b = screens[Math.min(hold, index + 1)];
       const sx = a.sx + (b.sx - a.sx) * u;
       const sy = a.sy + (b.sy - a.sy) * u;
       points.push(fromRestScreen(x, sx, sy));
     }
   }
-  const last = screens[lastGuide];
-  const prev = screens[Math.max(0, lastGuide - 1)];
+  const last = screens[hold];
+  const prev = screens[Math.max(0, hold - 1)];
   // Rise about 33 degrees and stop above the last bar, not past the comb.
   const riseRad = 31 * Math.PI / 180;
   const arrive = { x: last.sx - prev.sx, y: last.sy - prev.sy };
@@ -536,16 +537,15 @@ function tailSpline(x, y0, crests, railRight, steps) {
   let sx = last.sx;
   let sy = last.sy;
   const tipSx = railRight + floorSpan * 0.02;
-  // A short bend at bar 5. The long arc was still falling across bars 6 and 7.
+  // Wide radius: the turn starts at bar 3 and finishes just after bar 5.
   let ang = Math.atan2(arrive.y, arrive.x);
   const target = Math.atan2(depart.y, depart.x);
-  const arcSteps = 8;
+  const arcSteps = 18;
   for (let i = 1; i <= arcSteps; i++) {
     const t = i / arcSteps;
-    const ease = 1 - ((1 - t) ** 2);
-    const a = ang + (target - ang) * ease;
-    sx += Math.cos(a) * step * 0.36;
-    sy += Math.sin(a) * step * 0.36;
+    const a = ang + (target - ang) * t;
+    sx += Math.cos(a) * step * 0.72;
+    sy += Math.sin(a) * step * 0.72;
     points.push(fromRestScreen(x, sx, sy));
   }
   let guard = 0;
@@ -600,7 +600,8 @@ function tailWorld(slice, world, maxSeconds, air) {
   const stopX = seen[start].sx + floorSpan * 0.42;
   let end = start + 1;
   while (end < seen.length - 1 && seen[end].sx < stopX) end += 1;
-  const tuck = 0.16 + (rank - 1) * 0.05;
+  // About two and a half bar-strokes below the fundamental.
+  const tuck = 0.28 + (rank - 1) * 0.05;
   return full.slice(start, end + 1).map((point) => ({ x: point.x, y: point.y - tuck, z: point.z }));
 }
 
@@ -675,9 +676,9 @@ function drawSlices(ctx, slices, detune, place, camera, look, palette, clock, st
     }
     for (const item of placed) {
       const world = worldOf(item.slice, detune);
-      const back = place(camera, world.x, world.y, 0.08);
-      const backFoot = place(camera, world.x, 0, 0.08);
-      glow(ctx, [backFoot, back], palette.ink, ink, item.slice.alpha * 0.85);
+      const back = place(camera, world.x, world.y, 0.18);
+      const backFoot = place(camera, world.x, 0, 0.18);
+      glow(ctx, [backFoot, back], palette.ink, ink, item.slice.alpha * (bloom ? 0.08 : 0.4));
       if (world.x > limit) {
         const far = place(camera, world.x, 0, PLANE.ribbonZ);
         glow(ctx, [item.tri.foot, far], palette.ink, ink, item.slice.alpha);
@@ -804,13 +805,26 @@ function coolHex(hex, amount) {
   return `#${channel(r)}${channel(g)}${channel(b)}`;
 }
 
+function neutralHex(hex) {
+  const match = /^#([0-9a-f]{6})$/i.exec(String(hex || ''));
+  if (!match) return hex;
+  const value = parseInt(match[1], 16);
+  const r = (value >> 16) & 255;
+  const g = (value >> 8) & 255;
+  const b = value & 255;
+  const level = Math.max(0, Math.min(255, Math.round((0.2126 * r) + (0.7152 * g) + (0.0722 * b))));
+  const channel = level.toString(16).padStart(2, '0');
+  return `#${channel}${channel}${channel}`;
+}
+
 function sitePalette(colors, invert = true) {
   const bg = colors?.bg || '#f2ede3';
   const fg = colors?.ink || colors?.fg || '#1f1d1a';
   // --muted is the site's lighter dark. Zebra's panel is a mid grey, not black.
   const muted = colors?.muted || '#6a655c';
   const mixed = mixHex(fg, muted, tune().panelMix);
-  const panel = invert ? coolHex(mixed, tune().panelCool) : bg;
+  // Neutral grey at the mix's lightness. Cooling toward blue left a green cast.
+  const panel = invert ? neutralHex(mixed) : bg;
   return {
     panel,
     ink: invert ? bg : fg,
