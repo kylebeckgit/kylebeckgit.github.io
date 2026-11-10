@@ -101,7 +101,7 @@ test('the resting wedge is a dense comb with short up-right tails', () => {
   assert.ok(tail / bar > 1.2 && tail / bar < 6.5, `tail/bar ${tail / bar}`);
   assert.ok(run / bar > 3.2 && run / bar < 5.2, `run/bar ${run / bar}`);
   assert.ok(tailDeg > 1 && tailDeg < 42, `tail ${tailDeg}`);
-  assert.ok(freqDeg > 28 && freqDeg < 38, `freq ${freqDeg}`);
+  assert.ok(freqDeg > 16 && freqDeg < 38, `freq ${freqDeg}`);
   const lastH = Math.abs(last.foot.y - last.crest.y);
   assert.ok(lastH / bar > 0.58 && lastH / bar < 0.8, `last/first ${lastH / bar}`);
   const lipX = first.floor.x - first.foot.x;

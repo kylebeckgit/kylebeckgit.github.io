@@ -275,6 +275,9 @@ export function measureFit(slices, camera, width, height, detune = 0) {
     minY = -1;
     maxY = 1;
   }
+  // A little room above the tip, so the floor sits down where the crop's rail does.
+  const contentY = Math.max(0.001, maxY - minY);
+  minY -= contentY * 0.08;
   const spanX = Math.max(0.001, maxX - minX);
   const spanY = Math.max(0.001, maxY - minY);
   const fitScale = Math.min(
@@ -328,7 +331,7 @@ export function paintModalView(ctx, partials, options = {}) {
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
   const clock = longestSeconds(slices);
-  const weight = lineWeight(fit.scale) * (style === 'eco' ? 0.85 : style === 'glow' ? 1.12 : 1);
+  const weight = lineWeight(width) * (style === 'eco' ? 0.85 : style === 'glow' ? 1.12 : 1);
   // Two stacked blooms. The wide one fills the gaps between close lines.
   // The tighter one brightens the mesh those overlaps make.
   // Cream bloom stays soft so neighbours keep a dark gap. Accent bloom
@@ -409,11 +412,11 @@ function floorBack(world, z = PLANE.ribbonZ) {
   return { x: world.x, y: 0, z };
 }
 
-// Stroke width is about 1/150 of the floor's screen length, so a small
-// canvas and the full panel stay the same picture.
-function lineWeight(scale) {
-  const graphic = Math.max(80, scale * PLANE.span);
-  return graphic / 32;
+// A bar is about 1.25% of the panel width. Tied to the canvas, not the
+// fit scale, so strokes stay thin when the comb is zoomed to fill the panel.
+function lineWeight(panelWidth) {
+  const panel = Math.max(320, Number(panelWidth) || 800);
+  return panel * 0.0125;
 }
 
 // Short rungs stop at the back rail. The left-hand ones run out to the
@@ -475,7 +478,7 @@ function airFrame(slices, clock, detune) {
 
 // Floor slope at rest, screen-y down per world-x. Steeper than the old 0.625
 // so the comb's run matches the crop, and short enough that the figure is compact.
-const FLOOR_SHEAR = 0.58;
+const FLOOR_SHEAR = 0.34;
 const DEPTH_X = 0.78;
 
 function depthRise(pitch = PLANE.pitch) {
@@ -529,16 +532,17 @@ function tailSpline(x, y0, crests, railRight, steps) {
   const step = floorSpan / 42;
   let sx = last.sx;
   let sy = last.sy;
+  const tipSx = railRight + floorSpan * 0.02;
+  // Longer arc so the crest slope eases into the rise instead of a corner.
   let ang = Math.atan2(arrive.y, arrive.x);
   const target = Math.atan2(depart.y, depart.x);
-  const arcSteps = 10;
+  const arcSteps = 16;
   for (let i = 1; i <= arcSteps; i++) {
     const a = ang + (target - ang) * (i / arcSteps);
-    sx += Math.cos(a) * step * 0.42;
-    sy += Math.sin(a) * step * 0.42;
+    sx += Math.cos(a) * step * 0.85;
+    sy += Math.sin(a) * step * 0.85;
     points.push(fromRestScreen(x, sx, sy));
   }
-  const tipSx = railRight + floorSpan * 0.03;
   let guard = 0;
   while (sx < tipSx && guard < 48) {
     sx += depart.x * step;
@@ -603,17 +607,6 @@ function strokePath(ctx, points, color, width, alpha) {
   ctx.stroke();
 }
 
-function fillPoly(ctx, points, color, alpha) {
-  if (points.length < 3) return;
-  ctx.beginPath();
-  ctx.moveTo(points[0].x, points[0].y);
-  for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
-  ctx.closePath();
-  ctx.fillStyle = color;
-  ctx.globalAlpha = alpha;
-  ctx.fill();
-}
-
 function glow(ctx, points, color, look, alpha) {
   if (look.halo > 0) strokePath(ctx, points, color, look.halo, look.haloAlpha * alpha);
   strokePath(ctx, points, color, look.width, look.alpha * alpha);
@@ -629,12 +622,12 @@ function drawSlices(ctx, slices, detune, place, camera, look, palette, clock, st
   const ink = { width: weight * bulk, alpha, halo: 0, haloAlpha: 0 };
   const accent = { width: weight * 0.5 * bulk, alpha: accentAlpha, halo: 0, haloAlpha: 0 };
   // Wide under the blur, a lighter core on the sharp pass. The pair stays soft.
-  const tailW = bloom ? weight * (bulk > 1.15 ? 2.7 : 1.7) : weight * 1.55;
+  const tailW = weight * (bloom ? 1.15 : 1);
   const tail = { width: tailW, alpha: 1, halo: 0, haloAlpha: 0 };
   const octave = { width: tailW * 0.74, alpha: 1, halo: 0, haloAlpha: 0 };
-  const rail = { width: weight * 2.6 * bulk, alpha, halo: 0, haloAlpha: 0 };
-  // Bloom strokes are wide enough that neighbouring lines share one glow.
-  const rungW = bloom ? weight * (bulk > 1.15 ? 1.15 : 0.85) : weight * 0.48;
+  const rail = { width: weight * bulk, alpha, halo: 0, haloAlpha: 0 };
+  // Thin accent lines. The bars stay the wide strokes.
+  const rungW = weight * (bloom ? 0.55 : 0.4);
   const rung = { width: rungW, alpha: bloom ? tune().hatchGlow : tune().hatchAlpha, halo: 0, haloAlpha: 0 };
   const meshTint = mixHex(palette.wire, palette.paper, 0.62);
   const tailColor = mixHex(palette.wire, palette.paper, tune().tailCream);
@@ -661,43 +654,18 @@ function drawSlices(ctx, slices, detune, place, camera, look, palette, clock, st
     glow(ctx, atDepth(placed, 0), palette.ink, rail, 1);
     glow(ctx, atDepth(placed, PLANE.ribbonZ), palette.ink, rail, 1);
     const hatched = placed.filter((item) => worldOf(item.slice, detune).x <= limit);
-    // A light fill under the glow, so the left block reads as one soft mesh.
-    const veil = mixHex(palette.ink, meshTint, 0.35);
-    for (let i = 0; i < hatched.length - 1; i++) {
-      const a = hatched[i];
-      const b = hatched[i + 1];
-      const aw = worldOf(a.slice, detune);
-      const bw = worldOf(b.slice, detune);
-      fillPoly(ctx, [
-        place(camera, aw.x, aw.y * 0.82, 0),
-        place(camera, bw.x, bw.y * 0.82, 0),
-        b.tri.foot,
-        a.tri.foot,
-      ], veil, bloom ? 0.07 : 0.16);
-    }
-    // Inside the first bars, from just under the crests down to the floor.
-    // Depth rays ran up-right and stuck out above the crest line.
+    // Thin diagonals from the crests down to the floor, crossing several bars.
     for (let i = 0; i < hatched.length; i++) {
       const item = hatched[i];
       const world = worldOf(item.slice, detune);
-      const next = hatched[i + 1];
-      const nxt = next ? worldOf(next.slice, detune) : null;
-      // Several drops inside each bar, all starting below the crest.
-      for (const frac of [0.82, 0.55, 0.28]) {
-        const top = place(camera, world.x, world.y * frac, 0);
-        glow(ctx, [top, item.tri.foot], meshTint, rung, item.slice.alpha);
-      }
-      if (!nxt) continue;
-      const cap = Math.min(world.y, nxt.y);
-      const midX = (world.x + nxt.x) / 2;
-      glow(ctx, [place(camera, midX, cap * 0.8, 0), place(camera, midX, 0, 0)], meshTint, rung, item.slice.alpha);
-      glow(ctx, [place(camera, world.x, cap * 0.78, 0), next.tri.foot], meshTint, rung, item.slice.alpha);
-      glow(ctx, [item.tri.foot, place(camera, nxt.x, cap * 0.62, 0)], meshTint, rung, item.slice.alpha);
-      const skip = hatched[i + 2];
-      if (skip) {
-        const far = worldOf(skip.slice, detune);
-        const low = Math.min(cap, far.y);
-        glow(ctx, [place(camera, world.x, low * 0.7, 0), skip.tri.foot], meshTint, rung, item.slice.alpha);
+      const from = place(camera, world.x, world.y * 0.9, 0);
+      for (const skip of [2, 3, 4]) {
+        const other = hatched[i + skip];
+        if (!other) continue;
+        glow(ctx, [from, other.tri.foot], meshTint, rung, item.slice.alpha);
+        const ow = worldOf(other.slice, detune);
+        const under = place(camera, ow.x, ow.y * 0.45, 0);
+        glow(ctx, [item.tri.foot, under], meshTint, rung, item.slice.alpha);
       }
     }
     for (const item of placed) {
