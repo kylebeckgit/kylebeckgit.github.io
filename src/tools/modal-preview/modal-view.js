@@ -35,7 +35,7 @@ const TUNE = {
   tailGlow: 0.62,
   octaveGlow: 0.44,
   tailSharp: 0.92,
-  octaveSharp: 0.7,
+  octaveSharp: 0.88,
   // Core is accent blended toward the page cream, so the tails stay warm
   // but read as a soft bright pair.
   tailCream: 0.74,
@@ -361,16 +361,16 @@ export function paintModalView(ctx, partials, options = {}) {
   // is softer still, a tint rather than a second set of bars.
   const wide = Math.max(2.4, weight * (style === 'eco' ? 0.7 : 1.05));
   const tight = Math.max(1.4, weight * (style === 'eco' ? 0.45 : 0.62));
-  const scene = Math.max(3.5, weight * 0.9);
+  const scene = Math.max(4.2, weight * 1.05);
   ctx.save();
   ctx.filter = `blur(${scene}px)`;
   ctx.globalCompositeOperation = palette.bloom;
-  drawSlices(ctx, slices, detune, place, camera, look, palette, clock, style, selected, true, weight, 1.15, 0.1, 0.05, 0.08);
+  drawSlices(ctx, slices, detune, place, camera, look, palette, clock, style, selected, true, weight, 1.15, 0.14, 0.05, 0.08);
   ctx.restore();
   ctx.save();
   ctx.filter = `blur(${wide}px)`;
   ctx.globalCompositeOperation = palette.bloom;
-  drawSlices(ctx, slices, detune, place, camera, look, palette, clock, style, selected, true, weight, 1.12, 0.13, 0.06, 0.1);
+  drawSlices(ctx, slices, detune, place, camera, look, palette, clock, style, selected, true, weight, 1.12, 0.15, 0.06, 0.1);
   ctx.restore();
   ctx.save();
   ctx.filter = `blur(${tight}px)`;
@@ -614,15 +614,28 @@ function tailWorld(slice, world, maxSeconds, air) {
   for (let i = 1; i < seen.length; i++) {
     if (seen[i].sy > seen[bottom].sy) bottom = i;
   }
-  // Leave just before the bend, near bar 4, and stop a bit past halfway.
-  const start = Math.max(0, bottom - 6);
+  // Leave at the bend, near bar 5, and stop near 55% across the panel.
+  const start = bottom;
   const floorSpan = Math.max(0.4, (air?.railRight ?? x) - (air?.anchorX ?? x));
-  const stopX = seen[start].sx + floorSpan * 0.34;
+  const stopX = seen[0].sx + floorSpan * 0.66;
   let end = start + 1;
   while (end < seen.length - 1 && seen[end].sx < stopX) end += 1;
-  // About two and a half bar-strokes below the fundamental.
-  const tuck = 0.28 + (rank - 1) * 0.05;
+  // One bar step below the fundamental, for the whole branch.
+  let step = PLANE.span / 15;
+  if (air?.crests?.length > 1) step = Math.abs(air.crests[1].x - air.crests[0].x);
+  const tuck = step + (rank - 1) * step * 0.35;
   return full.slice(start, end + 1).map((point) => ({ x: point.x, y: point.y - tuck, z: point.z }));
+}
+
+function fadeLine(ctx, start, end, color, look, alpha) {
+  const steps = 6;
+  for (let i = 0; i < steps; i++) {
+    const u0 = i / steps;
+    const u1 = (i + 1) / steps;
+    const a = { x: start.x + (end.x - start.x) * u0, y: start.y + (end.y - start.y) * u0 };
+    const b = { x: start.x + (end.x - start.x) * u1, y: start.y + (end.y - start.y) * u1 };
+    glow(ctx, [a, b], color, look, alpha * (1 - u0));
+  }
 }
 
 function strokePath(ctx, points, color, width, alpha) {
@@ -664,7 +677,7 @@ function drawSlices(ctx, slices, detune, place, camera, look, palette, clock, st
   // Wide under the blur, a lighter core on the sharp pass. The pair stays soft.
   const tailW = weight * (bloom ? 1.15 : 1);
   const tail = { width: tailW, alpha: 1, halo: 0, haloAlpha: 0 };
-  const octave = { width: tailW * 0.74, alpha: 1, halo: 0, haloAlpha: 0 };
+  const octave = { width: tailW * 0.52, alpha: 1, halo: 0, haloAlpha: 0 };
   const rail = { width: weight * bulk, alpha, halo: 0, haloAlpha: 0 };
   // Decay strands are the same width as a bar. The bloom passes supply the faint glow.
   const strand = { width: weight, alpha: 1, halo: 0, haloAlpha: 0 };
@@ -690,8 +703,6 @@ function drawSlices(ctx, slices, detune, place, camera, look, palette, clock, st
       const world = worldOf(item.slice, detune);
       return place(camera, world.x, 0, z);
     });
-    glow(ctx, atDepth(placed, 0), palette.ink, rail, 1);
-    glow(ctx, atDepth(placed, PLANE.ribbonZ), palette.ink, rail, 1);
     const fund = placed.find((item) => item.shape.air && air.rankOf(item.slice) === 0);
     if (fund) {
       const bend = fund.tri.curve.reduce((low, point) => (point.y > low.y ? point : low), fund.tri.curve[0]);
@@ -708,36 +719,67 @@ function drawSlices(ctx, slices, detune, place, camera, look, palette, clock, st
         }
         return null;
       };
-      // Tops on the way down to the bend follow the sag. The rise leaves the later bars.
+      // Tops on the way down to the bend follow the sag.
       for (const item of placed) {
         item.baseCrest = item.tri.crest.y;
         if (item.shape.air || item.tri.crest.x > bend.x) continue;
         const y = tailAt(item.tri.crest.x);
         if (y != null) item.tri.crest = { x: item.tri.crest.x, y };
       }
-    }
-    const hatched = placed.filter((item) => worldOf(item.slice, detune).x <= limit);
-    const frontRail = atDepth(placed, 0);
-    const backRail = atDepth(placed, PLANE.ribbonZ);
-    for (let i = 0; i < placed.length; i++) {
-      glow(ctx, [frontRail[i], backRail[i]], palette.ink, rail, 1);
-      if (i + 1 < placed.length) {
-        glow(ctx, [frontRail[i], backRail[i + 1]], palette.ink, rail, 1);
-        glow(ctx, [frontRail[i + 1], backRail[i]], palette.ink, rail, 1);
+      // The post just past the bend reaches the tail. Later bars taper down.
+      const lead = placed[Math.min(7, placed.length - 1)];
+      const tailY = tailAt(lead.tri.crest.x);
+      if (tailY != null && lead.tri.foot.y > tailY) {
+        const leadH = (lead.tri.foot.y - tailY) * 0.96;
+        lead.tri.crest = { x: lead.tri.crest.x, y: lead.tri.foot.y - leadH };
+        const followers = placed.filter((item) => item.tri.foot.x > lead.tri.foot.x + 0.5);
+        const last = followers[followers.length - 1];
+        const lastH = last ? last.tri.foot.y - last.tri.crest.y : leadH * 0.7;
+        followers.forEach((item, i) => {
+          const t = (i + 1) / followers.length;
+          const h = leadH + (lastH - leadH) * t;
+          item.tri.crest = { x: item.tri.crest.x, y: item.tri.foot.y - Math.max(4, h) };
+        });
+        for (const item of placed) {
+          if (item === lead || item.tri.foot.x >= lead.tri.foot.x) continue;
+          if (item.shape.air || item.tri.crest.x <= bend.x) continue;
+          const y = tailAt(item.tri.crest.x);
+          if (y != null) item.tri.crest = { x: item.tri.crest.x, y: y + 2 };
+        }
       }
     }
-    // One strand per left-hand bar: from the crest, down-right, until the floor.
-    // Sharp strands, plus one soft pass under 10% so the blur does not fill the gaps.
+    const frontRail = atDepth(placed, 0);
+    const backRail = atDepth(placed, PLANE.ribbonZ);
+    // Dimmer than the bars, with thin ties, and only the wide blur so it hazes.
     if (!bloom || bulk > 1.12) {
-      const strandAng = 52 * Math.PI / 180;
-      for (const item of hatched) {
-        const world = worldOf(item.slice, detune);
-        const origH = item.tri.foot.y - (item.baseCrest ?? item.tri.crest.y);
-        const shownH = item.tri.foot.y - item.tri.crest.y;
-        const frac = origH > 1 ? shownH / origH : 1;
-        const end = strandOnFloor(world.x, world.y * frac, strandAng);
-        if (!end) continue;
-        glow(ctx, [item.tri.crest, place(camera, end.x, end.y, end.z)], meshTint, strand, (bloom ? 0.08 : 0.9) * item.slice.alpha);
+      const tie = { width: weight * (bloom ? 0.55 : 0.34), alpha: 1, halo: 0, haloAlpha: 0 };
+      const railA = bloom ? 0.28 : 0.52;
+      const tieA = bloom ? 0.12 : 0.22;
+      glow(ctx, frontRail, palette.ink, rail, railA);
+      glow(ctx, backRail, palette.ink, rail, railA);
+      for (let i = 0; i < placed.length; i++) {
+        glow(ctx, [frontRail[i], backRail[i]], palette.ink, tie, tieA);
+        if (i + 1 < placed.length) {
+          glow(ctx, [frontRail[i], backRail[i + 1]], palette.ink, tie, tieA);
+          glow(ctx, [frontRail[i + 1], backRail[i]], palette.ink, tie, tieA);
+        }
+      }
+    }
+    // Six steep strands. They fade out around the middle of the comb.
+    if (!bloom || bulk > 1.12) {
+      const strandAng = 66 * Math.PI / 180;
+      const cos = Math.cos(strandAng);
+      const sin = Math.sin(strandAng);
+      const mid = placed[Math.min(8, placed.length - 1)];
+      const picks = [0, 1, 2, 3, 4, 5].filter((index) => index < placed.length);
+      for (const index of picks) {
+        const item = placed[index];
+        const crest = item.tri.crest;
+        const room = Math.max(10, mid.tri.foot.x - crest.x);
+        const drop = Math.max(8, (item.tri.foot.y - crest.y) * 0.7);
+        const len = Math.min(room / Math.max(0.2, cos), drop / Math.max(0.2, sin));
+        const end = { x: crest.x + cos * len, y: crest.y + sin * len };
+        fadeLine(ctx, crest, end, meshTint, strand, (bloom ? 0.08 : 0.9) * item.slice.alpha);
       }
     }
     for (let index = 0; index < placed.length; index++) {
