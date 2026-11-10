@@ -66,8 +66,8 @@ export const PLANE = {
   focal: 9.5,
   pitchMin: 0.35,
   pitchMax: 0.85,
-  span: 2.4,
-  height: 1.29,
+  span: 6.4,
+  height: 1.7,
   depth: 3.15,
   // Below this fraction of the longest decay the accent stays a vertical
   // line beside the bar. The two longest (string: fundamental and octave)
@@ -240,7 +240,7 @@ export function slicesMoving(motion, now) {
   return now < motion.t0 + motion.dur;
 }
 
-const FIT_MARGIN = 22;
+const FIT_MARGIN = 10;
 
 export function measureFit(slices, camera, width, height, detune = 0) {
   const view = clampCamera(camera);
@@ -283,7 +283,7 @@ export function measureFit(slices, camera, width, height, detune = 0) {
   );
   // Don't blow a compact wedge up to the edges. Still shrink if a turn
   // or a detune spread would otherwise leave the canvas.
-  const capScale = Math.min((width * 0.9) / spanX, (height * 0.84) / spanY);
+  const capScale = Math.min((width * 0.92) / spanX, (height * 0.92) / spanY);
   const scale = Math.min(fitScale, capScale);
   return { scale, cx: (minX + maxX) / 2, cy: (minY + maxY) / 2 };
 }
@@ -475,7 +475,7 @@ function airFrame(slices, clock, detune) {
 
 // Floor slope at rest, screen-y down per world-x. Steeper than the old 0.625
 // so the comb's run matches the crop, and short enough that the figure is compact.
-const FLOOR_SHEAR = 0.74;
+const FLOOR_SHEAR = 0.58;
 const DEPTH_X = 0.78;
 
 function depthRise(pitch = PLANE.pitch) {
@@ -521,30 +521,26 @@ function tailSpline(x, y0, crests, railRight, steps) {
   }
   const last = screens[lastGuide];
   const prev = screens[Math.max(0, lastGuide - 1)];
-  const start = screens[0];
-  // Shallow rise. The tip sits only a little above bar 1, not a steep climb.
-  const riseRad = 18 * Math.PI / 180;
-  const tipSy = start.sy - y0 * 0.42;
-  const climb = Math.max(0.15, last.sy - tipSy);
-  const span = climb / Math.sin(riseRad);
+  // Rise about 33 degrees and stop above the last bar, not past the comb.
+  const riseRad = 31 * Math.PI / 180;
   const arrive = { x: last.sx - prev.sx, y: last.sy - prev.sy };
-  const aLen = Math.hypot(arrive.x, arrive.y) || 1;
   const depart = { x: Math.cos(riseRad), y: -Math.sin(riseRad) };
+  const floorSpan = Math.max(0.4, railRight - screens[0].sx);
+  const step = floorSpan / 42;
   let sx = last.sx;
   let sy = last.sy;
-  const step = span / 26;
-  // A circular bend from the crest slope up into the shallow rise.
   let ang = Math.atan2(arrive.y, arrive.x);
   const target = Math.atan2(depart.y, depart.x);
-  const arcSteps = 12;
+  const arcSteps = 10;
   for (let i = 1; i <= arcSteps; i++) {
     const a = ang + (target - ang) * (i / arcSteps);
-    sx += Math.cos(a) * step * 0.55;
-    sy += Math.sin(a) * step * 0.55;
+    sx += Math.cos(a) * step * 0.42;
+    sy += Math.sin(a) * step * 0.42;
     points.push(fromRestScreen(x, sx, sy));
   }
+  const tipSx = railRight + floorSpan * 0.03;
   let guard = 0;
-  while (sy > tipSy && guard < 48) {
+  while (sx < tipSx && guard < 48) {
     sx += depart.x * step;
     sy += depart.y * step;
     points.push(fromRestScreen(x, sx, sy));
@@ -607,6 +603,17 @@ function strokePath(ctx, points, color, width, alpha) {
   ctx.stroke();
 }
 
+function fillPoly(ctx, points, color, alpha) {
+  if (points.length < 3) return;
+  ctx.beginPath();
+  ctx.moveTo(points[0].x, points[0].y);
+  for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
+  ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.globalAlpha = alpha;
+  ctx.fill();
+}
+
 function glow(ctx, points, color, look, alpha) {
   if (look.halo > 0) strokePath(ctx, points, color, look.halo, look.haloAlpha * alpha);
   strokePath(ctx, points, color, look.width, look.alpha * alpha);
@@ -654,6 +661,20 @@ function drawSlices(ctx, slices, detune, place, camera, look, palette, clock, st
     glow(ctx, atDepth(placed, 0), palette.ink, rail, 1);
     glow(ctx, atDepth(placed, PLANE.ribbonZ), palette.ink, rail, 1);
     const hatched = placed.filter((item) => worldOf(item.slice, detune).x <= limit);
+    // A light fill under the glow, so the left block reads as one soft mesh.
+    const veil = mixHex(palette.ink, meshTint, 0.35);
+    for (let i = 0; i < hatched.length - 1; i++) {
+      const a = hatched[i];
+      const b = hatched[i + 1];
+      const aw = worldOf(a.slice, detune);
+      const bw = worldOf(b.slice, detune);
+      fillPoly(ctx, [
+        place(camera, aw.x, aw.y * 0.82, 0),
+        place(camera, bw.x, bw.y * 0.82, 0),
+        b.tri.foot,
+        a.tri.foot,
+      ], veil, bloom ? 0.07 : 0.16);
+    }
     // Inside the first bars, from just under the crests down to the floor.
     // Depth rays ran up-right and stuck out above the crest line.
     for (let i = 0; i < hatched.length; i++) {
