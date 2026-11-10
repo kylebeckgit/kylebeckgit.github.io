@@ -185,7 +185,23 @@ export function spaceByLog(slices) {
     return slices;
   }
   const ordered = [...usable].sort((a, b) => a.ratio - b.ratio);
-  ordered.forEach((slice, index) => { slice.t = index / (ordered.length - 1); });
+  const count = ordered.length;
+  // Seven posts from bar 1 through the bend, which stays 4/15 along the floor
+  // so the tail does not move. The right-hand posts spread a little wider.
+  const bendT = 4 / 15;
+  const leftPosts = Math.max(2, Math.min(count, Math.round(count * 7 / 16)));
+  ordered.forEach((slice, index) => {
+    if (count < 2) {
+      slice.t = 0.5;
+      return;
+    }
+    if (index <= leftPosts - 1) {
+      slice.t = bendT * (index / (leftPosts - 1));
+      return;
+    }
+    const rightSteps = count - leftPosts;
+    slice.t = bendT + (1 - bendT) * ((index - (leftPosts - 1)) / rightSteps);
+  });
   return slices;
 }
 
@@ -539,10 +555,11 @@ function tailSpline(x, y0, crests, railRight, steps) {
     index === 0 ? restScreen(x, y0, 0) : restScreen(crest.x, crest.y, 0)
   ));
   const start = screens[0];
-  const bendAt = screens[Math.min(4, screens.length - 1)];
   const barScreen = Math.max(0.2, (FLOOR_SHEAR * start.sx) - start.sy);
   const drop = barScreen * 0.56;
-  let bendSx = bendAt.sx;
+  // Keep the bend where bar 5 sat on an even floor, even if the left posts pack tighter.
+  const spanX = Math.max(0.4, railRight - start.sx);
+  let bendSx = start.sx + spanX * (4 / 15);
   let bendSy = start.sy + drop;
   const localFloor = FLOOR_SHEAR * bendSx;
   bendSy = Math.min(bendSy, localFloor - barScreen * 0.16);
@@ -732,13 +749,13 @@ function drawSlices(ctx, slices, detune, place, camera, look, palette, clock, st
       if (tailY != null && lead.tri.foot.y > tailY) {
         const leadH = (lead.tri.foot.y - tailY) * 0.96;
         lead.tri.crest = { x: lead.tri.crest.x, y: lead.tri.foot.y - leadH };
+        const bar1H = Math.max(4, placed[0].tri.foot.y - placed[0].tri.crest.y);
         const followers = placed.filter((item) => item.tri.foot.x > lead.tri.foot.x + 0.5);
-        const last = followers[followers.length - 1];
-        const lastH = last ? last.tri.foot.y - last.tri.crest.y : leadH * 0.7;
         followers.forEach((item, i) => {
-          const t = (i + 1) / followers.length;
-          const h = leadH + (lastH - leadH) * t;
-          item.tri.crest = { x: item.tri.crest.x, y: item.tri.foot.y - Math.max(4, h) };
+          const t = followers.length <= 1 ? 1 : i / (followers.length - 1);
+          // Zebra's posts after the tall one sit near 80% of bar 1 and ease toward 72%.
+          const h = bar1H * (0.82 + (0.72 - 0.82) * t);
+          item.tri.crest = { x: item.tri.crest.x, y: item.tri.foot.y - h };
         });
         for (const item of placed) {
           if (item === lead || item.tri.foot.x >= lead.tri.foot.x) continue;
@@ -752,9 +769,9 @@ function drawSlices(ctx, slices, detune, place, camera, look, palette, clock, st
     const backRail = atDepth(placed, PLANE.ribbonZ);
     // Dimmer than the bars, with thin ties, and only the wide blur so it hazes.
     if (!bloom || bulk > 1.12) {
-      const tie = { width: weight * (bloom ? 0.55 : 0.34), alpha: 1, halo: 0, haloAlpha: 0 };
-      const railA = bloom ? 0.28 : 0.52;
-      const tieA = bloom ? 0.12 : 0.22;
+      const tie = { width: weight * (bloom ? 0.5 : 0.32), alpha: 1, halo: 0, haloAlpha: 0 };
+      const railA = bloom ? 0.75 : 0.86;
+      const tieA = bloom ? 0.32 : 0.18;
       glow(ctx, frontRail, palette.ink, rail, railA);
       glow(ctx, backRail, palette.ink, rail, railA);
       for (let i = 0; i < placed.length; i++) {
@@ -765,21 +782,14 @@ function drawSlices(ctx, slices, detune, place, camera, look, palette, clock, st
         }
       }
     }
-    // Six steep strands. They fade out around the middle of the comb.
+    // Strands cross the left posts and land on the floor under bars 3 to 8.
     if (!bloom || bulk > 1.12) {
-      const strandAng = 66 * Math.PI / 180;
-      const cos = Math.cos(strandAng);
-      const sin = Math.sin(strandAng);
-      const mid = placed[Math.min(8, placed.length - 1)];
-      const picks = [0, 1, 2, 3, 4, 5].filter((index) => index < placed.length);
-      for (const index of picks) {
-        const item = placed[index];
-        const crest = item.tri.crest;
-        const room = Math.max(10, mid.tri.foot.x - crest.x);
-        const drop = Math.max(8, (item.tri.foot.y - crest.y) * 0.7);
-        const len = Math.min(room / Math.max(0.2, cos), drop / Math.max(0.2, sin));
-        const end = { x: crest.x + cos * len, y: crest.y + sin * len };
-        fadeLine(ctx, crest, end, meshTint, strand, (bloom ? 0.08 : 0.9) * item.slice.alpha);
+      const pairs = [[0, 3], [1, 4], [2, 5], [3, 5], [4, 6], [5, 7], [6, 7]];
+      for (const [from, to] of pairs) {
+        if (from >= placed.length || to >= placed.length) continue;
+        const end = frontRail[to];
+        if (!end || end.x <= placed[from].tri.crest.x + 4) continue;
+        fadeLine(ctx, placed[from].tri.crest, end, meshTint, strand, (bloom ? 0.08 : 0.9) * placed[from].slice.alpha);
       }
     }
     for (let index = 0; index < placed.length; index++) {
