@@ -285,21 +285,13 @@ export function measureFit(slices, camera, width, height, detune = 0) {
     minY = -1;
     maxY = 1;
   }
-  // At rest, fit the figure, then slide it so the bend sits near 27% across
-  // and 41% down. The floor angle comes from the projection, not from pinning
-  // the rail ends to percentages.
-  if (bend && Math.abs(view.yaw) < 1e-3 && Math.abs(view.pitch - PLANE.pitch) < 1e-3 && !detune) {
+  // At rest, fit the whole figure and center it. A steeper floor makes the
+  // comb taller than it is wide, so the wide panel leaves space on both sides.
+  if (Math.abs(view.yaw) < 1e-3 && Math.abs(view.pitch - PLANE.pitch) < 1e-3 && !detune) {
     const spanX = Math.max(0.001, maxX - minX);
     const spanY = Math.max(0.001, maxY - minY);
     const scale = Math.min((width - 16) / spanX, (height - 16) / spanY);
-    const clampShift = (want, lo, hi, edge) => {
-      const minC = hi - ((edge - 8) - edge / 2) / scale;
-      const maxC = lo - (8 - edge / 2) / scale;
-      return Math.min(maxC, Math.max(minC, want));
-    };
-    const cx = clampShift(bend.x - ((0.27 * width) - width / 2) / scale, minX, maxX, width);
-    const cy = clampShift(bend.y - ((0.41 * height) - height / 2) / scale, minY, maxY, height);
-    return { scale, cx, cy };
+    return { scale, cx: (minX + maxX) / 2, cy: (minY + maxY) / 2 };
   }
   const spanX = Math.max(0.001, maxX - minX);
   const spanY = Math.max(0.001, maxY - minY);
@@ -497,9 +489,10 @@ function airFrame(slices, clock, detune) {
   };
 }
 
-// On-screen floor angle at rest. Zebra's rail measures 28 degrees on the crop;
-// tan of that is the shear, so the wide panel draws the same pixel angle.
-const FLOOR_SHEAR = Math.tan(28 * Math.PI / 180);
+// On-screen floor angle at rest. The bright band, foot to foot, rises at
+// about 37 degrees. The figure stays in that proportion and is centered;
+// the wide panel keeps empty space on either side.
+const FLOOR_SHEAR = Math.tan(37 * Math.PI / 180);
 const DEPTH_X = 0.78;
 
 function depthRise(pitch = PLANE.pitch) {
@@ -624,7 +617,7 @@ function tailWorld(slice, world, maxSeconds, air) {
   // One bar step below the fundamental, for the whole branch.
   let step = PLANE.span / 15;
   if (air?.crests?.length > 1) step = Math.abs(air.crests[1].x - air.crests[0].x);
-  const tuck = step + (rank - 1) * step * 0.35;
+  const tuck = step * Math.hypot(1, FLOOR_SHEAR) * 1.2 + (rank - 1) * step * 0.35;
   return full.slice(start, end + 1).map((point) => ({ x: point.x, y: point.y - tuck, z: point.z }));
 }
 
