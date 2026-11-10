@@ -42,16 +42,17 @@ const TUNE = {
   octaveCream: 0.62,
   // Tip sits just past the right end of the front rail.
   tailReach: 1.04,
-  leftSharp: 1,
-  leftWidth: 1.15,
-  leftGlow: 1,
+  // Left accent is a tint in the mesh, not a separate stroke.
+  leftSharp: 0.28,
+  leftWidth: 0.7,
+  leftGlow: 0.38,
   // Right accent is a tint in the stroke, not a second edge.
   rightSharp: 0.14,
   accentZ: 0,
-  accentZLeft: 0.09,
+  accentZLeft: 0.04,
   rungZ: 1.7,
-  hatchAlpha: 0.5,
-  hatchGlow: 0.36,
+  hatchAlpha: 0.4,
+  hatchGlow: 0.18,
 };
 let activeTune = null;
 function tune() {
@@ -614,7 +615,10 @@ function drawSlices(ctx, slices, detune, place, camera, look, palette, clock, st
   const tail = { width: tailW, alpha: 1, halo: 0, haloAlpha: 0 };
   const octave = { width: tailW * 0.74, alpha: 1, halo: 0, haloAlpha: 0 };
   const rail = { width: weight * bulk, alpha, halo: 0, haloAlpha: 0 };
-  const rung = { width: weight * 0.58 * bulk, alpha: bloom ? tune().hatchGlow : tune().hatchAlpha, halo: 0, haloAlpha: 0 };
+  // Bloom strokes are wide enough that neighbouring lines share one glow.
+  const rungW = bloom ? weight * (bulk > 1.15 ? 1.15 : 0.85) : weight * 0.48;
+  const rung = { width: rungW, alpha: bloom ? tune().hatchGlow : tune().hatchAlpha, halo: 0, haloAlpha: 0 };
+  const meshTint = mixHex(palette.wire, palette.paper, 0.62);
   const tailColor = mixHex(palette.wire, palette.paper, tune().tailCream);
   const octaveColor = mixHex(palette.wire, palette.paper, tune().octaveCream);
   const air = airFrame(slices, clock, detune);
@@ -639,23 +643,34 @@ function drawSlices(ctx, slices, detune, place, camera, look, palette, clock, st
     glow(ctx, atDepth(placed, 0), palette.ink, rail, 1);
     glow(ctx, atDepth(placed, PLANE.ribbonZ), palette.ink, rail, 1);
     const hatched = placed.filter((item) => worldOf(item.slice, detune).x <= limit);
-    // Short diagonals in both directions, uneven lengths. The blur turns
-    // them into a weave. A ruled lattice of long rails reads as a grid.
+    // About two crossings per bar gap, both diagonals. The tight bloom is
+    // the shared glow. The wide bloom would fill the block solid.
+    if (!(bloom && bulk > 1.15)) {
+    const depths = [0.28, 0.5, 0.72, 0.94, 1.16, 1.38];
     for (let i = 0; i < hatched.length; i++) {
       const item = hatched[i];
       const world = worldOf(item.slice, detune);
-      // Stay under the crest. A rung taller than its bar leaves the fitted frame.
-      const depth = Math.min((0.46 + i * 0.2) * (i % 2 ? 0.78 : 1), world.y / 0.72);
-      const far = place(camera, world.x, 0, depth);
-      glow(ctx, [item.tri.foot, far], palette.ink, rung, item.slice.alpha);
+      const cap = world.y / 0.72;
       const next = hatched[i + 1];
-      if (!next) continue;
-      const nxt = worldOf(next.slice, detune);
-      const mid = place(camera, world.x, 0, depth * 0.42);
-      const low = place(camera, nxt.x, 0, 0.1);
-      const high = place(camera, nxt.x, 0, depth * 0.28);
-      glow(ctx, [mid, low], palette.ink, rung, item.slice.alpha);
-      glow(ctx, [item.tri.foot, high], palette.ink, rung, item.slice.alpha);
+      const nxt = next ? worldOf(next.slice, detune) : null;
+      const skip = hatched[i + 2];
+      const farBar = skip ? worldOf(skip.slice, detune) : null;
+      for (let d = 0; d < depths.length; d++) {
+        const z = depths[d];
+        if (z > cap) continue;
+        const far = place(camera, world.x, 0, z);
+        glow(ctx, [item.tri.foot, far], palette.ink, rung, item.slice.alpha);
+        if (nxt) {
+          const across = place(camera, nxt.x, 0, z * 0.22);
+          const mid = place(camera, world.x, 0, z * 0.62);
+          glow(ctx, [mid, across], palette.ink, rung, item.slice.alpha);
+        }
+        if (farBar && d % 2 === 0) {
+          const over = place(camera, farBar.x, 0, 0.14);
+          glow(ctx, [far, over], palette.ink, rung, item.slice.alpha);
+        }
+      }
+    }
     }
     for (const item of placed) {
       const world = worldOf(item.slice, detune);
@@ -674,15 +689,21 @@ function drawSlices(ctx, slices, detune, place, camera, look, palette, clock, st
       const strength = bloom
         ? (rank === 0 ? tune().tailGlow : tune().octaveGlow)
         : (rank === 0 ? tune().tailSharp : tune().octaveSharp);
-      glow(ctx, item.tri.curve, rank === 0 ? tailColor : octaveColor, look, strength);
+      const color = rank === 0 ? tailColor : octaveColor;
+      glow(ctx, item.tri.curve, color, look, strength);
+      // The head of each tail is the bar's cream, so the join glows as one stroke.
+      const headCount = Math.max(3, Math.round(item.tri.curve.length * 0.18));
+      const head = item.tri.curve.slice(0, headCount);
+      const join = mixHex(color, palette.ink, 0.8);
+      glow(ctx, head, join, { ...look, width: look.width * (bloom ? 1.05 : 1.15) }, bloom ? strength * 0.35 : 1);
       continue;
     }
     const left = world.x <= limit;
-    const width = weight * (left ? tune().leftWidth : 0.5) * bulk;
+    const width = weight * (left ? (bloom ? 0.9 : tune().leftWidth) : 0.5) * (left ? 1 : bulk);
     const strength = left
       ? (bloom ? tune().leftGlow : tune().leftSharp)
       : (bloom ? accentAlpha * 1.8 : tune().rightSharp);
-    glow(ctx, item.tri.curve, palette.wire, { ...accent, width }, Math.min(1, strength));
+    glow(ctx, item.tri.curve, left ? meshTint : palette.wire, { ...accent, width }, Math.min(1, strength));
   }
   if (bloom || selected < 0 || !slices[selected]) return;
   const slice = slices[selected];
