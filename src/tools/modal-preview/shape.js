@@ -8,7 +8,7 @@
 //   Absorb, Normalize, Decay, and Decay KF only nudge level and decay.
 //   In the recording those nudges are small.
 //   Tune shifts every ratio by semitones. Disperse stretches the octaves.
-//   Detune is stereo in Zebra and is drawn as a second sheet, not a CSV edit.
+//   Detune is not applied here. The view spreads frequency with it, live.
 
 function clamp(value, lo, hi) {
   return Math.min(hi, Math.max(lo, value));
@@ -45,6 +45,11 @@ export function shapePartials(partials, shape = {}) {
 
 function resample(items, density) {
   if (density === items.length) return items;
+  // Fewer modes keeps the lowest partials, the way Zebra's density list does.
+  // Spreading 16 slots across all 64 made the second bar a high, quiet harmonic.
+  if (density < items.length) {
+    return items.slice(0, density).map((item) => ({ ...item }));
+  }
   const last = Math.max(1, items.length - 1);
   const out = [];
   for (let i = 0; i < density; i++) {

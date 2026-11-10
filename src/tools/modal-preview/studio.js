@@ -30,7 +30,7 @@ export function mountStudio(root, api) {
   };
   const showAllowance = () => {
     const left = Math.max(0, ALLOWANCE - used());
-    if (allowance) allowance.textContent = `This preview allows ${ALLOWANCE} describes in this browser session. ${left} left. Nothing is sent, and membership is not checked.`;
+    if (allowance) allowance.textContent = `${left} of ${ALLOWANCE} describes left in this session. Nothing is sent.`;
   };
 
   function setStatus(text) {
@@ -68,7 +68,7 @@ export function mountStudio(root, api) {
   function pushTurn(prompt, current) {
     const count = used();
     if (count >= ALLOWANCE) {
-      setStatus(`This session has used its ${ALLOWANCE} preview describes. The starters below still play.`);
+      setStatus(`This session has used its ${ALLOWANCE} describes. The starters under More still play.`);
       return false;
     }
     const variations = describePrompt(prompt, current);
@@ -104,6 +104,13 @@ export function mountStudio(root, api) {
     if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
       event.preventDefault();
       askButton?.click();
+    }
+  });
+
+  refineText?.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      refineButton?.click();
     }
   });
 

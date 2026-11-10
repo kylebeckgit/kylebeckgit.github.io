@@ -1,96 +1,400 @@
-// Straight wedge of the modal face, matched to the Zebra 3 frame at 00:12.
+// Each partial is its own wireframe slice, oblique like Zebra's Partials view.
 //
-// The bright face is a triangle, not the spectrum outline. Its left edge is
-// the low-frequency end, its top and bottom edges are straight, and they
-// meet at a sharp tip. Inside it, rung spacing follows log ratio on a fixed
-// window, so a profile or a Tune sweep slides the lines. Length and brightness
-// follow level.
-// Cyan lines stack along the top edge. The lid is two lines that leave that
-// edge about a third and a half of the way along and rise up-right, with a
-// short right-angle hook at the far end.
+//   x  frequency, evenly spaced, falling down-right at about 32 degrees
+//   y  level, screen-vertical, on a compressed dB scale that keeps the first crests tall
+//   z  decay time, rising up-right. Long decays leave the comb.
 //
-// WEDGE is the look and the drag limits. Retune numbers here.
+// Each slice is three lines. A vertical front in the ink color. An accent
+// line beside that bar: the left-hand bars keep a bright accent in the mesh,
+// and the right-hand accent sits on its bar so the pair is one stroke. Only
+// the two longest decays leave the comb. The fundamental follows the traced
+// Zebra centerline: a shallow sag along the crests, then a long rise that
+// bows and ends just past the rail. The octave runs under it for about 40%
+// of that arc. On the floor, a front rail and a close back rail run the full
+// width. Under the first bars, short diagonals cross in both directions
+// and blur into a weave. The two tails are accent blended toward the page
+// cream, with a wide soft glow. Stroke width tracks the view. A blurred
+// pass sits under the sharp strokes.
+// Yaw turns frequency and decay around the vertical, so the fronts stay
+// vertical. Pitch only changes how steeply decay rises.
+//
+// Motion lives in aimSlices / sampleSlices. Match by index. A profile change
+// eases for MORPH_MS with ease-out. New indices grow from zero height. Indices
+// that leave shrink and fade. Detune is not part of that tween: paint applies
+// it live, spreading or bunching frequency while height and depth stay put.
 
-export const WEDGE = {
-  // Default camera. The left edge projects vertical and the long axis
-  // runs down-right, with the tip left of the right side of the box.
-  yaw: -0.56,
-  pitch: 0.6,
-  focal: 10,
-  perspective: 0.4,
-  yawMin: -1.7,
-  yawMax: 2.25,
-  pitchMin: 0.08,
-  pitchMax: 1.35,
-  span: 6,
-  leftH: 4,
-  tipY: 0.8,
-  tipZ: 0.5,
-  // Resting placement in the box. The top-left corner sits at a quarter of
-  // the height, the left edge is tall, and a 45 degree top edge lands the
-  // tip near the horizontal middle at about 80 percent of the height.
-  originX: 0.05,
-  originY: 0.25,
-  leftScreen: 0.393,
-  stackCount: 4,
-  stackGap: 0.012,
-  stackEnd: 0.97,
-  lidFrom: 0.33,
-  lidTo: 0.5,
-  lidReach: 0.78,
-  rungAlpha: 0.55,
+export const MORPH_MS = 260;
+
+// Knobs the String 16 picture is tuned with. paintModalView may override
+// them for a comparison pass; the defaults are what the page draws.
+const TUNE = {
+  // Lightness stays at this mix of --fg and --muted. panelCool then pulls
+  // the red/blue gap in, so the grey is less warm at the same luminance.
+  panelMix: 0.34,
+  panelCool: 0.55,
+  tailGlow: 0.62,
+  octaveGlow: 0.44,
+  tailSharp: 0.92,
+  octaveSharp: 0.88,
+  // Core is accent blended toward the page cream, so the tails stay warm
+  // but read as a soft bright pair.
+  tailCream: 0.74,
+  octaveCream: 0.62,
+  // Tip sits just past the right end of the front rail.
+  tailReach: 1.04,
+  // Left accent is a tint in the mesh, not a separate stroke.
+  leftSharp: 0.72,
+  leftWidth: 0.85,
+  leftGlow: 0.55,
+  // Right accent is a tint in the stroke, not a second edge.
+  rightSharp: 0.14,
+  accentZ: 0,
+  accentZLeft: 0.04,
+  rungZ: 1.7,
+  hatchAlpha: 0.78,
+  hatchGlow: 0.36,
+};
+let activeTune = null;
+function tune() {
+  return activeTune || TUNE;
+}
+
+export const PLANE = {
+  // Resting view. The floor run is about five bar-heights long.
+  yaw: 0,
+  pitch: 0.55,
+  focal: 9.5,
+  pitchMin: 0.35,
+  pitchMax: 0.85,
+  span: 8.4,
+  height: 2.15,
+  depth: 3.15,
+  // Below this fraction of the longest decay the accent stays a vertical
+  // line beside the bar. The two longest (string: fundamental and octave)
+  // are the only tails.
+  airRel: 0.46,
+  // Accent sits just beside the ink bar. Close enough to glow into it,
+  // far enough that the bar stays the ink colour.
+  accentZ: 0.05,
+  // Back rail, about one bar-step behind the front so the floor is a band.
+  ribbonZ: 1.1,
+  // Floor hatch under bars 1 to about 6. Evenly spaced, and tall enough
+  // that the crossings run up through those bars, not only along the floor.
+  latticeZ: [0.5, 1.0, 1.5, 2.0],
   ratioLo: 0.35,
   ratioHi: 48,
-  tipSize: 0.055,
-  bottomWire: 0.42,
-  wireAlpha: 0.92,
   styles: {
-    eco: { width: 0.75, alpha: 0.55, halo: 0, haloAlpha: 0, solid: false },
-    fast: { width: 1.15, alpha: 0.85, halo: 0, haloAlpha: 0, solid: true },
-    glow: { width: 1.45, alpha: 0.95, halo: 18, haloAlpha: 0.62, solid: true },
+    eco: { width: 1.05, alpha: 0.95, halo: 3.2, haloAlpha: 0.26 },
+    fast: { width: 1.3, alpha: 1, halo: 5, haloAlpha: 0.32 },
+    glow: { width: 1.45, alpha: 1, halo: 7.5, haloAlpha: 0.42 },
   },
 };
 
 export function defaultCamera() {
-  return { yaw: WEDGE.yaw, pitch: WEDGE.pitch, distance: WEDGE.focal };
+  return { yaw: PLANE.yaw, pitch: PLANE.pitch, distance: PLANE.focal };
 }
 
 export function clampCamera(camera) {
   const base = camera || defaultCamera();
+  let yaw = Number(base.yaw);
+  if (!Number.isFinite(yaw)) yaw = PLANE.yaw;
+  yaw = Math.atan2(Math.sin(yaw), Math.cos(yaw));
+  let pitch = Number(base.pitch);
+  if (!Number.isFinite(pitch)) pitch = PLANE.pitch;
   return {
-    yaw: clamp(base.yaw, WEDGE.yawMin, WEDGE.yawMax),
-    pitch: clamp(base.pitch, WEDGE.pitchMin, WEDGE.pitchMax),
-    distance: WEDGE.focal,
+    yaw,
+    pitch: clamp(pitch, PLANE.pitchMin, PLANE.pitchMax),
+    distance: PLANE.focal,
   };
 }
 
-export function paintModalView(ctx, partials, options) {
-  const { width, height, style = 'fast', colors, selected = -1, camera, detune = 0 } = options;
-  const look = WEDGE.styles[style] || WEDGE.styles.fast;
-  const scene = layoutScene(partials, camera, width, height);
-  const palette = sitePalette(colors);
+// Camera stays put. Slice motion is aimSlices, not this function.
+export function frameMotion({ partials, camera, time = 0 }) {
+  return { partials, camera, time };
+}
+
+export function sliceFromPartial(partial, alpha = 1) {
+  const gainDb = Number(partial?.gainDb);
+  return {
+    t: frequencyT(partial?.ratio),
+    ratio: Math.max(0, Number(partial?.ratio) || 0),
+    gainDb: Number.isFinite(gainDb) ? gainDb : 0,
+    height: levelHeight(partial?.gainDb),
+    depth: decayDepth(partial?.decay),
+    seconds: clamp(Number(partial?.decay) || 0.05, 0.05, 40),
+    alpha,
+  };
+}
+
+// A plucked string's Position puts nodes on some partials. Apply that in
+// amplitude, then draw the result on the same compressed scale.
+export function combHeights(slices, position) {
+  const pos = Number(position);
+  if (!Number.isFinite(pos) || pos <= 0.02) return slices;
+  const placed = Math.min(0.98, Math.max(0.02, pos));
+  const amps = slices.map((slice, index) => {
+    const db = Number.isFinite(slice?.gainDb) ? slice.gainDb : -60;
+    const weight = Math.abs(Math.sin(Math.PI * (index + 1) * placed));
+    // A light comb. The old 8% floor turned the right-hand bars into a zigzag.
+    return Math.pow(10, db / 20) * (0.74 + 0.26 * weight);
+  });
+  const peak = Math.max(1e-6, ...amps);
+  return slices.map((slice, index) => ({
+    ...slice,
+    height: levelHeight(20 * Math.log10(Math.max(amps[index] / peak, 1e-6))),
+  }));
+}
+
+export function frequencyT(ratio) {
+  const value = Math.max(Number(ratio) || PLANE.ratioLo, 1e-6);
+  const logLo = Math.log2(PLANE.ratioLo);
+  const logHi = Math.log2(PLANE.ratioHi);
+  return clamp((Math.log2(value) - logLo) / (logHi - logLo), 0, 1);
+}
+
+export function levelHeight(gainDb) {
+  const number = Number(gainDb);
+  const db = clamp(Number.isFinite(number) ? number : -60, -90, 0);
+  // A wide window, so a large drop in level only shortens the bar a little.
+  const floor = -78;
+  const linear = clamp((db - floor) / -floor, 0, 1);
+  // The first bars step down with the tail. Later bars stay short and close.
+  const loss = 1 - linear;
+  const drop = loss <= 0 ? 0 : Math.min(0.32, 0.85 * (loss ** 0.9));
+  return clamp(1 - drop, 0, 1);
+}
+
+export function decayDepth(decay) {
+  const seconds = clamp(Number(decay) || 0, 0, 24);
+  // Steep on purpose: the fundamental's tail is long, the next is shorter,
+  // and the rest stay down among the bars.
+  return clamp(Math.pow(seconds / 8.5, 0.72), 0, 1);
+}
+
+function evenT(index, count) {
+  if (count <= 1) return 0.5;
+  return index / (count - 1);
+}
+
+// Equal steps along the floor, in ratio order. A power of the ratio opens
+// a visible gap partway down the comb. Detune still spreads this spacing.
+export function spaceByLog(slices) {
+  const usable = slices.filter((slice) => slice && Number(slice.ratio) > 0);
+  if (usable.length < 2) {
+    slices.forEach((slice, index) => { if (slice) slice.t = evenT(index, slices.length); });
+    return slices;
+  }
+  const ordered = [...usable].sort((a, b) => a.ratio - b.ratio);
+  ordered.forEach((slice, index) => { slice.t = index / (ordered.length - 1); });
+  return slices;
+}
+
+// Positive detune spreads frequency away from the low end. Negative bunches
+// it. Height and depth are left alone.
+export function detuneT(t, detune) {
+  const spread = 1 + clamp(Number(detune) || 0, -1, 1) * 0.72;
+  const pivot = 0.28;
+  return pivot + (t - pivot) * spread;
+}
+
+export function createSliceMotion() {
+  return { from: [], to: [], t0: 0, dur: 0 };
+}
+
+export function aimSlices(motion, partials, now, duration = MORPH_MS) {
+  const shown = sampleSlices(motion, now);
+  const next = partials.map((partial) => sliceFromPartial(partial, 1));
+  spaceByLog(next);
+  const count = Math.max(shown.length, next.length);
+  const from = [];
+  const to = [];
+  for (let i = 0; i < count; i++) {
+    const target = next[i] || { ...(shown[i] || sliceFromPartial(null, 0)), height: 0, depth: 0, alpha: 0 };
+    if (shown[i]) from.push(shown[i]);
+    else from.push({ t: target.t, height: 0, depth: 0, alpha: 0, ratio: target.ratio, gainDb: target.gainDb });
+    to.push(target);
+  }
+  motion.from = from;
+  motion.to = to;
+  motion.t0 = now;
+  motion.dur = duration > 0 ? duration : 0;
+  return motion;
+}
+
+export function sampleSlices(motion, now) {
+  const count = Math.max(motion?.from?.length || 0, motion?.to?.length || 0);
+  if (!count) return [];
+  const dur = motion.dur || 0;
+  const t = dur <= 0 ? 1 : clamp((now - motion.t0) / dur, 0, 1);
+  const eased = 1 - (1 - t) ** 3;
+  const out = [];
+  for (let i = 0; i < count; i++) {
+    out.push(lerpSlice(motion.from[i], motion.to[i], eased));
+  }
+  if (t >= 1) {
+    while (out.length && out[out.length - 1].alpha <= 0.02) out.pop();
+  }
+  return out;
+}
+
+export function slicesMoving(motion, now) {
+  if (!motion?.dur) return false;
+  return now < motion.t0 + motion.dur;
+}
+
+const FIT_MARGIN = 10;
+
+export function measureFit(slices, camera, width, height, detune = 0) {
+  const view = clampCamera(camera);
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  const list = slices?.length ? slices : [sliceFromPartial({ ratio: 1, gainDb: 0, decay: 1 })];
+  const clock = longestSeconds(list);
+  const air = airFrame(list, clock, detune);
+  let bend = null;
+  for (const slice of list) {
+    if (!slice || (slice.alpha < 0.04 && slice.height < 0.02 && slice.depth < 0.02)) continue;
+    const world = worldOf(slice, detune);
+    const shape = drawShape(Math.max(0.05, Number(slice.seconds) || 0.2), clock);
+    const tail = tailWorld(slice, world, clock, air);
+    if (shape.air && air.rankOf(slice) === 0) {
+      for (const sample of tail) {
+        const point = screenOf(view, sample.x, sample.y, sample.z);
+        if (!bend || point.y > bend.y) bend = point;
+      }
+    }
+    const samples = [
+      { x: world.x, y: 0, z: 0 },
+      { x: world.x, y: world.y, z: 0 },
+      floorBack(world, landingDepth(shape)),
+      ...tail,
+    ];
+    for (const sample of samples) {
+      const point = screenOf(view, sample.x, sample.y, sample.z);
+      if (point.x < minX) minX = point.x;
+      if (point.x > maxX) maxX = point.x;
+      if (point.y < minY) minY = point.y;
+      if (point.y > maxY) maxY = point.y;
+    }
+  }
+  if (!Number.isFinite(minX)) {
+    minX = -1;
+    maxX = 1;
+    minY = -1;
+    maxY = 1;
+  }
+  // At rest, fit the whole figure and center it. A steeper floor makes the
+  // comb taller than it is wide, so the wide panel leaves space on both sides.
+  if (Math.abs(view.yaw) < 1e-3 && Math.abs(view.pitch - PLANE.pitch) < 1e-3 && !detune) {
+    const spanX = Math.max(0.001, maxX - minX);
+    const spanY = Math.max(0.001, maxY - minY);
+    const scale = Math.min((width - 16) / spanX, (height - 16) / spanY);
+    return { scale, cx: (minX + maxX) / 2, cy: (minY + maxY) / 2 };
+  }
+  const spanX = Math.max(0.001, maxX - minX);
+  const spanY = Math.max(0.001, maxY - minY);
+  const fitScale = Math.min(
+    (width - FIT_MARGIN * 2) / spanX,
+    (height - FIT_MARGIN * 2) / spanY,
+  );
+  // Don't blow a compact wedge up to the edges. Still shrink if a turn
+  // or a detune spread would otherwise leave the canvas.
+  const capScale = Math.min((width * 0.94) / spanX, (height * 0.94) / spanY);
+  const scale = Math.min(fitScale, capScale);
+  return { scale, cx: (minX + maxX) / 2, cy: (minY + maxY) / 2 };
+}
+
+export function createFitMotion() {
+  return { shown: null, now: 0, moving: false };
+}
+
+// Zooming in eases. Zooming out tracks the slices immediately so the tails
+// never leave the canvas. The center stays on the current bounds.
+export function followFit(motion, ideal, now) {
+  if (!motion.shown) {
+    motion.shown = { scale: ideal.scale, cx: ideal.cx, cy: ideal.cy };
+    motion.now = now;
+    motion.moving = false;
+    return motion.shown;
+  }
+  const dt = Math.min(0.05, Math.max(0, (now - motion.now) / 1000));
+  motion.now = now;
+  const k = dt > 0 ? 1 - Math.exp(-dt / 0.11) : 0;
+  let scale = motion.shown.scale + (ideal.scale - motion.shown.scale) * k;
+  scale = Math.min(scale, ideal.scale);
+  motion.shown = { scale, cx: ideal.cx, cy: ideal.cy };
+  motion.moving = ideal.scale - scale > ideal.scale * 0.012;
+  return motion.shown;
+}
+
+export function paintModalView(ctx, partials, options = {}) {
+  const { width, height, style = 'fast', colors, selected = -1, detune = 0 } = options;
+  const camera = clampCamera(options.camera);
+  const rawSlices = options.slices || spaceSlices(partials);
+  const slices = combHeights(rawSlices, options.position);
+  const look = PLANE.styles[style] || PLANE.styles.fast;
+  activeTune = { ...TUNE, ...(options.tune || {}) };
+  const palette = sitePalette(colors, options.invertPanel !== false);
+  const ideal = measureFit(slices, camera, width, height, detune);
+  const fit = options.fitMotion ? followFit(options.fitMotion, ideal, options.now ?? 0) : ideal;
+  const place = placement(fit, width, height);
   ctx.clearRect(0, 0, width, height);
   ctx.fillStyle = palette.panel;
   ctx.fillRect(0, 0, width, height);
-  ctx.lineCap = 'butt';
-  ctx.lineJoin = 'miter';
-  const smear = Math.max(-1, Math.min(1, detune)) * 7;
-  if (smear) drawSheet(ctx, scene, look, palette, selected, smear, 0.45);
-  drawSheet(ctx, scene, look, palette, selected, 0, 1);
-  if (selected >= 0 && scene.modes[selected]) {
-    const mode = scene.modes[selected];
-    strokeRung(ctx, mode, { width: look.width + 1.1, alpha: 1, halo: 3, haloAlpha: 0.35 }, palette.wire);
-  }
-  return scene.modes.map((mode) => mode.base);
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  const clock = longestSeconds(slices);
+  const weight = lineWeight(width) * (style === 'eco' ? 0.85 : style === 'glow' ? 1.12 : 1);
+  // Two stacked blooms. The wide one fills the gaps between close lines.
+  // The tighter one brightens the mesh those overlaps make.
+  // Cream bloom stays soft so neighbours keep a dark gap. Accent bloom
+  // is softer still, a tint rather than a second set of bars.
+  const wide = Math.max(2.4, weight * (style === 'eco' ? 0.7 : 1.05));
+  const tight = Math.max(1.4, weight * (style === 'eco' ? 0.45 : 0.62));
+  const scene = Math.max(4.8, weight * 1.22);
+  ctx.save();
+  ctx.filter = `blur(${scene}px)`;
+  ctx.globalCompositeOperation = palette.bloom;
+  drawSlices(ctx, slices, detune, place, camera, look, palette, clock, style, selected, true, weight, 1.15, 0.16, 0.05, 0.08);
+  ctx.restore();
+  ctx.save();
+  ctx.filter = `blur(${wide}px)`;
+  ctx.globalCompositeOperation = palette.bloom;
+  drawSlices(ctx, slices, detune, place, camera, look, palette, clock, style, selected, true, weight, 1.12, 0.15, 0.06, 0.1);
+  ctx.restore();
+  ctx.save();
+  ctx.filter = `blur(${tight}px)`;
+  ctx.globalCompositeOperation = palette.bloom;
+  drawSlices(ctx, slices, detune, place, camera, look, palette, clock, style, selected, true, weight, 1.04, 0.1, 0.04, 0.08);
+  ctx.restore();
+  drawSlices(ctx, slices, detune, place, camera, look, palette, clock, style, selected, false, weight, 1, 1, 0.48, 0.55);
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
+  const air = airFrame(slices, clock, detune);
+  return slices.map((slice) => projectSlice(slice, detune, place, camera, clock, air).crest);
 }
 
-export function hitPartial(partials, camera, width, height, x, y) {
-  const scene = layoutScene(partials, camera, width, height);
+export function hitPartial(partials, camera, width, height, x, y, detune = 0, fit = null) {
+  const slices = partials?.[0] && 't' in partials[0]
+    ? partials
+    : (partials || []).map((partial) => sliceFromPartial(partial, 1));
+  const view = clampCamera(camera);
+  const used = fit || measureFit(slices, view, width, height, detune);
+  const place = placement(used, width, height);
+  const clock = longestSeconds(slices);
+  const air = airFrame(slices, clock, detune);
   let best = -1;
-  let score = 12;
-  for (let i = 0; i < scene.modes.length; i++) {
-    const mode = scene.modes[i];
-    const distance = distanceToSegment(x, y, mode.base.x, mode.base.y, mode.crest.x, mode.crest.y);
+  let score = 14;
+  for (let i = 0; i < slices.length; i++) {
+    if (slices[i].alpha < 0.2) continue;
+    const tri = projectSlice(slices[i], detune, place, view, clock, air);
+    const distance = Math.min(
+      distanceToSegment(x, y, tri.foot.x, tri.foot.y, tri.crest.x, tri.crest.y),
+      distanceToSegment(x, y, tri.crest.x, tri.crest.y, tri.back.x, tri.back.y),
+      distanceToSegment(x, y, tri.foot.x, tri.foot.y, tri.back.x, tri.back.y),
+    );
     if (distance < score) {
       score = distance;
       best = i;
@@ -99,46 +403,457 @@ export function hitPartial(partials, camera, width, height, x, y) {
   return best;
 }
 
-export function layoutScene(partials, camera, width, height) {
-  const view = clampCamera(camera);
-  const place = placement(width, height);
-  const rawTl = place(view, 0, WEDGE.leftH, 0);
-  const rawBl = place(view, 0, 0, 0);
-  const rawTip = place(view, WEDGE.span, WEDGE.tipY, WEDGE.tipZ);
-  const fit = contain([rawTl, rawBl, rawTip, ...lidEnds(rawTl, rawBl, rawTip)], width, height);
-  const tl = fit(rawTl);
-  const bl = fit(rawBl);
-  const tip = fit(rawTip);
-  const logLo = Math.log2(WEDGE.ratioLo);
-  const logHi = Math.log2(WEDGE.ratioHi);
-  const modes = partials.map((partial) => {
-    const ratio = Math.max(Number(partial.ratio) || WEDGE.ratioLo, 1e-6);
-    const t = clamp((Math.log2(ratio) - logLo) / (logHi - logLo), 0, 1);
-    const amp = 10 ** (Math.max(-72, Math.min(0, Number(partial.gainDb) || 0)) / 20);
-    const reach = 0.22 + 0.78 * Math.sqrt(amp);
-    const foot = lerp(bl, tip, t);
-    const head = lerp(tl, tip, t);
-    return {
-      base: foot,
-      crest: lerp(foot, head, reach),
-      t,
-      amp,
-    };
-  });
-  return { modes, tl, bl, tip, project: (x, y, z) => place(view, x, y, z) };
+export function worldOf(slice, detune = 0) {
+  const t = detuneT(slice.t, detune);
+  return {
+    x: (t - 0.5) * PLANE.span,
+    y: clamp(slice.height, 0, 1.2) * PLANE.height,
+    z: clamp(slice.depth, 0, 1) * PLANE.depth,
+  };
 }
 
-// Pin the resting left edge, then keep that same screen scale while dragging.
-function placement(width, height) {
-  const home = clampCamera(defaultCamera());
-  const origin = screenOf(home, 0, WEDGE.leftH, 0);
-  const foot = screenOf(home, 0, 0, 0);
-  const scale = (height * WEDGE.leftScreen) / (Math.hypot(foot.x - origin.x, foot.y - origin.y) || 1);
-  const ox = width * WEDGE.originX - origin.x * scale;
-  const oy = height * WEDGE.originY - origin.y * scale;
+function spaceSlices(partials) {
+  const slices = (partials || []).map((partial) => sliceFromPartial(partial, 1));
+  return spaceByLog(slices);
+}
+
+function showDecay(slices) {
+  const max = Math.max(0, ...slices.map((slice) => slice?.depth || 0));
+  if (max < 1e-4) return slices;
+  return slices.map((slice) => ({ ...slice, depth: (slice?.depth || 0) / max }));
+}
+
+function floorBack(world, z = PLANE.ribbonZ) {
+  return { x: world.x, y: 0, z };
+}
+
+// A bar is about 1.25% of the panel width. Tied to the canvas, not the
+// fit scale, so strokes stay thin when the comb is zoomed to fill the panel.
+function lineWeight(panelWidth) {
+  const panel = Math.max(320, Number(panelWidth) || 800);
+  return panel * 0.0125;
+}
+
+// Every bar's tie stops on the back rail. The two rails stay a bar-step apart.
+function landingDepth() {
+  return PLANE.ribbonZ;
+}
+
+function longestSeconds(slices) {
+  let max = 0.05;
+  for (const slice of slices || []) {
+    if (!slice || slice.alpha < 0.08) continue;
+    const seconds = Number(slice.seconds);
+    if (seconds > max) max = seconds;
+  }
+  return max;
+}
+
+// Anything under the two longest decays is a vertical accent beside its bar.
+// longRung marks the left-hand floor rungs that cross the hatch.
+function drawShape(seconds, maxSeconds) {
+  const rel = Math.max(0.02, Math.max(0.02, seconds) / Math.max(0.05, maxSeconds));
+  if (rel >= PLANE.airRel) {
+    return { air: true, tight: false, longRung: true, rel };
+  }
+  return { air: false, tight: true, longRung: rel >= 0.14, rel };
+}
+
+// The longest decay anchors the tails. Later air partials share its x so
+// they stay parallel instead of splaying off their own bars.
+function airFrame(slices, clock, detune) {
+  const air = [];
+  for (const slice of slices || []) {
+    if (!slice || slice.alpha < 0.08) continue;
+    const seconds = Math.max(0.05, Number(slice.seconds) || 0.2);
+    if (!drawShape(seconds, clock).air) continue;
+    air.push(slice);
+  }
+  air.sort((a, b) => b.seconds - a.seconds);
+  if (!air.length) return { anchorX: 0, anchorY: PLANE.height, rankOf: () => 0 };
+  const head = worldOf(air[0], detune);
+  const rank = new Map(air.map((slice, index) => [slice, index]));
+  const ordered = (slices || [])
+    .filter((slice) => slice && slice.alpha >= 0.08 && slice.height >= 0.02)
+    .map((slice) => worldOf(slice, detune))
+    .sort((a, b) => a.x - b.x);
+  const span = ordered.length > 1 ? ordered[ordered.length - 1].x - ordered[0].x : PLANE.span;
+  return {
+    anchorX: head.x,
+    anchorY: head.y,
+    rankOf: (slice) => rank.get(slice) ?? 0,
+    crests: ordered.slice(0, 5),
+    railRight: ordered.length ? ordered[ordered.length - 1].x : head.x + PLANE.span,
+    // Bars 1–6. Same cut the floor hatch uses.
+    hatchX: ordered.length ? ordered[0].x + 0.5 * span : head.x,
+  };
+}
+
+// On-screen floor angle at rest. The bright band, foot to foot, rises at
+// about 37 degrees. The figure stays in that proportion and is centered;
+// the wide panel keeps empty space on either side.
+const FLOOR_SHEAR = Math.tan(37 * Math.PI / 180);
+const DEPTH_X = 0.78;
+
+function depthRise(pitch = PLANE.pitch) {
+  return 0.75 * (0.85 + (pitch - PLANE.pitch) * 1.15);
+}
+
+// A decay strand in rest-screen space, from a crest down-right onto the front rail.
+function strandOnFloor(x, y, angle) {
+  const start = restScreen(x, y, 0);
+  const denom = Math.sin(angle) - FLOOR_SHEAR * Math.cos(angle);
+  if (Math.abs(denom) < 1e-3) return null;
+  const t = (FLOOR_SHEAR * start.sx - start.sy) / denom;
+  if (!(t > 0.05)) return null;
+  const sx = start.sx + Math.cos(angle) * t;
+  const sy = start.sy + Math.sin(angle) * t;
+  return fromRestScreen(x, sx, sy);
+}
+
+function fromRestScreen(x, sx, sy) {
+  const z = (sx - x) / DEPTH_X;
+  const y = (-sy) - (x * -FLOOR_SHEAR) - (z * depthRise());
+  return { x, y, z };
+}
+
+function restScreen(x, y, z) {
+  return {
+    sx: x + (z * DEPTH_X),
+    sy: -(y + (x * -FLOOR_SHEAR) + (z * depthRise())),
+  };
+}
+
+// Sag from bar 1 down to a low point near bar 5, then rise at the crop's angle.
+// A straight run along the crests read as a flat arc with the bend too far right.
+function tailSpline(x, y0, crests, railRight, steps) {
+  const guides = (crests && crests.length) ? crests : [{ x, y: y0 }];
+  const screens = guides.map((crest, index) => (
+    index === 0 ? restScreen(x, y0, 0) : restScreen(crest.x, crest.y, 0)
+  ));
+  const start = screens[0];
+  const barScreen = Math.max(0.2, (FLOOR_SHEAR * start.sx) - start.sy);
+  const drop = barScreen * 0.66;
+  // Keep the bend where bar 5 sat on an even floor, even if the left posts pack tighter.
+  const spanX = Math.max(0.4, railRight - start.sx);
+  let bendSx = start.sx + spanX * (4 / 15);
+  let bendSy = start.sy + drop;
+  const localFloor = FLOOR_SHEAR * bendSx;
+  bendSy = Math.min(bendSy, localFloor - barScreen * 0.16);
+  const points = [];
+  const sagN = Math.max(10, Math.round((steps || 24) * 0.45));
+  for (let i = 0; i <= sagN; i++) {
+    const t = i / sagN;
+    const sx = start.sx + (bendSx - start.sx) * t;
+    const sy = start.sy + (bendSy - start.sy) * Math.sin(t * Math.PI / 2);
+    points.push(fromRestScreen(x, sx, sy));
+  }
+  const riseRad = 34 * Math.PI / 180;
+  const floorSpan = Math.max(0.4, railRight - start.sx);
+  const step = floorSpan / 42;
+  let sx = bendSx;
+  let sy = bendSy;
+  const arcSteps = 10;
+  for (let i = 1; i <= arcSteps; i++) {
+    const theta = -riseRad * (i / arcSteps);
+    sx += Math.cos(theta) * step * 0.85;
+    sy += Math.sin(theta) * step * 0.85;
+    points.push(fromRestScreen(x, sx, sy));
+  }
+  const depart = { x: Math.cos(riseRad), y: -Math.sin(riseRad) };
+  const tipSx = railRight - floorSpan * 0.02;
+  let guard = 0;
+  while (sx < tipSx && guard < 48) {
+    sx += depart.x * step;
+    sy += depart.y * step;
+    points.push(fromRestScreen(x, sx, sy));
+    guard += 1;
+  }
+  return points;
+}
+
+function tailWorld(slice, world, maxSeconds, air) {
+  const seconds = Math.max(0.05, Number(slice?.seconds) || 0.2);
+  const shape = drawShape(seconds, maxSeconds || seconds);
+  if (!shape.air) {
+    // Left accents stand just off the bar so the mesh reads accent-and-cream.
+    // Right accents share the bar's x, so no second edge appears.
+    const left = world.x <= (air?.hatchX ?? world.x);
+    const z = left ? tune().accentZLeft : tune().accentZ;
+    const top = world.y;
+    if (!left) {
+      return [
+        { x: world.x, y: top, z: 0 },
+        { x: world.x, y: top * 0.97, z },
+        { x: world.x, y: top * 0.02, z },
+      ];
+    }
+    // A shallow curve through the left block, not a second straight edge.
+    return [
+      { x: world.x, y: top, z: 0 },
+      { x: world.x, y: top * 0.68, z: z * 1.35 },
+      { x: world.x, y: top * 0.34, z: z * 0.7 },
+      { x: world.x, y: top * 0.02, z: z * 0.25 },
+    ];
+  }
+  const rank = air?.rankOf(slice) ?? 0;
+  const x = air?.anchorX ?? world.x;
+  const y0 = air?.anchorY ?? world.y;
+  const full = tailSpline(x, y0, air?.crests, air?.railRight ?? x + PLANE.span, 36);
+  if (rank === 0) return full;
+  // Leave at the bend and run straight, parallel to the rise. Copying the
+  // rounded bottom made the octave droop below the tail.
+  const seen = full.map((point) => restScreen(point.x, point.y, point.z));
+  let bottom = 0;
+  for (let i = 1; i < seen.length; i++) {
+    if (seen[i].sy > seen[bottom].sy) bottom = i;
+  }
+  const floorSpan = Math.max(0.4, (air?.railRight ?? x) - (air?.anchorX ?? x));
+  const stopX = seen[0].sx + floorSpan * 0.66;
+  let step = PLANE.span / 15;
+  if (air?.crests?.length > 1) step = Math.abs(air.crests[1].x - air.crests[0].x);
+  const tuck = step * Math.hypot(1, FLOOR_SHEAR) * 1.85 + (rank - 1) * step * 0.35;
+  const riseRad = 34 * Math.PI / 180;
+  const sx0 = seen[bottom].sx;
+  const sy0 = seen[bottom].sy + tuck;
+  const run = Math.max(0.2, stopX - sx0);
+  const samples = 14;
+  const straight = [];
+  for (let i = 0; i <= samples; i++) {
+    const t = i / samples;
+    const sx = sx0 + run * t;
+    const sy = sy0 - Math.tan(riseRad) * run * t;
+    straight.push(fromRestScreen(x, sx, sy));
+  }
+  return straight;
+}
+
+function fadeLine(ctx, start, end, color, look, alpha) {
+  const steps = 6;
+  for (let i = 0; i < steps; i++) {
+    const u0 = i / steps;
+    const u1 = (i + 1) / steps;
+    const a = { x: start.x + (end.x - start.x) * u0, y: start.y + (end.y - start.y) * u0 };
+    const b = { x: start.x + (end.x - start.x) * u1, y: start.y + (end.y - start.y) * u1 };
+    glow(ctx, [a, b], color, look, alpha * (1 - u0));
+  }
+}
+
+function strokePath(ctx, points, color, width, alpha) {
+  if (points.length < 2) return;
+  ctx.beginPath();
+  ctx.moveTo(points[0].x, points[0].y);
+  for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = width;
+  ctx.globalAlpha = alpha;
+  ctx.stroke();
+}
+
+function fillPoly(ctx, points, color, alpha) {
+  if (points.length < 3) return;
+  ctx.beginPath();
+  ctx.moveTo(points[0].x, points[0].y);
+  for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
+  ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.globalAlpha = alpha;
+  ctx.fill();
+}
+
+function glow(ctx, points, color, look, alpha) {
+  if (look.halo > 0) strokePath(ctx, points, color, look.halo, look.haloAlpha * alpha);
+  strokePath(ctx, points, color, look.width, look.alpha * alpha);
+}
+
+function hatchLimit(placed, detune) {
+  const xs = placed.map((item) => worldOf(item.slice, detune).x).sort((a, b) => a - b);
+  if (xs.length < 2) return Infinity;
+  return xs[0] + 0.5 * (xs[xs.length - 1] - xs[0]);
+}
+
+function drawSlices(ctx, slices, detune, place, camera, look, palette, clock, style, selected, bloom, weight, bulk = 1, alpha = 1, accentAlpha = alpha, hatchAlpha = alpha) {
+  const ink = { width: weight * bulk, alpha, halo: 0, haloAlpha: 0 };
+  const accent = { width: weight * 0.5 * bulk, alpha: accentAlpha, halo: 0, haloAlpha: 0 };
+  // Wide under the blur, a lighter core on the sharp pass. The pair stays soft.
+  const tailW = weight * (bloom ? 1.15 : 1);
+  const tail = { width: tailW, alpha: 1, halo: 0, haloAlpha: 0 };
+  const octave = { width: tailW * 0.52, alpha: 1, halo: 0, haloAlpha: 0 };
+  const rail = { width: weight * bulk, alpha, halo: 0, haloAlpha: 0 };
+  // Decay strands are the same width as a bar. The bloom passes supply the faint glow.
+  const strand = { width: weight, alpha: 1, halo: 0, haloAlpha: 0 };
+  const meshTint = mixHex(palette.wire, palette.paper, 0.62);
+  const tailColor = mixHex(palette.wire, palette.paper, tune().tailCream);
+  const octaveColor = mixHex(palette.wire, palette.paper, tune().octaveCream);
+  const air = airFrame(slices, clock, detune);
+  const visible = [];
+  for (let index = 0; index < slices.length; index++) {
+    const slice = slices[index];
+    if (!slice || slice.alpha < 0.04 || slice.height < 0.02) continue;
+    visible.push(slice);
+  }
+  const placed = visible.map((slice) => ({
+    slice,
+    tri: projectSlice(slice, detune, place, camera, clock, air),
+    shape: drawShape(Math.max(0.05, Number(slice.seconds) || 0.2), clock),
+  }));
+  placed.sort((a, b) => worldOf(a.slice, detune).x - worldOf(b.slice, detune).x);
+  const limit = hatchLimit(placed, detune);
+  if (style !== 'eco') {
+    const atDepth = (group, z) => group.map((item) => {
+      const world = worldOf(item.slice, detune);
+      return place(camera, world.x, 0, z);
+    });
+    const fund = placed.find((item) => item.shape.air && air.rankOf(item.slice) === 0);
+    if (fund) {
+      const bend = fund.tri.curve.reduce((low, point) => (point.y > low.y ? point : low), fund.tri.curve[0]);
+      const tailAt = (x) => {
+        const curve = fund.tri.curve;
+        for (let i = 1; i < curve.length; i++) {
+          const a = curve[i - 1];
+          const b = curve[i];
+          const minX = Math.min(a.x, b.x);
+          const maxX = Math.max(a.x, b.x);
+          if (x < minX || x > maxX) continue;
+          const u = (x - a.x) / ((b.x - a.x) || 1);
+          return a.y + (b.y - a.y) * u;
+        }
+        return null;
+      };
+      // Tops on the way down to the bend follow the sag.
+      for (const item of placed) {
+        item.baseCrest = item.tri.crest.y;
+        if (item.shape.air || item.tri.crest.x > bend.x) continue;
+        const y = tailAt(item.tri.crest.x);
+        if (y != null) item.tri.crest = { x: item.tri.crest.x, y };
+      }
+      // Bars past the bend use the crop's measured lengths, and never rise through the tail.
+      const measured = { 6: 0.84, 7: 1, 8: 0.8, 9: 0.85, 10: 0.78, 11: 0.77, 12: 0.91, 13: 0.75, 14: 0.74, 15: 0.75, 16: 0.72 };
+      const bar1H = Math.max(4, placed[0].tri.foot.y - placed[0].tri.crest.y);
+      for (let i = 0; i < placed.length; i++) {
+        const frac = measured[i + 1];
+        if (frac == null) continue;
+        const item = placed[i];
+        let crestY = item.tri.foot.y - bar1H * frac;
+        const tailY = tailAt(item.tri.crest.x);
+        if (tailY != null) crestY = Math.max(crestY, tailY + 4);
+        item.tri.crest = { x: item.tri.crest.x, y: Math.min(crestY, item.tri.foot.y - 4) };
+      }
+    }
+    const frontRail = atDepth(placed, 0);
+    const backRail = atDepth(placed, PLANE.ribbonZ);
+    // Dimmer than the bars, with thin ties, and only the wide blur so it hazes.
+    if (!bloom || bulk > 1.12) {
+      const tie = { width: weight * (bloom ? 0.5 : 0.32), alpha: 1, halo: 0, haloAlpha: 0 };
+      const railA = bloom ? 0.75 : 0.86;
+      const tieA = bloom ? 0.32 : 0.18;
+      glow(ctx, frontRail, palette.ink, rail, railA);
+      glow(ctx, backRail, palette.ink, rail, railA);
+      for (let i = 0; i < placed.length; i++) {
+        glow(ctx, [frontRail[i], backRail[i]], palette.ink, tie, tieA);
+        if (i + 1 < placed.length) {
+          glow(ctx, [frontRail[i], backRail[i + 1]], palette.ink, tie, tieA);
+          glow(ctx, [frontRail[i + 1], backRail[i]], palette.ink, tie, tieA);
+        }
+      }
+    }
+    // Strands cross the left posts and land on the floor under bars 3 to 8.
+    if (!bloom || bulk > 1.12) {
+      const pairs = [
+        [0, 3], [1, 4], [2, 5], [3, 6], [4, 7], [5, 7],
+        [0, 6], [1, 7], [0, 7], [2, 7], [1, 6],
+      ];
+      for (const [from, to] of pairs) {
+        if (from >= placed.length || to >= placed.length) continue;
+        const end = frontRail[to];
+        if (!end || end.x <= placed[from].tri.crest.x + 4) continue;
+        fadeLine(ctx, placed[from].tri.crest, end, meshTint, strand, (bloom ? 0.08 : 0.9) * placed[from].slice.alpha);
+      }
+    }
+    for (let index = 0; index < placed.length; index++) {
+      const item = placed[index];
+      const world = worldOf(item.slice, detune);
+      // Zebra doubles only the left-hand bars. The right-hand row stays single.
+      if (index < 7) {
+        const backFoot = place(camera, world.x, 0, 0.26);
+        const ghostTop = {
+          x: item.tri.crest.x + (backFoot.x - item.tri.foot.x),
+          y: item.tri.crest.y + (backFoot.y - item.tri.foot.y),
+        };
+        glow(ctx, [backFoot, ghostTop], palette.ink, ink, item.slice.alpha * (bloom ? 0.04 : 0.15));
+      }
+      glow(ctx, [item.tri.foot, item.tri.crest], palette.ink, ink, item.slice.alpha);
+    }
+  }
+  for (const item of placed) {
+    const world = worldOf(item.slice, detune);
+    if (item.shape.air) {
+      const rank = air.rankOf(item.slice);
+      const look = rank === 0 ? tail : octave;
+      const strength = bloom
+        ? (rank === 0 ? tune().tailGlow : tune().octaveGlow)
+        : (rank === 0 ? tune().tailSharp : tune().octaveSharp);
+      const color = rank === 0 ? tailColor : octaveColor;
+      glow(ctx, item.tri.curve, color, look, strength);
+      if (rank === 0) {
+        // The head of the fundamental matches the bar. The octave stays its own line.
+        const headCount = Math.max(3, Math.round(item.tri.curve.length * 0.18));
+        const head = item.tri.curve.slice(0, headCount);
+        const join = mixHex(color, palette.ink, 0.8);
+        glow(ctx, head, join, { ...look, width: look.width * (bloom ? 1.05 : 1.15) }, bloom ? strength * 0.35 : 1);
+      }
+      continue;
+    }
+    const left = world.x <= limit;
+    // The left block is the separate strands drawn above. A second curve here
+    // stacked into the peach sheet.
+    if (left) continue;
+    const width = weight * 0.5 * bulk;
+    const strength = bloom ? accentAlpha * 1.8 : tune().rightSharp;
+    glow(ctx, item.tri.curve, palette.wire, { ...accent, width }, Math.min(1, strength));
+  }
+  if (bloom || selected < 0 || !slices[selected]) return;
+  const slice = slices[selected];
+  const tri = projectSlice(slice, detune, place, camera, clock, air);
+  if (style !== 'eco') {
+    glow(ctx, [tri.foot, tri.crest], palette.ink, { ...ink, width: ink.width + weight * 0.35 }, 1);
+    glow(ctx, [tri.foot, tri.floor], palette.ink, ink, 1);
+  }
+  glow(ctx, tri.curve, palette.wire, { ...accent, width: accent.width + weight * 0.3 }, 1);
+}
+
+export function layoutTriangles(slices, camera, width, height, detune = 0) {
+  const view = clampCamera(camera);
+  const spaced = spaceByLog(slices.map((slice) => ({ ...slice })));
+  const fit = measureFit(spaced, view, width, height, detune);
+  const place = placement(fit, width, height);
+  const clock = longestSeconds(spaced);
+  const air = airFrame(spaced, clock, detune);
+  return spaced.map((slice) => projectSlice(slice, detune, place, view, clock, air));
+}
+
+function projectSlice(slice, detune, place, camera, maxSeconds, air) {
+  const world = worldOf(slice, detune);
+  const seconds = Math.max(0.05, Number(slice?.seconds) || 0.2);
+  const shape = drawShape(seconds, maxSeconds || seconds);
+  const rear = floorBack(world, landingDepth(shape));
+  const curve = tailWorld(slice, world, maxSeconds, air).map((point) => place(camera, point.x, point.y, point.z));
+  return {
+    foot: place(camera, world.x, 0, 0),
+    crest: place(camera, world.x, world.y, 0),
+    back: curve[curve.length - 1],
+    floor: place(camera, rear.x, rear.y, rear.z),
+    curve,
+  };
+}
+
+function placement(fit, width, height) {
   return (camera, x, y, z) => {
     const point = screenOf(camera, x, y, z);
-    return { x: point.x * scale + ox, y: point.y * scale + oy };
+    return {
+      x: width / 2 + (point.x - fit.cx) * fit.scale,
+      y: height / 2 + (point.y - fit.cy) * fit.scale,
+    };
   };
 }
 
@@ -147,186 +862,100 @@ function screenOf(camera, x, y, z) {
   return { x: point.x, y: -point.y };
 }
 
-function lidEnds(tl, bl, tip) {
-  const edge = norm(sub(tip, tl));
-  let normal = { x: edge.y, y: -edge.x };
-  if (dot(normal, sub(bl, tl)) > 0) normal = { x: -normal.x, y: -normal.y };
-  const reach = (Math.hypot(bl.x - tl.x, bl.y - tl.y) || 1) * WEDGE.lidReach;
-  return [WEDGE.lidFrom, WEDGE.lidTo].map((t) => add(lerp(tl, tip, t), scale(normal, reach)));
-}
-
-function contain(points, width, height) {
-  const pad = 6;
-  let minX = Infinity;
-  let maxX = -Infinity;
-  let minY = Infinity;
-  let maxY = -Infinity;
-  for (const point of points) {
-    if (point.x < minX) minX = point.x;
-    if (point.x > maxX) maxX = point.x;
-    if (point.y < minY) minY = point.y;
-    if (point.y > maxY) maxY = point.y;
-  }
-  if (minX >= pad && minY >= pad && maxX <= width - pad && maxY <= height - pad) return (point) => point;
-  const zoom = Math.min((width - pad * 2) / Math.max(1, maxX - minX), (height - pad * 2) / Math.max(1, maxY - minY));
-  const cx = (minX + maxX) / 2;
-  const cy = (minY + maxY) / 2;
-  return (point) => ({ x: width / 2 + (point.x - cx) * zoom, y: height / 2 + (point.y - cy) * zoom });
-}
-
 function rawProject(x, y, z, camera) {
   const cy = Math.cos(camera.yaw);
   const sy = Math.sin(camera.yaw);
-  const cp = Math.cos(camera.pitch);
-  const sp = Math.sin(camera.pitch);
-  const x1 = x * cy + z * sy;
-  const z1 = -x * sy + z * cy;
-  const y2 = y * cp - z1 * sp;
-  const z2 = y * sp + z1 * cp;
-  const denom = camera.distance + z2 * WEDGE.perspective;
-  const persp = clamp(camera.distance / Math.max(0.25, denom), 0.25, 2.4);
-  return { x: x1 * persp, y: y2 * persp, depth: z2 };
-}
-
-function sitePalette(colors) {
+  // Frequency and decay turn around the vertical. Level does not, so a
+  // front edge stays vertical at every yaw.
+  const xr = x * cy + z * sy;
+  const zr = -x * sy + z * cy;
+  const rise = 0.85 + (camera.pitch - PLANE.pitch) * 1.15;
   return {
-    panel: colors?.bg || '#f2ede3',
-    face: colors?.ink || '#1a1916',
-    wire: colors?.accent || '#d4421c',
+    x: xr * 1 + zr * DEPTH_X,
+    y: y + xr * -FLOOR_SHEAR + zr * 0.75 * rise,
+    depth: zr,
   };
 }
 
-function drawSheet(ctx, scene, look, palette, selected, shift, alphaScale) {
-  const { modes, tl, bl, tip } = scene;
-  if (!tl || !bl || !tip) return;
-  const fuse = modes.length >= 64 && look.solid;
-  ctx.fillStyle = palette.face;
-  ctx.strokeStyle = palette.face;
-  if (fuse) {
-    ctx.globalAlpha = (modes.length > 96 ? 0.72 : 0.9) * alphaScale;
-    fillTriangle(ctx, tl, bl, tip, shift);
-  }
-  ctx.strokeStyle = palette.wire;
-  const rungWidth = modes.length > 160 ? 0.7 : modes.length > 48 ? 1.15 : look.width;
-  for (let i = 0; i < modes.length; i++) {
-    if (i === selected) continue;
-    const mode = modes[i];
-    const presence = 0.35 + 0.65 * mode.amp;
-    if (look.halo > 0) {
-      ctx.globalAlpha = look.haloAlpha * presence * alphaScale;
-      ctx.lineWidth = look.halo * (0.45 + 0.55 * mode.amp);
-      line(ctx, shiftPoint(mode.base, shift), shiftPoint(mode.crest, shift));
-    }
-    ctx.globalAlpha = (fuse ? WEDGE.rungAlpha : Math.min(0.85, look.alpha)) * presence * alphaScale;
-    ctx.lineWidth = rungWidth;
-    line(ctx, shiftPoint(mode.base, shift), shiftPoint(mode.crest, shift));
-  }
-  strokeEdges(ctx, tl, bl, tip, palette, shift, alphaScale);
-  drawTopWire(ctx, tl, bl, tip, look, palette, shift, alphaScale);
-  drawTip(ctx, tl, bl, tip, palette, shift, alphaScale);
-  ctx.globalAlpha = 1;
+function mixHex(a, b, t) {
+  const parse = (hex) => {
+    const match = /^#([0-9a-f]{6})$/i.exec(String(hex || ''));
+    return match ? parseInt(match[1], 16) : null;
+  };
+  const pa = parse(a);
+  const pb = parse(b);
+  if (pa == null || pb == null) return a;
+  const channel = (shift) => Math.round(((pa >> shift) & 255) * (1 - t) + ((pb >> shift) & 255) * t);
+  return `#${[channel(16), channel(8), channel(0)].map((value) => value.toString(16).padStart(2, '0')).join('')}`;
 }
 
-function drawTopWire(ctx, tl, bl, tip, look, palette, shift, alphaScale) {
-  const edge = norm(sub(tip, tl));
-  let normal = { x: edge.y, y: -edge.x };
-  const down = sub(bl, tl);
-  if (dot(normal, down) > 0) normal = { x: -normal.x, y: -normal.y };
-  const left = Math.hypot(bl.x - tl.x, bl.y - tl.y) || 1;
-  const gap = left * WEDGE.stackGap;
-  ctx.strokeStyle = palette.wire;
-  ctx.lineWidth = 1.15;
-  const end = lerp(tl, tip, WEDGE.stackEnd);
-  if (look.halo > 0) {
-    ctx.globalAlpha = look.haloAlpha * alphaScale;
-    ctx.lineWidth = look.halo;
-    strokeOffset(ctx, tl, end, normal, gap * 2, shift);
-    ctx.lineWidth = 1.15;
-  }
-  ctx.globalAlpha = WEDGE.wireAlpha * alphaScale;
-  for (let i = 1; i <= WEDGE.stackCount; i++) strokeOffset(ctx, tl, end, normal, gap * i, shift);
-  const reach = left * WEDGE.lidReach;
-  const startA = lerp(tl, tip, WEDGE.lidFrom);
-  const startB = lerp(tl, tip, WEDGE.lidTo);
-  const endA = add(startA, scale(normal, reach));
-  const endB = add(startB, scale(normal, reach));
-  if (look.halo > 0) {
-    ctx.globalAlpha = look.haloAlpha * alphaScale;
-    ctx.lineWidth = look.halo;
-    line(ctx, shiftPoint(startA, shift), shiftPoint(endA, shift));
-    line(ctx, shiftPoint(startB, shift), shiftPoint(endB, shift));
-    ctx.lineWidth = 1.15;
-  }
-  ctx.globalAlpha = WEDGE.wireAlpha * alphaScale;
-  line(ctx, shiftPoint(startA, shift), shiftPoint(endA, shift));
-  line(ctx, shiftPoint(startB, shift), shiftPoint(endB, shift));
-  line(ctx, shiftPoint(endA, shift), shiftPoint(endB, shift));
+function coolHex(hex, amount) {
+  const match = /^#([0-9a-f]{6})$/i.exec(String(hex || ''));
+  if (!match || !(amount > 0)) return hex;
+  let r = parseInt(match[1].slice(0, 2), 16);
+  let g = parseInt(match[1].slice(2, 4), 16);
+  let b = parseInt(match[1].slice(4, 6), 16);
+  const before = (0.2126 * r) + (0.7152 * g) + (0.0722 * b);
+  const delta = (r - b) * amount * 0.5;
+  r -= delta;
+  b += delta;
+  const after = (0.2126 * r) + (0.7152 * g) + (0.0722 * b) || 1;
+  const scale = before / after;
+  const channel = (value) => Math.max(0, Math.min(255, Math.round(value * scale))).toString(16).padStart(2, '0');
+  return `#${channel(r)}${channel(g)}${channel(b)}`;
 }
 
-function drawTip(ctx, tl, bl, tip, palette, shift, alphaScale) {
-  const back = norm(sub(mid(tl, bl), tip));
-  const side = { x: -back.y, y: back.x };
-  const size = Math.hypot(bl.x - tl.x, bl.y - tl.y) * WEDGE.tipSize;
-  ctx.strokeStyle = palette.wire;
-  ctx.globalAlpha = WEDGE.wireAlpha * alphaScale;
-  ctx.lineWidth = 1;
-  for (let i = 1; i <= 3; i++) {
-    const d = (size * i) / 3;
-    const p = add(tip, scale(back, d));
-    const half = d * 0.42;
-    line(ctx, shiftPoint(add(p, scale(side, -half)), shift), shiftPoint(add(p, scale(side, half)), shift));
-  }
-  for (const s of [-0.28, 0.28]) {
-    const a = add(tip, scale(side, s * size));
-    line(ctx, shiftPoint(a, shift), shiftPoint(add(a, scale(back, size * 0.95)), shift));
-  }
+function neutralHex(hex) {
+  const match = /^#([0-9a-f]{6})$/i.exec(String(hex || ''));
+  if (!match) return hex;
+  const value = parseInt(match[1], 16);
+  const r = (value >> 16) & 255;
+  const g = (value >> 8) & 255;
+  const b = value & 255;
+  const level = Math.max(0, Math.min(255, Math.round((0.2126 * r) + (0.7152 * g) + (0.0722 * b))));
+  const channel = level.toString(16).padStart(2, '0');
+  return `#${channel}${channel}${channel}`;
 }
 
-function fillTriangle(ctx, tl, bl, tip, shift) {
-  const a = shiftPoint(tl, shift);
-  const b = shiftPoint(bl, shift);
-  const c = shiftPoint(tip, shift);
-  ctx.beginPath();
-  ctx.moveTo(a.x, a.y);
-  ctx.lineTo(c.x, c.y);
-  ctx.lineTo(b.x, b.y);
-  ctx.closePath();
-  ctx.fill();
+function sitePalette(colors, invert = true) {
+  const bg = colors?.bg || '#f2ede3';
+  const fg = colors?.ink || colors?.fg || '#1f1d1a';
+  // --muted is the site's lighter dark. Zebra's panel is a mid grey, not black.
+  const muted = colors?.muted || '#6a655c';
+  const mixed = mixHex(fg, muted, tune().panelMix);
+  // Neutral grey at the mix's lightness. Cooling toward blue left a green cast.
+  const panel = invert ? neutralHex(mixed) : bg;
+  return {
+    panel,
+    ink: invert ? bg : fg,
+    paper: bg,
+    wire: colors?.accent || '#d4421c',
+    bloom: invert ? 'lighter' : 'source-over',
+  };
 }
 
-function strokeEdges(ctx, tl, bl, tip, palette, shift, alphaScale) {
-  ctx.strokeStyle = palette.face;
-  ctx.globalAlpha = Math.min(1, 0.95 * alphaScale);
-  ctx.lineWidth = 1.35;
-  line(ctx, shiftPoint(tl, shift), shiftPoint(bl, shift));
-  line(ctx, shiftPoint(tip, shift), shiftPoint(tl, shift));
-  line(ctx, shiftPoint(bl, shift), shiftPoint(tip, shift));
-  const edge = norm(sub(tip, bl));
-  let outward = { x: edge.y, y: -edge.x };
-  if (dot(outward, sub(tl, bl)) > 0) outward = { x: -outward.x, y: -outward.y };
-  const offset = scale(outward, 1.6);
-  ctx.strokeStyle = palette.wire;
-  ctx.globalAlpha = WEDGE.bottomWire * alphaScale;
-  ctx.lineWidth = 1.05;
-  line(ctx, shiftPoint(add(bl, offset), shift), shiftPoint(add(tip, offset), shift));
+function luminance(color) {
+  const hex = String(color || '').trim();
+  const match = /^#([0-9a-f]{6})$/i.exec(hex);
+  if (!match) return 180;
+  const value = parseInt(match[1], 16);
+  const r = (value >> 16) & 255;
+  const g = (value >> 8) & 255;
+  const b = value & 255;
+  return (r + g + b) / 3;
 }
 
-function strokeOffset(ctx, a, b, normal, distance, shift) {
-  const o = scale(normal, distance);
-  line(ctx, shiftPoint(add(a, o), shift), shiftPoint(add(b, o), shift));
-}
-
-function strokeRung(ctx, mode, look, color) {
-  ctx.strokeStyle = color;
-  if (look.halo) {
-    ctx.globalAlpha = look.haloAlpha;
-    ctx.lineWidth = look.halo;
-    line(ctx, mode.base, mode.crest);
-  }
-  ctx.globalAlpha = look.alpha;
-  ctx.lineWidth = look.width;
-  line(ctx, mode.base, mode.crest);
-  ctx.globalAlpha = 1;
+function lerpSlice(from, to, eased) {
+  const a = from || { t: to?.t || 0, height: 0, depth: 0, alpha: 0 };
+  const b = to || { t: a.t, height: 0, depth: 0, alpha: 0 };
+  return {
+    t: a.t + (b.t - a.t) * eased,
+    gainDb: (a.gainDb || 0) + ((b.gainDb || 0) - (a.gainDb || 0)) * eased,
+    height: a.height + (b.height - a.height) * eased,
+    depth: a.depth + (b.depth - a.depth) * eased,
+    seconds: (a.seconds || b.seconds || 0.2) + ((b.seconds || a.seconds || 0.2) - (a.seconds || b.seconds || 0.2)) * eased,
+    alpha: a.alpha + (b.alpha - a.alpha) * eased,
+  };
 }
 
 function line(ctx, a, b) {
@@ -334,39 +963,6 @@ function line(ctx, a, b) {
   ctx.moveTo(a.x, a.y);
   ctx.lineTo(b.x, b.y);
   ctx.stroke();
-}
-
-function shiftPoint(point, shift) {
-  return shift ? { x: point.x + shift, y: point.y } : point;
-}
-
-function lerp(a, b, t) {
-  return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
-}
-
-function add(a, b) {
-  return { x: a.x + b.x, y: a.y + b.y };
-}
-
-function sub(a, b) {
-  return { x: a.x - b.x, y: a.y - b.y };
-}
-
-function scale(v, k) {
-  return { x: v.x * k, y: v.y * k };
-}
-
-function dot(a, b) {
-  return a.x * b.x + a.y * b.y;
-}
-
-function mid(a, b) {
-  return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-}
-
-function norm(v) {
-  const len = Math.hypot(v.x, v.y) || 1;
-  return { x: v.x / len, y: v.y / len };
 }
 
 function clamp(value, lo, hi) {
