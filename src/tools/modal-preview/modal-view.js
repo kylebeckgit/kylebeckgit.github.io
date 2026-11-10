@@ -67,7 +67,7 @@ export const PLANE = {
   pitchMin: 0.35,
   pitchMax: 0.85,
   span: 6.4,
-  height: 1.7,
+  height: 2.05,
   depth: 3.15,
   // Below this fraction of the longest decay the accent stays a vertical
   // line beside the bar. The two longest (string: fundamental and octave)
@@ -158,8 +158,11 @@ export function levelHeight(gainDb) {
   const db = clamp(Number.isFinite(number) ? number : -60, -90, 0);
   // A wide window, so a large drop in level only shortens the bar a little.
   const floor = -78;
-  // Linear in the wide window, so the sixteen bars taper smoothly.
-  return clamp((db - floor) / -floor, 0, 1);
+  const linear = clamp((db - floor) / -floor, 0, 1);
+  // The first bars step down with the tail. Later bars stay short and close.
+  const loss = 1 - linear;
+  const drop = loss <= 0 ? 0 : Math.min(0.42, 1.05 * (loss ** 0.85));
+  return clamp(1 - drop, 0, 1);
 }
 
 export function decayDepth(decay) {
@@ -277,7 +280,7 @@ export function measureFit(slices, camera, width, height, detune = 0) {
   }
   // A little room above the tip, so the floor sits down where the crop's rail does.
   const contentY = Math.max(0.001, maxY - minY);
-  minY -= contentY * 0.08;
+  minY -= contentY * 0.03;
   const spanX = Math.max(0.001, maxX - minX);
   const spanY = Math.max(0.001, maxY - minY);
   const fitScale = Math.min(
@@ -469,7 +472,7 @@ function airFrame(slices, clock, detune) {
     anchorX: head.x,
     anchorY: head.y,
     rankOf: (slice) => rank.get(slice) ?? 0,
-    crests: ordered.slice(0, 6),
+    crests: ordered.slice(0, 5),
     railRight: ordered.length ? ordered[ordered.length - 1].x : head.x + PLANE.span,
     // Bars 1–6. Same cut the floor hatch uses.
     hatchX: ordered.length ? ordered[0].x + 0.5 * span : head.x,
@@ -533,14 +536,16 @@ function tailSpline(x, y0, crests, railRight, steps) {
   let sx = last.sx;
   let sy = last.sy;
   const tipSx = railRight + floorSpan * 0.02;
-  // Longer arc so the crest slope eases into the rise instead of a corner.
+  // A short bend at bar 5. The long arc was still falling across bars 6 and 7.
   let ang = Math.atan2(arrive.y, arrive.x);
   const target = Math.atan2(depart.y, depart.x);
-  const arcSteps = 16;
+  const arcSteps = 8;
   for (let i = 1; i <= arcSteps; i++) {
-    const a = ang + (target - ang) * (i / arcSteps);
-    sx += Math.cos(a) * step * 0.85;
-    sy += Math.sin(a) * step * 0.85;
+    const t = i / arcSteps;
+    const ease = 1 - ((1 - t) ** 2);
+    const a = ang + (target - ang) * ease;
+    sx += Math.cos(a) * step * 0.36;
+    sy += Math.sin(a) * step * 0.36;
     points.push(fromRestScreen(x, sx, sy));
   }
   let guard = 0;
@@ -589,11 +594,14 @@ function tailWorld(slice, world, maxSeconds, air) {
   for (let i = 1; i < seen.length; i++) {
     if (seen[i].sy > seen[bottom].sy) bottom = i;
   }
-  const start = Math.max(0, bottom - 4);
-  const remain = full.length - start;
-  const end = Math.min(full.length, start + Math.max(6, Math.round(remain * (0.46 - (rank - 1) * 0.1))));
-  const tuck = 0.09 + (rank - 1) * 0.04;
-  return full.slice(start, end).map((point) => ({ x: point.x, y: point.y - tuck, z: point.z }));
+  // Leave just before the bend, near bar 4, and stop a bit past halfway.
+  const start = Math.max(0, bottom - 6);
+  const floorSpan = Math.max(0.4, (air?.railRight ?? x) - (air?.anchorX ?? x));
+  const stopX = seen[start].sx + floorSpan * 0.42;
+  let end = start + 1;
+  while (end < seen.length - 1 && seen[end].sx < stopX) end += 1;
+  const tuck = 0.16 + (rank - 1) * 0.05;
+  return full.slice(start, end + 1).map((point) => ({ x: point.x, y: point.y - tuck, z: point.z }));
 }
 
 function strokePath(ctx, points, color, width, alpha) {
@@ -654,22 +662,22 @@ function drawSlices(ctx, slices, detune, place, camera, look, palette, clock, st
     glow(ctx, atDepth(placed, 0), palette.ink, rail, 1);
     glow(ctx, atDepth(placed, PLANE.ribbonZ), palette.ink, rail, 1);
     const hatched = placed.filter((item) => worldOf(item.slice, detune).x <= limit);
-    // Thin diagonals from the crests down to the floor, crossing several bars.
+    // Steep accent lines: each crest down to the floor one or two bars over.
     for (let i = 0; i < hatched.length; i++) {
       const item = hatched[i];
       const world = worldOf(item.slice, detune);
-      const from = place(camera, world.x, world.y * 0.9, 0);
-      for (const skip of [2, 3, 4]) {
+      const from = place(camera, world.x, world.y * 0.92, 0);
+      for (const skip of [1, 2]) {
         const other = hatched[i + skip];
         if (!other) continue;
         glow(ctx, [from, other.tri.foot], meshTint, rung, item.slice.alpha);
-        const ow = worldOf(other.slice, detune);
-        const under = place(camera, ow.x, ow.y * 0.45, 0);
-        glow(ctx, [item.tri.foot, under], meshTint, rung, item.slice.alpha);
       }
     }
     for (const item of placed) {
       const world = worldOf(item.slice, detune);
+      const back = place(camera, world.x, world.y, 0.08);
+      const backFoot = place(camera, world.x, 0, 0.08);
+      glow(ctx, [backFoot, back], palette.ink, ink, item.slice.alpha * 0.85);
       if (world.x > limit) {
         const far = place(camera, world.x, 0, PLANE.ribbonZ);
         glow(ctx, [item.tri.foot, far], palette.ink, ink, item.slice.alpha);
@@ -687,11 +695,13 @@ function drawSlices(ctx, slices, detune, place, camera, look, palette, clock, st
         : (rank === 0 ? tune().tailSharp : tune().octaveSharp);
       const color = rank === 0 ? tailColor : octaveColor;
       glow(ctx, item.tri.curve, color, look, strength);
-      // The head of each tail is the bar's cream, so the join glows as one stroke.
-      const headCount = Math.max(3, Math.round(item.tri.curve.length * 0.18));
-      const head = item.tri.curve.slice(0, headCount);
-      const join = mixHex(color, palette.ink, 0.8);
-      glow(ctx, head, join, { ...look, width: look.width * (bloom ? 1.05 : 1.15) }, bloom ? strength * 0.35 : 1);
+      if (rank === 0) {
+        // The head of the fundamental matches the bar. The octave stays its own line.
+        const headCount = Math.max(3, Math.round(item.tri.curve.length * 0.18));
+        const head = item.tri.curve.slice(0, headCount);
+        const join = mixHex(color, palette.ink, 0.8);
+        glow(ctx, head, join, { ...look, width: look.width * (bloom ? 1.05 : 1.15) }, bloom ? strength * 0.35 : 1);
+      }
       continue;
     }
     const left = world.x <= limit;
