@@ -66,8 +66,8 @@ export const PLANE = {
   focal: 9.5,
   pitchMin: 0.35,
   pitchMax: 0.85,
-  span: 6.9,
-  height: 1.68,
+  span: 8.4,
+  height: 2.15,
   depth: 3.15,
   // Below this fraction of the longest decay the accent stays a vertical
   // line beside the bar. The two longest (string: fundamental and octave)
@@ -161,7 +161,7 @@ export function levelHeight(gainDb) {
   const linear = clamp((db - floor) / -floor, 0, 1);
   // The first bars step down with the tail. Later bars stay short and close.
   const loss = 1 - linear;
-  const drop = loss <= 0 ? 0 : Math.min(0.42, 1.05 * (loss ** 0.85));
+  const drop = loss <= 0 ? 0 : Math.min(0.32, 0.85 * (loss ** 0.9));
   return clamp(1 - drop, 0, 1);
 }
 
@@ -278,9 +278,21 @@ export function measureFit(slices, camera, width, height, detune = 0) {
     minY = -1;
     maxY = 1;
   }
-  // A little room above the tip, so the floor sits down where the crop's rail does.
-  const contentY = Math.max(0.001, maxY - minY);
-  maxY += contentY * 0.07;
+  // At rest, pin the floor ends to the crop: left 5%, 56% and right 97%, 94%.
+  if (Math.abs(view.yaw) < 1e-3 && Math.abs(view.pitch - PLANE.pitch) < 1e-3 && !detune) {
+    const span = PLANE.span;
+    const spanY = Math.max(0.001, maxY - minY);
+    const scale = Math.min((width * 0.92) / span, (height * 0.9) / spanY);
+    const sxL = -span / 2;
+    const syL = FLOOR_SHEAR * sxL;
+    const cx = sxL - ((0.05 * width) - width / 2) / scale;
+    let cy = syL - ((0.56 * height) - height / 2) / scale;
+    const top = height / 2 + (minY - cy) * scale;
+    if (top < 8) cy -= (8 - top) / scale;
+    const bottom = height / 2 + (maxY - cy) * scale;
+    if (bottom > height - 8) cy += (bottom - (height - 8)) / scale;
+    return { scale, cx, cy };
+  }
   const spanX = Math.max(0.001, maxX - minX);
   const spanY = Math.max(0.001, maxY - minY);
   const fitScale = Math.min(
@@ -529,14 +541,14 @@ function tailSpline(x, y0, crests, railRight, steps) {
   const last = screens[hold];
   const prev = screens[Math.max(0, hold - 1)];
   // Rise about 33 degrees and stop above the last bar, not past the comb.
-  const riseRad = 31 * Math.PI / 180;
+  const riseRad = 24 * Math.PI / 180;
   const arrive = { x: last.sx - prev.sx, y: last.sy - prev.sy };
   const depart = { x: Math.cos(riseRad), y: -Math.sin(riseRad) };
   const floorSpan = Math.max(0.4, railRight - screens[0].sx);
   const step = floorSpan / 42;
   let sx = last.sx;
   let sy = last.sy;
-  const tipSx = railRight + floorSpan * 0.02;
+  const tipSx = railRight - floorSpan * 0.01;
   // Wide radius: the turn starts at bar 3 and finishes just after bar 5.
   let ang = Math.atan2(arrive.y, arrive.x);
   const target = Math.atan2(depart.y, depart.x);
@@ -597,7 +609,7 @@ function tailWorld(slice, world, maxSeconds, air) {
   // Leave just before the bend, near bar 4, and stop a bit past halfway.
   const start = Math.max(0, bottom - 6);
   const floorSpan = Math.max(0.4, (air?.railRight ?? x) - (air?.anchorX ?? x));
-  const stopX = seen[start].sx + floorSpan * 0.42;
+  const stopX = seen[start].sx + floorSpan * 0.34;
   let end = start + 1;
   while (end < seen.length - 1 && seen[end].sx < stopX) end += 1;
   // About two and a half bar-strokes below the fundamental.
@@ -614,6 +626,17 @@ function strokePath(ctx, points, color, width, alpha) {
   ctx.lineWidth = width;
   ctx.globalAlpha = alpha;
   ctx.stroke();
+}
+
+function fillPoly(ctx, points, color, alpha) {
+  if (points.length < 3) return;
+  ctx.beginPath();
+  ctx.moveTo(points[0].x, points[0].y);
+  for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
+  ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.globalAlpha = alpha;
+  ctx.fill();
 }
 
 function glow(ctx, points, color, look, alpha) {
@@ -662,12 +685,49 @@ function drawSlices(ctx, slices, detune, place, camera, look, palette, clock, st
     });
     glow(ctx, atDepth(placed, 0), palette.ink, rail, 1);
     glow(ctx, atDepth(placed, PLANE.ribbonZ), palette.ink, rail, 1);
+    const fund = placed.find((item) => item.shape.air && air.rankOf(item.slice) === 0);
+    if (fund) {
+      const bend = fund.tri.curve.reduce((low, point) => (point.y > low.y ? point : low), fund.tri.curve[0]);
+      const tailAt = (x) => {
+        const curve = fund.tri.curve;
+        for (let i = 1; i < curve.length; i++) {
+          const a = curve[i - 1];
+          const b = curve[i];
+          const minX = Math.min(a.x, b.x);
+          const maxX = Math.max(a.x, b.x);
+          if (x < minX || x > maxX) continue;
+          const u = (x - a.x) / ((b.x - a.x) || 1);
+          return a.y + (b.y - a.y) * u;
+        }
+        return null;
+      };
+      // Bars under the sag grow up until their tops sit on the fundamental.
+      for (const item of placed) {
+        if (item.shape.air || item.tri.crest.x > bend.x) continue;
+        const y = tailAt(item.tri.crest.x);
+        if (y != null && y < item.tri.crest.y) item.tri.crest = { x: item.tri.crest.x, y };
+      }
+    }
     const hatched = placed.filter((item) => worldOf(item.slice, detune).x <= limit);
+    if (bloom && bulk > 1.1) {
+      for (let i = 0; i < hatched.length - 1; i++) {
+        const a = hatched[i];
+        const b = hatched[i + 1];
+        const aw = worldOf(a.slice, detune);
+        const bw = worldOf(b.slice, detune);
+        fillPoly(ctx, [
+          a.tri.crest,
+          b.tri.crest,
+          b.tri.foot,
+          a.tri.foot,
+        ], meshTint, 0.25);
+      }
+    }
     // Steep accent lines: each crest down to the floor one or two bars over.
     for (let i = 0; i < hatched.length; i++) {
       const item = hatched[i];
       const world = worldOf(item.slice, detune);
-      const from = place(camera, world.x, world.y * 0.92, 0);
+      const from = item.tri.crest;
       for (const skip of [1, 2]) {
         const other = hatched[i + skip];
         if (!other) continue;
@@ -676,9 +736,9 @@ function drawSlices(ctx, slices, detune, place, camera, look, palette, clock, st
     }
     for (const item of placed) {
       const world = worldOf(item.slice, detune);
-      const back = place(camera, world.x, world.y, 0.18);
-      const backFoot = place(camera, world.x, 0, 0.18);
-      glow(ctx, [backFoot, back], palette.ink, ink, item.slice.alpha * (bloom ? 0.08 : 0.4));
+      const back = place(camera, world.x, world.y, 0.26);
+      const backFoot = place(camera, world.x, 0, 0.26);
+      glow(ctx, [backFoot, back], palette.ink, ink, item.slice.alpha * (bloom ? 0.04 : 0.15));
       if (world.x > limit) {
         const far = place(camera, world.x, 0, PLANE.ribbonZ);
         glow(ctx, [item.tri.foot, far], palette.ink, ink, item.slice.alpha);
