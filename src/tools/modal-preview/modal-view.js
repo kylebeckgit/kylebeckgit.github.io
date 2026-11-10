@@ -701,9 +701,13 @@ function drawSlices(ctx, slices, detune, place, camera, look, palette, clock, st
         }
         return null;
       };
-      // Bars under the sag grow up until their tops sit on the fundamental.
+      // Bars 1 to 7 grow up until their tops sit on the fundamental.
+      // The bend is near bar 5, so the reach runs two bar steps past it.
+      const floorL = placed[0].tri.foot.x;
+      const floorR = placed[placed.length - 1].tri.foot.x;
+      const reach = bend.x + ((floorR - floorL) * 2) / Math.max(1, placed.length - 1);
       for (const item of placed) {
-        if (item.shape.air || item.tri.crest.x > bend.x) continue;
+        if (item.shape.air || item.tri.crest.x > reach) continue;
         const y = tailAt(item.tri.crest.x);
         if (y != null && y < item.tri.crest.y) item.tri.crest = { x: item.tri.crest.x, y };
       }
