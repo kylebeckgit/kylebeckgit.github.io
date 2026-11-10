@@ -1,7 +1,7 @@
 // Each partial is its own wireframe slice, oblique like Zebra's Partials view.
 //
 //   x  frequency, evenly spaced, falling down-right at about 32 degrees
-//   y  level, screen-vertical, on a compressed dB scale
+//   y  level, screen-vertical, on a compressed dB scale that keeps the first crests tall
 //   z  decay time, rising up-right. Long decays leave the comb.
 //
 // Each slice is three lines. A vertical front in the ink color. An accent
@@ -11,9 +11,10 @@
 // Zebra centerline: a shallow sag along the crests, then a long rise that
 // bows and ends just past the rail. The octave runs under it for about 40%
 // of that arc. On the floor, a front rail and a close back rail run the full
-// width. Left-hand rungs climb through bars 1 to 6 and cross rails parallel
-// to the front. Stroke width tracks the view. A blurred pass sits under the
-// sharp strokes.
+// width. Under the first bars, short diagonals cross in both directions
+// and blur into a weave. The two tails are accent blended toward the page
+// cream, with a wide soft glow. Stroke width tracks the view. A blurred
+// pass sits under the sharp strokes.
 // Yaw turns frequency and decay around the vertical, so the fronts stay
 // vertical. Pitch only changes how steeply decay rises.
 //
@@ -31,21 +32,26 @@ const TUNE = {
   // the red/blue gap in, so the grey is less warm at the same luminance.
   panelMix: 0.34,
   panelCool: 0.55,
-  tailGlow: 0.40,
-  octaveGlow: 0.30,
-  tailSharp: 0.88,
-  octaveSharp: 0.56,
+  tailGlow: 0.62,
+  octaveGlow: 0.44,
+  tailSharp: 0.92,
+  octaveSharp: 0.7,
+  // Core is accent blended toward the page cream, so the tails stay warm
+  // but read as a soft bright pair.
+  tailCream: 0.74,
+  octaveCream: 0.62,
   // Tip sits just past the right end of the front rail.
   tailReach: 1.04,
-  leftSharp: 0.96,
-  leftWidth: 0.9,
-  leftGlow: 0.84,
+  leftSharp: 1,
+  leftWidth: 1.15,
+  leftGlow: 1,
   // Right accent is a tint in the stroke, not a second edge.
   rightSharp: 0.14,
   accentZ: 0,
-  accentZLeft: 0.05,
-  rungZ: 2.05,
-  hatchAlpha: 0.66,
+  accentZLeft: 0.09,
+  rungZ: 1.7,
+  hatchAlpha: 0.5,
+  hatchGlow: 0.36,
 };
 let activeTune = null;
 function tune() {
@@ -150,7 +156,14 @@ export function levelHeight(gainDb) {
   const db = clamp(Number.isFinite(number) ? number : -60, -90, 0);
   // A wide window, so a large drop in level only shortens the bar a little.
   const floor = -78;
-  return clamp((db - floor) / -floor, 0, 1);
+  const linear = clamp((db - floor) / -floor, 0, 1);
+  // The first partials lose only a little height. A straight dB line drops
+  // them fast enough that the crests outrun the traced sag. Squaring the
+  // loss keeps those crests on the sag, and a full string still ends near
+  // three quarters of the fundamental.
+  const loss = 1 - linear;
+  const shown = loss <= 0 ? 0 : Math.min(0.82, ((loss / 0.309) ** 2) * 0.28);
+  return clamp(1 - shown, 0, 1);
 }
 
 export function decayDepth(decay) {
@@ -165,17 +178,17 @@ function evenT(index, count) {
   return index / (count - 1);
 }
 
-// A log of harmonic number spreads the first octave and packs the highs.
-// The string picture does the other thing: bars 1–5 sit closer than the
-// rest, so the floor position is ratio^1.35, normalized across the set.
-// Detune still spreads whatever spacing this produces.
+// Harmonic number, normalized across the set. A higher power packs the
+// lows and makes the crest line fall too steeply for the traced sag, so
+// the fourth crest misses the bottom of the tail. Detune still spreads
+// whatever spacing this produces.
 export function spaceByLog(slices) {
   const usable = slices.filter((slice) => slice && Number(slice.ratio) > 0);
   if (usable.length < 2) {
     slices.forEach((slice, index) => { if (slice) slice.t = evenT(index, slices.length); });
     return slices;
   }
-  const power = 1.35;
+  const power = 1;
   const bent = usable.map((slice) => slice.ratio ** power);
   const lo = Math.min(...bent);
   const hi = Math.max(...bent);
@@ -543,10 +556,19 @@ function tailWorld(slice, world, maxSeconds, air) {
     const left = world.x <= (air?.hatchX ?? world.x);
     const z = left ? tune().accentZLeft : tune().accentZ;
     const top = world.y;
+    if (!left) {
+      return [
+        { x: world.x, y: top, z: 0 },
+        { x: world.x, y: top * 0.97, z },
+        { x: world.x, y: top * 0.02, z },
+      ];
+    }
+    // A shallow curve through the left block, not a second straight edge.
     return [
       { x: world.x, y: top, z: 0 },
-      { x: world.x, y: top * 0.97, z },
-      { x: world.x, y: top * 0.02, z },
+      { x: world.x, y: top * 0.68, z: z * 1.35 },
+      { x: world.x, y: top * 0.34, z: z * 0.7 },
+      { x: world.x, y: top * 0.02, z: z * 0.25 },
     ];
   }
   const rank = air?.rankOf(slice) ?? 0;
@@ -587,10 +609,14 @@ function hatchLimit(placed, detune) {
 function drawSlices(ctx, slices, detune, place, camera, look, palette, clock, style, selected, bloom, weight, bulk = 1, alpha = 1, accentAlpha = alpha, hatchAlpha = alpha) {
   const ink = { width: weight * bulk, alpha, halo: 0, haloAlpha: 0 };
   const accent = { width: weight * 0.5 * bulk, alpha: accentAlpha, halo: 0, haloAlpha: 0 };
-  const tail = { width: weight * (bloom ? 1.05 : 1), alpha: 1, halo: 0, haloAlpha: 0 };
-  const octave = { width: weight * (bloom ? 0.68 : 0.64), alpha: 1, halo: 0, haloAlpha: 0 };
+  // Wide under the blur, a lighter core on the sharp pass. The pair stays soft.
+  const tailW = bloom ? weight * (bulk > 1.15 ? 2.7 : 1.7) : weight * 1.55;
+  const tail = { width: tailW, alpha: 1, halo: 0, haloAlpha: 0 };
+  const octave = { width: tailW * 0.74, alpha: 1, halo: 0, haloAlpha: 0 };
   const rail = { width: weight * bulk, alpha, halo: 0, haloAlpha: 0 };
-  const rung = { width: weight * 0.72 * bulk, alpha: bloom ? hatchAlpha : tune().hatchAlpha, halo: 0, haloAlpha: 0 };
+  const rung = { width: weight * 0.58 * bulk, alpha: bloom ? tune().hatchGlow : tune().hatchAlpha, halo: 0, haloAlpha: 0 };
+  const tailColor = mixHex(palette.wire, palette.paper, tune().tailCream);
+  const octaveColor = mixHex(palette.wire, palette.paper, tune().octaveCream);
   const air = airFrame(slices, clock, detune);
   const visible = [];
   for (let index = 0; index < slices.length; index++) {
@@ -613,16 +639,30 @@ function drawSlices(ctx, slices, detune, place, camera, look, palette, clock, st
     glow(ctx, atDepth(placed, 0), palette.ink, rail, 1);
     glow(ctx, atDepth(placed, PLANE.ribbonZ), palette.ink, rail, 1);
     const hatched = placed.filter((item) => worldOf(item.slice, detune).x <= limit);
-    for (const z of PLANE.latticeZ) {
-      glow(ctx, atDepth(hatched, z), palette.ink, rung, 1);
+    // Short diagonals in both directions, uneven lengths. The blur turns
+    // them into a weave. A ruled lattice of long rails reads as a grid.
+    for (let i = 0; i < hatched.length; i++) {
+      const item = hatched[i];
+      const world = worldOf(item.slice, detune);
+      // Stay under the crest. A rung taller than its bar leaves the fitted frame.
+      const depth = Math.min((0.46 + i * 0.2) * (i % 2 ? 0.78 : 1), world.y / 0.72);
+      const far = place(camera, world.x, 0, depth);
+      glow(ctx, [item.tri.foot, far], palette.ink, rung, item.slice.alpha);
+      const next = hatched[i + 1];
+      if (!next) continue;
+      const nxt = worldOf(next.slice, detune);
+      const mid = place(camera, world.x, 0, depth * 0.42);
+      const low = place(camera, nxt.x, 0, 0.1);
+      const high = place(camera, nxt.x, 0, depth * 0.28);
+      glow(ctx, [mid, low], palette.ink, rung, item.slice.alpha);
+      glow(ctx, [item.tri.foot, high], palette.ink, rung, item.slice.alpha);
     }
     for (const item of placed) {
       const world = worldOf(item.slice, detune);
-      // One rung per bar, back along depth. The left ones run far enough
-      // to cross the neighbouring curve-feet, which is the lattice.
-      const rungZ = world.x <= limit ? tune().rungZ : PLANE.ribbonZ;
-      const far = place(camera, world.x, 0, rungZ);
-      glow(ctx, [item.tri.foot, far], palette.ink, world.x <= limit ? rung : ink, item.slice.alpha);
+      if (world.x > limit) {
+        const far = place(camera, world.x, 0, PLANE.ribbonZ);
+        glow(ctx, [item.tri.foot, far], palette.ink, ink, item.slice.alpha);
+      }
       glow(ctx, [item.tri.foot, item.tri.crest], palette.ink, ink, item.slice.alpha);
     }
   }
@@ -634,7 +674,7 @@ function drawSlices(ctx, slices, detune, place, camera, look, palette, clock, st
       const strength = bloom
         ? (rank === 0 ? tune().tailGlow : tune().octaveGlow)
         : (rank === 0 ? tune().tailSharp : tune().octaveSharp);
-      glow(ctx, item.tri.curve, palette.wire, look, strength);
+      glow(ctx, item.tri.curve, rank === 0 ? tailColor : octaveColor, look, strength);
       continue;
     }
     const left = world.x <= limit;
@@ -747,6 +787,7 @@ function sitePalette(colors, invert = true) {
   return {
     panel,
     ink: invert ? bg : fg,
+    paper: bg,
     wire: colors?.accent || '#d4421c',
     bloom: invert ? 'lighter' : 'source-over',
   };
