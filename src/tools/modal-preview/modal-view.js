@@ -77,7 +77,7 @@ export const PLANE = {
   // far enough that the bar stays the ink colour.
   accentZ: 0.05,
   // Back rail, about one bar-step behind the front so the floor is a band.
-  ribbonZ: 0.68,
+  ribbonZ: 1.1,
   // Floor hatch under bars 1 to about 6. Evenly spaced, and tall enough
   // that the crossings run up through those bars, not only along the floor.
   latticeZ: [0.5, 1.0, 1.5, 2.0],
@@ -353,11 +353,11 @@ export function paintModalView(ctx, partials, options = {}) {
   // is softer still, a tint rather than a second set of bars.
   const wide = Math.max(2.4, weight * (style === 'eco' ? 0.7 : 1.05));
   const tight = Math.max(1.4, weight * (style === 'eco' ? 0.45 : 0.62));
-  const scene = Math.max(4.2, weight * 1.05);
+  const scene = Math.max(4.8, weight * 1.22);
   ctx.save();
   ctx.filter = `blur(${scene}px)`;
   ctx.globalCompositeOperation = palette.bloom;
-  drawSlices(ctx, slices, detune, place, camera, look, palette, clock, style, selected, true, weight, 1.15, 0.14, 0.05, 0.08);
+  drawSlices(ctx, slices, detune, place, camera, look, palette, clock, style, selected, true, weight, 1.15, 0.16, 0.05, 0.08);
   ctx.restore();
   ctx.save();
   ctx.filter = `blur(${wide}px)`;
@@ -533,7 +533,7 @@ function tailSpline(x, y0, crests, railRight, steps) {
   ));
   const start = screens[0];
   const barScreen = Math.max(0.2, (FLOOR_SHEAR * start.sx) - start.sy);
-  const drop = barScreen * 0.56;
+  const drop = barScreen * 0.66;
   // Keep the bend where bar 5 sat on an even floor, even if the left posts pack tighter.
   const spanX = Math.max(0.4, railRight - start.sx);
   let bendSx = start.sx + spanX * (4 / 15);
@@ -601,24 +601,31 @@ function tailWorld(slice, world, maxSeconds, air) {
   const y0 = air?.anchorY ?? world.y;
   const full = tailSpline(x, y0, air?.crests, air?.railRight ?? x + PLANE.span, 36);
   if (rank === 0) return full;
-  // The octave leaves the fundamental around bar 4–5 and runs below it,
-  // parallel and shorter.
+  // Leave at the bend and run straight, parallel to the rise. Copying the
+  // rounded bottom made the octave droop below the tail.
   const seen = full.map((point) => restScreen(point.x, point.y, point.z));
   let bottom = 0;
   for (let i = 1; i < seen.length; i++) {
     if (seen[i].sy > seen[bottom].sy) bottom = i;
   }
-  // Leave at the bend, near bar 5, and stop near 55% across the panel.
-  const start = bottom;
   const floorSpan = Math.max(0.4, (air?.railRight ?? x) - (air?.anchorX ?? x));
   const stopX = seen[0].sx + floorSpan * 0.66;
-  let end = start + 1;
-  while (end < seen.length - 1 && seen[end].sx < stopX) end += 1;
-  // One bar step below the fundamental, for the whole branch.
   let step = PLANE.span / 15;
   if (air?.crests?.length > 1) step = Math.abs(air.crests[1].x - air.crests[0].x);
-  const tuck = step * Math.hypot(1, FLOOR_SHEAR) * 1.2 + (rank - 1) * step * 0.35;
-  return full.slice(start, end + 1).map((point) => ({ x: point.x, y: point.y - tuck, z: point.z }));
+  const tuck = step * Math.hypot(1, FLOOR_SHEAR) * 1.85 + (rank - 1) * step * 0.35;
+  const riseRad = 34 * Math.PI / 180;
+  const sx0 = seen[bottom].sx;
+  const sy0 = seen[bottom].sy + tuck;
+  const run = Math.max(0.2, stopX - sx0);
+  const samples = 14;
+  const straight = [];
+  for (let i = 0; i <= samples; i++) {
+    const t = i / samples;
+    const sx = sx0 + run * t;
+    const sy = sy0 - Math.tan(riseRad) * run * t;
+    straight.push(fromRestScreen(x, sx, sy));
+  }
+  return straight;
 }
 
 function fadeLine(ctx, start, end, color, look, alpha) {
