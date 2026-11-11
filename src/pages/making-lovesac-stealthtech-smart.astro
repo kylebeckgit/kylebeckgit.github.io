@@ -1,0 +1,148 @@
+---
+import Base from '../layouts/Base.astro';
+import article from '../content/making-lovesac-stealthtech-smart.md?raw';
+
+const DASH_W = 368;
+const DASH_H = 800;
+
+function escapeHtml(value) {
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function inline(value) {
+  let text = escapeHtml(value);
+  text = text.replace(/`([^`]+)`/g, '<code>$1</code>');
+  text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label, href) => {
+    const rel = href.startsWith('http') ? ' rel="noopener"' : '';
+    return `<a href="${href}"${rel}>${label}</a>`;
+  });
+  text = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  return text;
+}
+
+function tableHtml(rows) {
+  const parsed = rows.map((row) => row.split('|').slice(1, -1).map((cell) => cell.trim()));
+  const kept = parsed.filter((cols) => !cols.every((cell) => /^:?-+:?$/.test(cell)));
+  const [head, ...body] = kept;
+  const headHtml = head.map((cell) => `<th>${inline(cell)}</th>`).join('');
+  const bodyHtml = body.map((cols) => `<tr>${cols.map((cell) => `<td>${inline(cell)}</td>`).join('')}</tr>`).join('');
+  return `<div class="table-scroll"><table><thead><tr>${headHtml}</tr></thead><tbody>${bodyHtml}</tbody></table></div>`;
+}
+
+const buyBox = `<aside class="kit"><p class="kit-title">What you'd buy</p><ul>
+<li><a href="https://www.amazon.com/dp/B09HC5GRKY" rel="noopener">WiiM Mini</a></li>
+<li><a href="https://shop.m5stack.com/products/atom-lite-esp32-development-kit" rel="noopener">M5Stack ATOM Lite</a></li>
+<li><a href="https://www.amazon.com/dp/B00NH11H38" rel="noopener">The one that came with your StealthTech works fine. If you've misplaced it, an Amazon Basics 6 ft cable will do.</a></li>
+<li>Home Assistant is free software; see the <a href="#words">glossary below</a>.</li>
+</ul></aside>`;
+
+const figure = `<figure class="phone"><img src="/assets/images/couch-dashboard.webp" width="${DASH_W}" height="${DASH_H}" alt="The Couch dashboard on a phone, with Power, Mute and volume buttons, input buttons for TV, Music, Bluetooth and AUX, sound modes, and a Quiet Couch toggle" loading="lazy" decoding="async"><figcaption>My Couch dashboard on my phone.</figcaption></figure>`;
+
+function render(markdown) {
+  const lines = markdown.replace(/\r\n/g, '\n').split('\n');
+  const html = [];
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    if (line.trim() === '' || line.trim() === '#grok bot/home#') { i += 1; continue; }
+    if (line.startsWith('# ') && !line.startsWith('## ')) { i += 1; continue; }
+    if (line.startsWith('## ')) {
+      const text = line.slice(3).trim();
+      const id = text === "The words you'll see" ? ' id="words"' : '';
+      html.push(`<h2${id}>${inline(text)}</h2>`);
+      i += 1;
+      continue;
+    }
+    if (line.startsWith('```')) {
+      const buf = [];
+      i += 1;
+      while (i < lines.length && !lines[i].startsWith('```')) { buf.push(lines[i]); i += 1; }
+      i += 1;
+      html.push(`<pre><code>${escapeHtml(buf.join('\n'))}</code></pre>`);
+      continue;
+    }
+    if (line.startsWith('|')) {
+      const buf = [];
+      while (i < lines.length && lines[i].startsWith('|')) { buf.push(lines[i]); i += 1; }
+      html.push(tableHtml(buf));
+      continue;
+    }
+    if (line.startsWith('- ')) {
+      const items = [];
+      while (i < lines.length && lines[i].startsWith('- ')) { items.push(lines[i].slice(2)); i += 1; }
+      html.push(`<ul>${items.map((item) => `<li>${inline(item)}</li>`).join('')}</ul>`);
+      continue;
+    }
+    const buf = [line];
+    i += 1;
+    while (i < lines.length && lines[i].trim() !== '' && !lines[i].startsWith('#') && !lines[i].startsWith('|') && !lines[i].startsWith('```') && !lines[i].startsWith('- ')) {
+      buf.push(lines[i]);
+      i += 1;
+    }
+    const text = buf.join(' ');
+    html.push(`<p>${inline(text)}</p>`);
+    if (text.startsWith('**Disclaimer**')) html.push(buyBox);
+    if (text.startsWith('I built a Couch dashboard for it')) html.push(figure);
+  }
+  return html.join('\n');
+}
+
+const body = render(article);
+---
+<Base title="Making Lovesac StealthTech smart" path="/making-lovesac-stealthtech-smart/" description="How I added AirPlay, Siri and a shared phone remote to a Lovesac StealthTech with a WiiM streamer, a small Bluetooth chip and Home Assistant." robots="noindex, nofollow">
+  <article class="piece">
+    <h1>Making Lovesac Stealthtech Smart</h1>
+    <div set:html={body} />
+  </article>
+</Base>
+<style>
+  .piece { max-width: min(42rem, 100%); overflow-x: clip; }
+  .piece :global(p) { margin: 0 0 1rem; }
+  .piece :global(h2) { margin: 2.25rem 0 .75rem; }
+  .piece :global(ul) { margin: 0 0 1rem; padding-left: 1.2rem; }
+  .piece :global(li) { margin: .4rem 0; }
+  .piece :global(code) { font-family: var(--mono); font-size: .92em; overflow-wrap: anywhere; }
+  .piece :global(pre code) { overflow-wrap: normal; white-space: pre; }
+  .piece :global(pre) {
+    font-family: var(--mono);
+    font-size: .82rem;
+    line-height: 1.45;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 1rem;
+    overflow-x: auto;
+    max-width: 100%;
+    margin: 0 0 1rem;
+  }
+  .piece :global(pre code) { font-size: inherit; }
+  .piece :global(.table-scroll) { overflow-x: auto; max-width: 100%; margin: 0 0 1rem; }
+  .piece :global(table) { width: 100%; border-collapse: collapse; }
+  .piece :global(th),
+  .piece :global(td) {
+    text-align: left;
+    vertical-align: top;
+    padding: .65rem .75rem .65rem 0;
+    border-bottom: 1px solid var(--line);
+    overflow-wrap: anywhere;
+  }
+  .piece :global(th) { color: var(--muted); font-weight: 600; }
+  .piece :global(.kit) {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 1rem 1.15rem;
+    margin: 0 0 1.25rem;
+  }
+  .piece :global(.kit-title) { font-weight: 650; margin: 0 0 .4rem; }
+  .piece :global(.kit ul) { margin: 0; }
+  .piece :global(.phone) { margin: 1.25rem 0 1.5rem; max-width: 17.5rem; }
+  .piece :global(.phone img) {
+    width: 100%;
+    height: auto;
+    display: block;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+  }
+  .piece :global(.phone figcaption) { color: var(--muted); font-size: .9rem; margin-top: .45rem; }
+</style>

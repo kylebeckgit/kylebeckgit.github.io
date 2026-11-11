@@ -19,7 +19,8 @@ for (const file of await walk(root)) {
   const raw = await readFile(file, 'utf8');
   const text = raw
     .replace(/<script[\s\S]*?<\/script>/gi, '')
-    .replace(/<style[\s\S]*?<\/style>/gi, '');
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<pre[\s\S]*?<\/pre>/gi, '');
   const index = text.indexOf('[');
   if (index !== -1) {
     hits.push(`${path.relative(root, file)}: ${text.slice(Math.max(0, index - 40), index + 60).replace(/\s+/g, ' ')}`);

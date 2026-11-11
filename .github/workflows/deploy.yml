@@ -27,13 +27,18 @@ jobs:
       - name: Launch checks
         run: |
           set -euo pipefail
-          if grep -R -l -n "noindex" dist --include='*.html' | grep -v '/z3-describe-preview.html$'; then
+          if grep -R -l -n "noindex" dist --include='*.html' | grep -v -e '/z3-describe-preview.html$' -e '/making-lovesac-stealthtech-smart/index.html$'; then
             echo "noindex is on a public page"
             exit 1
           fi
           grep -q 'name="robots" content="noindex, nofollow"' dist/z3-describe-preview.html
+          grep -q 'name="robots" content="noindex, nofollow"' dist/making-lovesac-stealthtech-smart/index.html
           if grep -R -n 'z3-describe-preview' dist --include='*.html' | grep -v 'z3-describe-preview.html:'; then
             echo "the describe preview is linked from another page"
+            exit 1
+          fi
+          if grep -R -n 'making-lovesac-stealthtech-smart' dist --include='*.html' | grep -v 'making-lovesac-stealthtech-smart/index.html:'; then
+            echo "the lovesac article is linked from another page"
             exit 1
           fi
           if grep -R -n "LS_VARIANT_ID_TODO" dist --include='*.html'; then
@@ -86,4 +91,8 @@ jobs:
           test ! -e _site/node_modules
           test ! -e _site/package.json
           test ! -e _site/plus3-doremidi-guide
+          if test -f _site/sitemap.xml && grep -q making-lovesac-stealthtech-smart _site/sitemap.xml; then
+            echo "the lovesac article is in the sitemap"
+            exit 1
+          fi
           node scripts/check-html.mjs _site
