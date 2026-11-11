@@ -1,0 +1,133 @@
+<!DOCTYPE html><html lang="en" data-font="specsheet"> <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Making Lovesac StealthTech smart | Kyle Beck</title><meta name="description" content="How I added AirPlay, Siri and a shared phone remote to a Lovesac StealthTech with a WiiM streamer, a small Bluetooth chip and Home Assistant."><link rel="canonical" href="https://kyle-beck.com/making-lovesac-stealthtech-smart/"><meta property="og:title" content="Making Lovesac StealthTech smart | Kyle Beck"><meta property="og:description" content="How I added AirPlay, Siri and a shared phone remote to a Lovesac StealthTech with a WiiM streamer, a small Bluetooth chip and Home Assistant."><meta property="og:url" content="https://kyle-beck.com/making-lovesac-stealthtech-smart/"><meta property="og:type" content="website"><meta property="og:image" content="https://kyle-beck.com/assets/images/og.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta property="og:image:alt" content="Kyle Beck"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:image" content="https://kyle-beck.com/assets/images/og.png"><meta name="robots" content="noindex, nofollow"><link rel="preload" as="font" type="font/woff2" crossorigin href="/fonts/figtree/figtree-latin-wght-normal.woff2"><link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" href="/assets/images/favicon.svg" type="image/svg+xml"><link rel="icon" href="/assets/images/favicon-32.png" type="image/png" sizes="32x32"><link rel="apple-touch-icon" href="/assets/images/apple-touch-icon.png"><link rel="manifest" href="/site.webmanifest"><meta name="theme-color" content="#f2ede3" media="(prefers-color-scheme: light)"><meta name="theme-color" content="#161513" media="(prefers-color-scheme: dark)"><script type="application/ld+json">{"@context":"https://schema.org","@type":"Person","name":"Kyle Beck","jobTitle":"Musician & Sound Designer","url":"https://kyle-beck.com","sameAs":["https://github.com/kylebeckgit"]}</script><link rel="stylesheet" href="/astro/about.ok-P9InA.css">
+<style>.piece[data-astro-cid-aehu6zqt]{max-width:min(42rem,100%);overflow-x:clip}.piece[data-astro-cid-aehu6zqt] p{margin:0 0 1rem}.piece[data-astro-cid-aehu6zqt] h2{margin:2.25rem 0 .75rem}.piece[data-astro-cid-aehu6zqt] ul{margin:0 0 1rem;padding-left:1.2rem}.piece[data-astro-cid-aehu6zqt] li{margin:.4rem 0}.piece[data-astro-cid-aehu6zqt] code{font-family:var(--mono);font-size:.92em;overflow-wrap:anywhere}.piece[data-astro-cid-aehu6zqt] pre code{overflow-wrap:normal;white-space:pre}.piece[data-astro-cid-aehu6zqt] pre{font-family:var(--mono);font-size:.82rem;line-height:1.45;background:var(--card);border:1px solid var(--line);border-radius:6px;padding:1rem;overflow-x:auto;max-width:100%;margin:0 0 1rem}.piece[data-astro-cid-aehu6zqt] pre code{font-size:inherit}.piece[data-astro-cid-aehu6zqt] .table-scroll{overflow-x:auto;max-width:100%;margin:0 0 1rem}.piece[data-astro-cid-aehu6zqt] table{width:100%;border-collapse:collapse}.piece[data-astro-cid-aehu6zqt] th,.piece[data-astro-cid-aehu6zqt] td{text-align:left;vertical-align:top;padding:.65rem .75rem .65rem 0;border-bottom:1px solid var(--line);overflow-wrap:anywhere}.piece[data-astro-cid-aehu6zqt] th{color:var(--muted);font-weight:600}.piece[data-astro-cid-aehu6zqt] .kit{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:1rem 1.15rem;margin:0 0 1.25rem}.piece[data-astro-cid-aehu6zqt] .kit-title{font-weight:650;margin:0 0 .4rem}.piece[data-astro-cid-aehu6zqt] .kit ul{margin:0}.piece[data-astro-cid-aehu6zqt] .phone{margin:1.25rem 0 1.5rem;max-width:17.5rem}.piece[data-astro-cid-aehu6zqt] .phone img{width:100%;height:auto;display:block;border:1px solid var(--line);border-radius:12px}.piece[data-astro-cid-aehu6zqt] .phone figcaption{color:var(--muted);font-size:.9rem;margin-top:.45rem}
+</style></head> <body> <a class="skip" href="#main">Skip to content</a> <header class="site"><div class="wrap"> <a class="brand" href="/"> <img class="mark mark-for-light" src="/assets/images/favicon.svg" alt="" width="34" height="34"> <img class="mark mark-for-dark" src="/assets/images/mark-on-dark.svg" alt="" width="34" height="34"> <span class="visually-hidden">Kyle Beck</span> </a> <nav aria-label="Main"><ul><li><a href="/packs/">Packs</a></li><li><a href="/library/">Library</a></li><li><a href="/tools/">Tools</a></li><li><a href="/contact/">Contact</a></li></ul></nav> </div></header> <main id="main"><div class="wrap"> <article class="piece" data-astro-cid-aehu6zqt> <h1 data-astro-cid-aehu6zqt>Making Lovesac Stealthtech Smart</h1> <div data-astro-cid-aehu6zqt><p><strong>TLDR</strong>: I was frustrated that StealthTech doesn't have AirPlay, so I found a way to add it with a WiiM streamer.</p>
+<p>Then I ran into a new problem: changing inputs is a pain. We mostly watch TV through the system, but now and then I want to play music on it with my HomePods.</p>
+<p>So I solved that with Home Assistant and a Bluetooth chip.</p>
+<p><strong>Bonus points!</strong> I can now use Siri commands with StealthTech, and my wife and I can both control the Lovesac from our phones without kicking the other off.</p>
+<p>Lots of details below. Some of it is nerdy, fair warning. I've tried to explain the techy words as we go, and there's a short glossary right after this.</p>
+<p><strong>Disclaimer</strong>: I'm tech-savvy, but I don't care for getting too into the weeds with scripting home automation stuff. I leaned a lot on Grok Bot for planning this, coding it, and setting up Home Assistant. So if you think you aren't savvy enough to pull this off, I'd say give it a shot anyway. The tools are good enough today that you can describe what you want and have it built for you. I'm happy to help out as well if I can, so feel free to <a href="https://kyle-beck.com/contact/" rel="noopener">get in touch</a>.</p>
+<aside class="kit"><p class="kit-title">What you'd buy</p><ul>
+<li><a href="https://www.amazon.com/dp/B09HC5GRKY" rel="noopener">WiiM Mini</a></li>
+<li><a href="https://shop.m5stack.com/products/atom-lite-esp32-development-kit" rel="noopener">M5Stack ATOM Lite</a></li>
+<li><a href="https://www.amazon.com/dp/B00NH11H38" rel="noopener">The one that came with your StealthTech works fine. If you've misplaced it, an Amazon Basics 6 ft cable will do.</a></li>
+<li>Home Assistant is free software; see the <a href="#words">glossary below</a>.</li>
+</ul></aside>
+<p>This isn't affiliated with Lovesac. It works by talking to the system in a way Lovesac doesn't officially support, so try it at your own risk. I’ve used it with great success however so take that for what its worth. </p>
+<h2 id="words">The words you'll see</h2>
+<ul><li><strong><a href="https://www.home-assistant.io/" rel="noopener">Home Assistant</a></strong> is free software that runs in your house and connects all your smart devices in one place, so they can work together. Everything here hangs off it.</li><li><strong>Bluetooth proxy</strong> is a tiny, cheap gadget that sits in a room and passes Bluetooth signals along to Home Assistant over your Wi-Fi.</li><li><strong><a href="https://esphome.io/" rel="noopener">ESPHome</a></strong> is the free software that turns that little gadget into a Bluetooth proxy.</li><li><strong>Integration</strong> is an add-on that teaches Home Assistant how to talk to one kind of device.</li><li><strong>HDMI-ARC</strong> is the HDMI connection that sends your TV's sound to the soundbar. <strong>Optical</strong> is a second, separate cable that carries digital audio.</li><li><strong>A virtual machine (VM)</strong> is a pretend computer running inside your real one. Mine runs Home Assistant on my Mac Studio, which is on 24/7. </li><li><strong><a href="https://www.apple.com/ios/home/" rel="noopener">HomeKit</a></strong> is Apple's smart home system, which is how Siri and the Home app control things.</li></ul>
+<h2>Why StealthTech needed help</h2>
+<p>We have HomePods around the house and a Lovesac StealthTech Sound + Charge system in the Sactionals in our living room, which handles our TV audio. StealthTech is a "dumb" system, meaning it can't join your smart home out of the box. It only takes HDMI-ARC, optical, Bluetooth, and AUX. There's no AirPlay support.</p>
+<p>The Lovesac app made things worse in a two-person house. Only one phone can hold the Bluetooth control connection at a time, so whoever opens the app kicks the other person off.</p>
+<h2>The Setup</h2>
+<p>I fed the StealthTech with a WiiM music streamer, connected over an optical cable. (You can use aux, but optical gives you the best sound quality.) Then I put a tiny Bluetooth proxy next to the couch so Home Assistant could talk to the Lovesac, and built a shared phone remote with Siri controls like mute on top.</p>
+<p>Now when I AirPlay to the WiiM and the HomePods together, the couch joins the rest of the house's music automatically. When the music stops, it switches itself back to the TV. My wife and I can use the same remote at the same time, and Siri can control it from anywhere in the house.</p>
+<p>Let's get into the nerdier bits.</p>
+<h2>What I Used</h2>
+<div class="table-scroll"><table><thead><tr><th>Piece</th><th>What it's for</th></tr></thead><tbody><tr><td><a href="https://www.amazon.com/dp/B09HC5GRKY" rel="noopener">WiiM Mini</a></td><td>A small streamer that adds AirPlay, Spotify Connect and app playback, and feeds the StealthTech over optical</td></tr><tr><td>Optical cable (the one that came with your StealthTech works fine; if you've misplaced it, <a href="https://www.amazon.com/dp/B00NH11H38" rel="noopener">this Amazon Basics 6 ft cable</a> will do. Aux works too, but optical sounds best)</td><td>Connects the WiiM to the StealthTech center channel</td></tr><tr><td><a href="https://shop.m5stack.com/products/atom-lite-esp32-development-kit" rel="noopener">M5Stack ATOM Lite</a> (a tiny ESP32 board)</td><td>The Bluetooth proxy. Plug it in somewhere close to the sound bar</td></tr><tr><td><a href="https://www.home-assistant.io/installation/" rel="noopener">Home Assistant OS</a></td><td>The Home Assistant software. Mine runs in a virtual machine on my Mac Studio</td></tr><tr><td><a href="https://github.com/ojiudezue/ha-lovesac-stealthtech" rel="noopener">lovesac_stealthtech</a></td><td>A community integration that controls power, volume, mute, input, sound mode, EQ and Quiet Couch over Bluetooth</td></tr><tr><td><a href="https://companion.home-assistant.io/" rel="noopener">Home Assistant Companion app</a></td><td>The shared Couch remote on both our phones</td></tr><tr><td><a href="https://www.home-assistant.io/integrations/homekit/" rel="noopener">HomeKit Bridge</a> (built into Home Assistant)</td><td>Shares one "TV Mute" switch with Siri and the HomePods</td></tr></tbody></table></div>
+<h2>WiiM into optical, HomePods in the group</h2>
+<p>I left the TV on HDMI-ARC and plugged the WiiM into the optical input. When we want music, we AirPlay to the HomePods and the WiiM together. The WiiM shows up as an AirPlay 2 speaker right next to the HomePods, so I can send to all of them at once. The couch gets the music over optical, and the rest of the house gets it over AirPlay.</p>
+<p>Home Assistant's built-in <a href="https://www.home-assistant.io/integrations/wiim/" rel="noopener">WiiM integration</a> found the WiiM on its own. One annoyance is that every kind of playback (AirPlay, Spotify Connect, the WiiM app) is labeled as the source <code>"Network"</code>, so you can't single out AirPlay. I just trigger on whether it's <code>playing</code>.</p>
+<h2>Why the Bluetooth chip has to sit by the couch</h2>
+<p>Home Assistant runs in a virtual machine on my Mac Studio, which is nowhere near the couch, so it can't reach the StealthTech over Bluetooth from there. An <a href="https://esphome.io/projects/" rel="noopener">ESPHome Bluetooth proxy</a> solves that. It's a small board near the StealthTech that passes the Bluetooth connection back to Home Assistant over Wi-Fi.</p>
+<p>I used an <a href="https://shop.m5stack.com/products/atom-lite-esp32-development-kit" rel="noopener">M5Stack ATOM Lite</a>. You flash it from your browser over USB using the <a href="https://esphome.io/projects/" rel="noopener">ESPHome projects page</a> (the Generic ESP32 option works if your board isn't listed), connect it to Wi-Fi, and Home Assistant picks it up. On this firmware the little light stays off. That worried me for a minute, but it's normal.</p>
+<p>My first try was plugging it in somewhere convenient, and the signal was weak, around -97 dBm (dBm is signal strength, and closer to zero is better). Commands barely worked. Once I moved it right next to the couch it came in around -50 dBm and everything started working. So the lesson I learned is that it really does need to be close.</p>
+<p>The ATOM Lite worked well for me once it was close to the couch.</p>
+<h2>The StealthTech integration</h2>
+<p><a href="https://github.com/ojiudezue/ha-lovesac-stealthtech" rel="noopener"><code>ojiudezue/ha-lovesac-stealthtech</code></a> talks to the StealthTech hub using the Bluetooth commands that the <a href="https://github.com/jackspirou/libstealthtech" rel="noopener">libstealthtech</a> project figured out by reverse engineering. It covers power, volume, mute, inputs (<code>HDMI-ARC</code>, <code>Optical</code>, <code>Bluetooth</code>, <code>AUX</code>), sound modes, EQ, Quiet Couch and the Sync button.</p>
+<p>To install it, I used Home Assistant's built-in <a href="https://www.home-assistant.io/integrations/marketplace/" rel="noopener">Marketplace</a> (Settings, then Marketplace). Add the GitHub repository as a custom repository (it has you approve the connection on GitHub, so your password never goes into Home Assistant), install it, and restart. On my system the media player is called <code>media_player.living_room_lovesac_stealthtech</code>, and the WiiM showed up as <code>media_player.couch</code>.</p>
+<p>There's the same limit here as with the app: the hub only allows one Bluetooth control connection. If the Lovesac app is open on anyone's phone, Home Assistant's commands fail and the hub eventually shows as unavailable. We keep that app closed. Bluetooth audio from a phone is a separate connection, so it can still work while Home Assistant keeps control.</p>
+<h2>How we use it</h2>
+<p>When the WiiM starts playing, the StealthTech wakes up if it's off, waits a few seconds, then switches to Optical. When the WiiM has been idle, paused or off for 30 seconds and the hub is still on Optical, it switches back to HDMI-ARC.</p>
+<p>Two small gotchas. The source names have to match exactly, so it's <code>HDMI-ARC</code> with a hyphen. And the hub ignores input changes while it's off, so the first automation turns it on before switching.</p>
+<p>Here are the two automations, in case you want to copy them:</p>
+<pre><code>- id: stealthtech_optical_when_wiim_plays
+  alias: "StealthTech: switch to Optical when the WiiM plays"
+  description: &gt;-
+    The WiiM feeds the StealthTech over optical. When it starts playing, power
+    the hub on if needed and select Optical, unless Optical is already selected.
+    Fires on any WiiM playback (AirPlay, Spotify Connect, app, etc.): the native
+    WiiM integration reports every streaming service as source "Network".
+  mode: single
+  max_exceeded: silent
+  triggers:
+    - trigger: state
+      entity_id: media_player.couch
+      to: "playing"
+      for:
+        seconds: 2
+  conditions: []
+  actions:
+    - if:
+        - condition: state
+          entity_id: media_player.living_room_lovesac_stealthtech
+          state: "off"
+      then:
+        - action: media_player.turn_on
+          target:
+            entity_id: media_player.living_room_lovesac_stealthtech
+        - delay:
+            seconds: 4
+    - if:
+        - condition: template
+          value_template: &gt;-
+            {{ state_attr('media_player.living_room_lovesac_stealthtech', 'source') != 'Optical' }}
+      then:
+        - action: media_player.select_source
+          target:
+            entity_id: media_player.living_room_lovesac_stealthtech
+          data:
+            source: "Optical"
+
+- id: stealthtech_hdmi_after_wiim_stops
+  alias: "StealthTech: back to HDMI-ARC 30 s after the WiiM stops"
+  description: &gt;-
+    After the WiiM has been idle, paused, or off for 30 seconds, return the
+    StealthTech to HDMI-ARC (TV). Only fires if the hub is on and still on
+    Optical, so it never overrides Bluetooth/AUX.
+  mode: single
+  max_exceeded: silent
+  triggers:
+    - trigger: state
+      entity_id: media_player.couch
+      to:
+        - "idle"
+        - "paused"
+        - "off"
+        - "standby"
+        - "unavailable"
+      for:
+        seconds: 30
+  conditions:
+    - condition: state
+      entity_id: media_player.living_room_lovesac_stealthtech
+      state: "on"
+    - condition: template
+      value_template: &gt;-
+        {{ state_attr('media_player.living_room_lovesac_stealthtech', 'source') == 'Optical' }}
+    - condition: not
+      conditions:
+        - condition: state
+          entity_id: media_player.couch
+          state:
+            - "playing"
+            - "buffering"
+  actions:
+    - action: media_player.select_source
+      target:
+        entity_id: media_player.living_room_lovesac_stealthtech
+      data:
+        source: "HDMI-ARC"</code></pre>
+<h2>One remote for both of us, plus Siri</h2>
+<p>This is the part that actually changed day-to-day life in a house with more than one person.</p>
+<p>With Lovesac's app, control is a single seat. One phone connects, and the other is locked out until the first person closes the app or walks out of range. If someone has the app open upstairs, you can't change the volume from the couch. That's just how it's built.</p>
+<p>With Home Assistant in the middle, it works differently. The Companion app on my phone and on my wife's phone both talk to Home Assistant over Wi-Fi, and Home Assistant is the only thing that opens short Bluetooth connections to the hub. So neither of us fights over that one Bluetooth slot. We can both have the remote open, change the volume, switch inputs and hit mute, and nobody gets kicked off.</p>
+<p>I built a Couch dashboard for it, with big Power, Mute, Vol - and Vol + buttons. There are input buttons for TV, Music (Optical / WiiM), Bluetooth and AUX, plus sound modes and Quiet Couch. A More section holds the tone controls, a Resync button and the WiiM's play controls. My wife has her own non-admin login, the dashboard shows up in the sidebar for both of us, and either of us can set it as the app's default page. It only works on our home Wi-Fi.</p>
+<figure class="phone"><img src="/assets/images/couch-dashboard.webp" width="450" height="800" alt="The Couch dashboard on a phone, with Power, Mute and volume buttons, input buttons for TV, Music, Bluetooth and AUX, sound modes, and a Quiet Couch toggle" loading="lazy" decoding="async"><figcaption>My Couch dashboard on my phone.</figcaption></figure>
+<p>One button on the dashboard is worth explaining: Resync. Home Assistant keeps its own record of whether the StealthTech is on or off, and sometimes that record gets out of step with reality. I've seen the remote say the hub was on when it was actually off. When that happens, tapping Power does the wrong thing, and the music automation switches inputs based on bad information. Resync is the integration's Sync button. It makes Home Assistant ask the hub for its real status again. If the remote ever seems confused, tap it first. It's tucked under More right now, but next time I'd put it right on the main screen.</p>
+<p>One thing you'll notice is a small delay. Each tap on the remote takes about 1 to 3 seconds to take effect. That's because Home Assistant has to open a fresh Bluetooth connection to the StealthTech for each command, send it, and then hang up again.</p>
+<p>There's a setting in the integration that helps, called <code>idle_timeout</code>. It controls how long Home Assistant keeps that Bluetooth connection open after your last tap before hanging up. It was set to 5 seconds, and I raised it to 30. That way, if you tap a few times in a row, Home Assistant doesn't have to reconnect each time, and the remote feels less sluggish.</p>
+<p>The tradeoff is that the StealthTech only allows one Bluetooth control connection at a time. While Home Assistant is holding it open, the Lovesac app can't connect. With a 30-second timeout, that means the app is locked out for 30 seconds after your last tap. That's fine for us, since we don't use the Lovesac app anymore.</p>
+<p>Siri is the other win here. I wrapped the StealthTech mute in a "TV Mute" switch and shared only that switch through Home Assistant's HomeKit Bridge. You pair the bridge once from the Home app, drop TV Mute into the Living Room, and then anyone in the Home can use it from a phone or a HomePod. Saying "Hey Siri, turn on TV Mute" mutes the couch. You don't need the Companion app open, and you don't need to know who last had the Lovesac app. You just ask. (Apple really should just let you mute the Apple TV under all circumstances, but Apple does Apple things so this works intead). </p>
+<h2>Things that might trip you up</h2>
+<p>If Home Assistant stops responding to the couch, the most likely reason is that someone opened the Lovesac app. I'd leave it closed, or even delete it once Home Assistant is set up, so it can't get in the way.</p>
+<p>Also, a dark light on the ATOM Lite doesn't mean it's bricked. It lights up when you first plug it in, but once you flash the firmware this setup needs, the light stays off.</p></div> </article> </div></main> <footer class="site"><div class="wrap"> <span>© 2026 Kyle Beck</span> <ul><li><a href="mailto:kyle@kyle-beck.com">Email</a></li><li><a href="https://github.com/kylebeckgit">GitHub</a></li><li><a href="https://buymeacoffee.com/kylebeck">Buy Me a Coffee</a></li></ul> </div></footer> </body></html> 
