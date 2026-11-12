@@ -36,19 +36,73 @@ const buyBox = `<aside class="kit"><p class="kit-title">What you'd buy</p><ul>
 <li>Home Assistant is free software; see the <a href="#words">glossary below</a>.</li>
 </ul></aside>`;
 
+const diagram = `<figure class="diagram">
+<svg role="img" aria-label="The TV reaches the StealthTech by HDMI-ARC, the WiiM Mini by optical, and both phones AirPlay to a group with the HomePods. Home Assistant on the Mac Studio switches the input through an ATOM Lite Bluetooth proxy." viewBox="0 0 440 760" width="440" height="760">
+  <defs>
+    <marker id="lovesac-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <path d="M0 0 L8 4 L0 8 Z" fill="var(--accent)"></path>
+    </marker>
+  </defs>
+  <rect x="52" y="8" width="156" height="52" rx="8" fill="var(--card)" stroke="var(--line)"></rect>
+  <text x="130" y="38" text-anchor="middle" font-family="Figtree, sans-serif" font-size="15" font-weight="650" fill="var(--fg)">My Phone</text>
+  <rect x="232" y="8" width="156" height="52" rx="8" fill="var(--card)" stroke="var(--line)"></rect>
+  <text x="310" y="38" text-anchor="middle" font-family="Figtree, sans-serif" font-size="15" font-weight="650" fill="var(--fg)">Wife's Phone</text>
+  <line x1="130" y1="60" x2="130" y2="108" stroke="var(--accent)" stroke-width="1.5" marker-end="url(#lovesac-arrow)"></line>
+  <text x="138" y="86" font-family="Figtree, sans-serif" font-size="12" fill="var(--muted)">AirPlay</text>
+  <line x1="310" y1="60" x2="310" y2="108" stroke="var(--accent)" stroke-width="1.5" marker-end="url(#lovesac-arrow)"></line>
+  <text x="246" y="86" font-family="Figtree, sans-serif" font-size="12" fill="var(--muted)">AirPlay</text>
+  <path d="M52 34 H16 V520 H64" fill="none" stroke="var(--accent)" stroke-width="1.5" marker-end="url(#lovesac-arrow)"></path>
+  <path d="M388 34 H424 V520 H376" fill="none" stroke="var(--accent)" stroke-width="1.5" marker-end="url(#lovesac-arrow)"></path>
+  <text x="28" y="300" text-anchor="middle" font-family="Figtree, sans-serif" font-size="12" fill="var(--muted)" transform="rotate(-90 28 300)">Couch dashboard over Wi-Fi</text>
+  <text x="412" y="300" text-anchor="middle" font-family="Figtree, sans-serif" font-size="12" fill="var(--muted)" transform="rotate(90 412 300)">Couch dashboard over Wi-Fi</text>
+  <rect x="64" y="112" width="312" height="268" rx="12" fill="color-mix(in srgb, var(--accent) 12%, var(--card))" stroke="var(--line)"></rect>
+  <text x="220" y="136" text-anchor="middle" font-family="Figtree, sans-serif" font-size="13" font-weight="650" fill="var(--fg)">AirPlay 2 group</text>
+  <text x="220" y="154" text-anchor="middle" font-family="Figtree, sans-serif" font-size="12" fill="var(--muted)">Plays together</text>
+  <rect x="118" y="168" width="204" height="44" rx="8" fill="var(--card)" stroke="var(--line)"></rect>
+  <text x="220" y="195" text-anchor="middle" font-family="Figtree, sans-serif" font-size="15" font-weight="650" fill="var(--fg)">HomePods</text>
+  <rect x="118" y="228" width="204" height="44" rx="8" fill="var(--card)" stroke="var(--line)"></rect>
+  <text x="220" y="255" text-anchor="middle" font-family="Figtree, sans-serif" font-size="15" font-weight="650" fill="var(--fg)">WiiM Mini</text>
+  <line x1="220" y1="272" x2="220" y2="300" stroke="var(--accent)" stroke-width="1.5" marker-end="url(#lovesac-arrow)"></line>
+  <text x="228" y="290" font-family="Figtree, sans-serif" font-size="12" fill="var(--muted)">optical</text>
+  <rect x="88" y="304" width="264" height="52" rx="8" fill="var(--card)" stroke="var(--line)"></rect>
+  <text x="220" y="335" text-anchor="middle" font-family="Figtree, sans-serif" font-size="15" font-weight="650" fill="var(--fg)">Lovesac StealthTech</text>
+  <rect x="118" y="404" width="204" height="44" rx="8" fill="var(--card)" stroke="var(--line)"></rect>
+  <text x="220" y="431" text-anchor="middle" font-family="Figtree, sans-serif" font-size="15" font-weight="650" fill="var(--fg)">TV</text>
+  <line x1="220" y1="404" x2="220" y2="380" stroke="var(--accent)" stroke-width="1.5" marker-end="url(#lovesac-arrow)"></line>
+  <text x="228" y="396" font-family="Figtree, sans-serif" font-size="12" fill="var(--muted)">HDMI-ARC</text>
+  <rect x="64" y="488" width="312" height="118" rx="8" fill="var(--card)" stroke="var(--line)"></rect>
+  <text x="220" y="512" text-anchor="middle" font-family="Figtree, sans-serif" font-size="14" font-weight="650" fill="var(--fg)">Home Assistant on the Mac Studio</text>
+  <text x="220" y="534" text-anchor="middle" font-family="Figtree, sans-serif" font-size="12" fill="var(--muted)">
+    <tspan x="220" dy="0">Watches the WiiM. Switches the</tspan>
+    <tspan x="220" dy="16">StealthTech to Optical when it plays,</tspan>
+    <tspan x="220" dy="16">and back to HDMI-ARC 30 s after it stops.</tspan>
+  </text>
+  <line x1="220" y1="606" x2="220" y2="654" stroke="var(--accent)" stroke-width="1.5" marker-end="url(#lovesac-arrow)"></line>
+  <text x="228" y="636" font-family="Figtree, sans-serif" font-size="12" fill="var(--muted)">Wi-Fi</text>
+  <rect x="88" y="658" width="264" height="68" rx="8" fill="var(--card)" stroke="var(--line)"></rect>
+  <text x="220" y="684" text-anchor="middle" font-family="Figtree, sans-serif" font-size="15" font-weight="650" fill="var(--fg)">ATOM Lite</text>
+  <text x="220" y="704" text-anchor="middle" font-family="Figtree, sans-serif" font-size="12" fill="var(--muted)">ESPHome Bluetooth proxy by the couch</text>
+  <path d="M88 692 H40 V330 H88" fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#lovesac-arrow)"></path>
+  <text x="46" y="620" font-family="Figtree, sans-serif" font-size="12" fill="var(--muted)">Bluetooth</text>
+</svg>
+<figcaption>Sound, AirPlay, and the shared remote.</figcaption>
+</figure>`;
+
 const figure = `<figure class="phone"><img src="/assets/images/couch-dashboard.webp" width="${DASH_W}" height="${DASH_H}" alt="The Couch dashboard on a phone, with Power, Mute and volume buttons, input buttons for TV, Music, Bluetooth and AUX, sound modes, and a Quiet Couch toggle" loading="lazy" decoding="async"><figcaption>My Couch dashboard on my phone.</figcaption></figure>`;
 
 function render(markdown) {
   const lines = markdown.replace(/\r\n/g, '\n').split('\n');
   const html = [];
   let i = 0;
+  let lastHeading = '';
   while (i < lines.length) {
     const line = lines[i];
     if (line.trim() === '' || line.trim() === '#grok bot/home#') { i += 1; continue; }
     if (line.startsWith('# ') && !line.startsWith('## ')) { i += 1; continue; }
     if (line.startsWith('## ')) {
       const text = line.slice(3).trim();
-      const id = text === "The words you'll see" ? ' id="words"' : '';
+      lastHeading = text;
+      const id = text === 'Quick glossary' ? ' id="words"' : '';
       html.push(`<h2${id}>${inline(text)}</h2>`);
       i += 1;
       continue;
@@ -71,6 +125,7 @@ function render(markdown) {
       const items = [];
       while (i < lines.length && lines[i].startsWith('- ')) { items.push(lines[i].slice(2)); i += 1; }
       html.push(`<ul>${items.map((item) => `<li>${inline(item)}</li>`).join('')}</ul>`);
+      if (lastHeading === 'Quick glossary') html.push(diagram);
       continue;
     }
     const buf = [line];
@@ -136,7 +191,7 @@ const body = render(article);
   }
   .piece :global(.kit-title) { font-weight: 650; margin: 0 0 .4rem; }
   .piece :global(.kit ul) { margin: 0; }
-  .piece :global(.phone) { margin: 1.25rem 0 1.5rem; max-width: 17.5rem; }
+  .piece :global(.phone) { margin: 1.25rem auto 1.5rem; max-width: 17.5rem; }
   .piece :global(.phone img) {
     width: 100%;
     height: auto;
@@ -144,5 +199,9 @@ const body = render(article);
     border: 1px solid var(--line);
     border-radius: 12px;
   }
-  .piece :global(.phone figcaption) { color: var(--muted); font-size: .9rem; margin-top: .45rem; }
+  .piece :global(.phone figcaption) { color: var(--muted); font-size: .9rem; margin-top: .45rem; text-align: center; }
+  .piece :global(.diagram) { margin: 1.5rem 0 1.75rem; max-width: 100%; }
+  .piece :global(.diagram svg) { width: min(100%, 22.5rem); height: auto; display: block; margin-inline: auto; }
+  .piece :global(.diagram text) { font-family: Figtree, sans-serif; }
+  .piece :global(.diagram figcaption) { color: var(--muted); font-size: .9rem; margin-top: .45rem; text-align: center; }
 </style>

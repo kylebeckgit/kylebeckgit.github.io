@@ -1,0 +1,24 @@
+flowchart TB
+  mine[My Phone]
+  wife[Wife's Phone]
+  tv[TV]
+
+  subgraph group["AirPlay 2 group"]
+    pods[HomePods]
+    wiim[WiiM Mini]
+    stealth[Lovesac StealthTech]
+    wiim -->|optical| stealth
+  end
+
+  tv -->|HDMI-ARC| stealth
+  mine -->|AirPlay| group
+  wife -->|AirPlay| group
+
+  ha["Home Assistant on the Mac Studio\nWatches the WiiM. Switches the StealthTech to Optical when it plays, and back to HDMI-ARC 30 s after it stops."]
+  atom["ATOM Lite\nESPHome Bluetooth proxy by the couch"]
+
+  mine -->|Couch dashboard over Wi-Fi| ha
+  wife -->|Couch dashboard over Wi-Fi| ha
+  ha -->|Wi-Fi| atom
+  %% Drawn dashed, on the left, clear of the wife's Wi-Fi line on the right.
+  atom -->|Bluetooth| stealth

@@ -12,9 +12,11 @@ Lots of details below. Some of it is nerdy, fair warning. I've tried to explain 
 
 **Disclaimer**: I'm tech-savvy, but I don't care for getting too into the weeds with scripting home automation stuff. I leaned a lot on Grok Bot for planning this, coding it, and setting up Home Assistant. So if you think you aren't savvy enough to pull this off, I'd say give it a shot anyway. The tools are good enough today that you can describe what you want and have it built for you. I'm happy to help out as well if I can, so feel free to [get in touch](https://kyle-beck.com/contact/).
 
-This isn't affiliated with Lovesac. It works by talking to the system in a way Lovesac doesn't officially support, so try it at your own risk. I’ve used it with great success however so take that for what its worth. 
+This isn't affiliated with Lovesac. It works by talking to the system in a way Lovesac doesn't officially support, so try it at your own risk. I’ve used it with great success however so take that for what it's worth. 
 
-## The words you'll see
+## Quick glossary
+
+Skip this if you already speak Home Assistant.
 
 - **[Home Assistant](https://www.home-assistant.io/)** is free software that runs in your house and connects all your smart devices in one place, so they can work together. Everything here hangs off it.
 - **Bluetooth proxy** is a tiny, cheap gadget that sits in a room and passes Bluetooth signals along to Home Assistant over your Wi-Fi.
@@ -32,7 +34,7 @@ The Lovesac app made things worse in a two-person house. Only one phone can hold
 
 ## The Setup
 
-I fed the StealthTech with a WiiM music streamer, connected over an optical cable. (You can use aux, but optical gives you the best sound quality.) Then I put a tiny Bluetooth proxy next to the couch so Home Assistant could talk to the Lovesac, and built a shared phone remote with Siri controls like mute on top.
+I fed the StealthTech with a WiiM music streamer, connected over an optical cable. (You can use aux, but optical gives you the best sound quality.) Then I put a tiny Bluetooth proxy next to the couch so Home Assistant could talk to the Lovesac, and built a shared phone remote, and set up Siri to mute the couch.
 
 Now when I AirPlay to the WiiM and the HomePods together, the couch joins the rest of the house's music automatically. When the music stops, it switches itself back to the TV. My wife and I can use the same remote at the same time, and Siri can control it from anywhere in the house.
 
@@ -50,6 +52,16 @@ Let's get into the nerdier bits.
 | [Home Assistant Companion app](https://companion.home-assistant.io/) | The shared Couch remote on both our phones |
 | [HomeKit Bridge](https://www.home-assistant.io/integrations/homekit/) (built into Home Assistant) | Shares one "TV Mute" switch with Siri and the HomePods |
 
+## What it cost
+
+Amazon prices as of November 2026:
+
+- [WiiM Mini](https://www.amazon.com/dp/B09HC5GRKY): $99.00
+- [M5Stack ATOM Lite](https://www.amazon.com/dp/B0D6LDXRJ4): $15.10
+- [Amazon Basics 6 ft optical cable](https://www.amazon.com/dp/B00NH11H38): $9.40, or free if you still have the one that came with your StealthTech
+
+That's about $114 to $124 in hardware. Home Assistant, ESPHome, the StealthTech integration and the Companion app are all free.
+
 ## WiiM into optical, HomePods in the group
 
 I left the TV on HDMI-ARC and plugged the WiiM into the optical input. When we want music, we AirPlay to the HomePods and the WiiM together. The WiiM shows up as an AirPlay 2 speaker right next to the HomePods, so I can send to all of them at once. The couch gets the music over optical, and the rest of the house gets it over AirPlay.
@@ -63,8 +75,6 @@ Home Assistant runs in a virtual machine on my Mac Studio, which is nowhere near
 I used an [M5Stack ATOM Lite](https://shop.m5stack.com/products/atom-lite-esp32-development-kit). You flash it from your browser over USB using the [ESPHome projects page](https://esphome.io/projects/) (the Generic ESP32 option works if your board isn't listed), connect it to Wi-Fi, and Home Assistant picks it up. On this firmware the little light stays off. That worried me for a minute, but it's normal.
 
 My first try was plugging it in somewhere convenient, and the signal was weak, around -97 dBm (dBm is signal strength, and closer to zero is better). Commands barely worked. Once I moved it right next to the couch it came in around -50 dBm and everything started working. So the lesson I learned is that it really does need to be close.
-
-The ATOM Lite worked well for me once it was close to the couch.
 
 ## The StealthTech integration
 
@@ -164,23 +174,13 @@ Here are the two automations, in case you want to copy them:
 
 ## One remote for both of us, plus Siri
 
-This is the part that actually changed day-to-day life in a house with more than one person.
+Home Assistant fixes this. The Companion app on my phone and on my wife's phone both talk to Home Assistant over Wi-Fi, and Home Assistant is the only thing that opens short Bluetooth connections to the hub. So neither of us fights over that one Bluetooth slot. We can both have the remote open, change the volume, switch inputs and hit mute, and nobody gets kicked off.
 
-With Lovesac's app, control is a single seat. One phone connects, and the other is locked out until the first person closes the app or walks out of range. If someone has the app open upstairs, you can't change the volume from the couch. That's just how it's built.
-
-With Home Assistant in the middle, it works differently. The Companion app on my phone and on my wife's phone both talk to Home Assistant over Wi-Fi, and Home Assistant is the only thing that opens short Bluetooth connections to the hub. So neither of us fights over that one Bluetooth slot. We can both have the remote open, change the volume, switch inputs and hit mute, and nobody gets kicked off.
-
-I built a Couch dashboard for it, with big Power, Mute, Vol - and Vol + buttons. There are input buttons for TV, Music (Optical / WiiM), Bluetooth and AUX, plus sound modes and Quiet Couch. A More section holds the tone controls, a Resync button and the WiiM's play controls. My wife has her own non-admin login, the dashboard shows up in the sidebar for both of us, and either of us can set it as the app's default page. It only works on our home Wi-Fi.
-
-One button on the dashboard is worth explaining: Resync. Home Assistant keeps its own record of whether the StealthTech is on or off, and sometimes that record gets out of step with reality. I've seen the remote say the hub was on when it was actually off. When that happens, tapping Power does the wrong thing, and the music automation switches inputs based on bad information. Resync is the integration's Sync button. It makes Home Assistant ask the hub for its real status again. If the remote ever seems confused, tap it first. It's tucked under More right now, but next time I'd put it right on the main screen.
+I built a Couch dashboard for it, with big Power, Mute, Vol - and Vol + buttons. There are input buttons for TV, Music (Optical / WiiM), Bluetooth and AUX, plus sound modes and Quiet Couch. My wife has her own non-admin login, the dashboard shows up in the sidebar for both of us, and either of us can set it as the app's default page. It only works on our home Wi-Fi.
 
 One thing you'll notice is a small delay. Each tap on the remote takes about 1 to 3 seconds to take effect. That's because Home Assistant has to open a fresh Bluetooth connection to the StealthTech for each command, send it, and then hang up again.
 
-There's a setting in the integration that helps, called `idle_timeout`. It controls how long Home Assistant keeps that Bluetooth connection open after your last tap before hanging up. It was set to 5 seconds, and I raised it to 30. That way, if you tap a few times in a row, Home Assistant doesn't have to reconnect each time, and the remote feels less sluggish.
-
-The tradeoff is that the StealthTech only allows one Bluetooth control connection at a time. While Home Assistant is holding it open, the Lovesac app can't connect. With a 30-second timeout, that means the app is locked out for 30 seconds after your last tap. That's fine for us, since we don't use the Lovesac app anymore.
-
-Siri is the other win here. I wrapped the StealthTech mute in a "TV Mute" switch and shared only that switch through Home Assistant's HomeKit Bridge. You pair the bridge once from the Home app, drop TV Mute into the Living Room, and then anyone in the Home can use it from a phone or a HomePod. Saying "Hey Siri, turn on TV Mute" mutes the couch. You don't need the Companion app open, and you don't need to know who last had the Lovesac app. You just ask. (Apple really should just let you mute the Apple TV under all circumstances, but Apple does Apple things so this works intead). 
+Siri is the other win here. I wrapped the StealthTech mute in a "TV Mute" switch and shared only that switch through Home Assistant's HomeKit Bridge. You pair the bridge once from the Home app, drop TV Mute into the Living Room, and then anyone in the Home can use it from a phone or a HomePod. Saying "Hey Siri, turn on TV Mute" mutes the couch. You don't need the Companion app open, and you don't need to know who last had the Lovesac app. You just ask. (Apple really should just let you mute the Apple TV under all circumstances, but Apple does Apple things so this works instead). 
 
 ## Things that might trip you up
 
