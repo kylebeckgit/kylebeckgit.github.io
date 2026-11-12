@@ -1,0 +1,1 @@
+Two brackets. The space between them is a loop, and an array.

@@ -1,0 +1,7 @@
+Round 3. The first two rounds were set aside. These six are drawn as vectors, one idea each.
+
+The geometry follows a few rules used by the identity work that still holds up: Paul Rand, Chermayeff & Geismar, Pentagram, and Sagmeister. One idea. A silhouette that survives at 16px and in one color. Negative space counted as part of the drawing. Optical balance instead of a raw geometric primitive: stroke weights match, a diagonal is not left heavier than a straight stem, and a note sits on a line when a line through its middle would turn into a cross at favicon size. Nothing here is a trend, a gradient, or a picture of an instrument.
+
+The music references are about restraint. Teenage Engineering and Elektron for a diagram you can read at a glance. Ableton and Native Instruments for a monogram with one stroke weight. ECM and Blue Note for how little a music mark needs. Moog, Warp, and Spitfire for a mark that stays calm.
+
+Each folder has the large mark, 32px, 16px, a one-color version, a browser-tab mock, and one line on the idea. The live favicon is unchanged.
