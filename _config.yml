@@ -20,6 +20,7 @@ exclude:
   - workers
   - public
   - node_modules
+  - docs
   - vendor
   - dist
   - _site
