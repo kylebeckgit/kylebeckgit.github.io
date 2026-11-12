@@ -34,7 +34,7 @@ The Lovesac app made things worse in a two-person house. Only one phone can hold
 
 ## The Setup
 
-I fed the StealthTech with a WiiM music streamer, connected over an optical cable. (You can use aux, but optical gives you the best sound quality.) Then I put a tiny Bluetooth proxy next to the couch so Home Assistant could talk to the Lovesac, and built a shared phone remote with Siri controls like mute on top.
+I fed the StealthTech with a WiiM music streamer, connected over an optical cable. (You can use aux, but optical gives you the best sound quality.) Then I put a tiny Bluetooth proxy next to the couch so Home Assistant could talk to the Lovesac, and built a shared phone remote, and set up Siri to mute the couch.
 
 Now when I AirPlay to the WiiM and the HomePods together, the couch joins the rest of the house's music automatically. When the music stops, it switches itself back to the TV. My wife and I can use the same remote at the same time, and Siri can control it from anywhere in the house.
 
@@ -51,6 +51,16 @@ Let's get into the nerdier bits.
 | [lovesac_stealthtech](https://github.com/ojiudezue/ha-lovesac-stealthtech) | A community integration that controls power, volume, mute, input, sound mode, EQ and Quiet Couch over Bluetooth |
 | [Home Assistant Companion app](https://companion.home-assistant.io/) | The shared Couch remote on both our phones |
 | [HomeKit Bridge](https://www.home-assistant.io/integrations/homekit/) (built into Home Assistant) | Shares one "TV Mute" switch with Siri and the HomePods |
+
+## What it cost
+
+Amazon prices as of November 2026:
+
+- [WiiM Mini](https://www.amazon.com/dp/B09HC5GRKY): $99.00
+- [M5Stack ATOM Lite](https://www.amazon.com/dp/B0D6LDXRJ4): $15.10
+- [Amazon Basics 6 ft optical cable](https://www.amazon.com/dp/B00NH11H38): $9.40, or free if you still have the one that came with your StealthTech
+
+That's about $114 to $124 in hardware. Home Assistant, ESPHome, the StealthTech integration and the Companion app are all free.
 
 ## WiiM into optical, HomePods in the group
 
