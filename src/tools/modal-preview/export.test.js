@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFileSync } from 'node:fs';
+import { strikeWeight } from './resonator.js';
 import {
   A4_HZ,
   ZEBRA_DECAY_MAX,
@@ -93,6 +95,14 @@ test('an exported file imports back to the preview decays', () => {
   const legacy = fromCsv('Ratio;GainDB;Decay\n1.0000;0.00;4.500\n2.0000;-6.00;2.250\n', { filename: 'old-profile.csv' });
   assert.equal(legacy[0].decay, 4.5);
   assert.equal(legacy[1].decay, 2.25);
+});
+
+test('a resting position does not duck the fundamental', () => {
+  assert.equal(strikeWeight(0, 0.02), 1);
+  assert.equal(strikeWeight(7, 0.02), 1);
+  assert.ok(Math.abs(strikeWeight(0, 0.18) - Math.sin(Math.PI * 0.18)) < 1e-9);
+  const worklet = readFileSync(new URL('../../../modal-preview-resonator.worklet.js', import.meta.url), 'utf8');
+  assert.match(worklet, /pos <= 0\.02\) return 1/);
 });
 
 test('rows above 12 kHz at A4 and above Nyquist stay out of the file', () => {

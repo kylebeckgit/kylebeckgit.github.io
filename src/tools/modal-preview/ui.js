@@ -1,6 +1,6 @@
 import { PRESETS, NOTE_BUTTONS, buildPartials, previewPartials, zebraExport, audiblePartials, fromCsv, noteFrequency, defaultControls, sanitizeControls, alignReference } from './engine.js';
 import { analyzeSamples, decodeRecording, resampleMono, parseRoot, frequencyToNote } from './analyze.js';
-import { renderPreview, scaleToPeak } from './resonator.js';
+import { renderPreview, scaleToPeak, strikeWeight } from './resonator.js';
 import { aimSlices, createFitMotion, createSliceMotion, defaultCamera, hitPartial, MORPH_MS, paintModalView, sampleSlices, slicesMoving } from './modal-view.js';
 import { shapePartials } from './shape.js';
 import { createRollHistory, defaultLocks, pushRoll, redoRoll, rollSound, undoRoll } from './randomize.js';
@@ -1194,7 +1194,7 @@ async function ensureAudio(state, resume = true) {
   if (!state.workletReady && !state.workletFailed && !state.workletLoading) {
     state.workletLoading = (async () => {
       try {
-        await state.audio.audioWorklet.addModule('/modal-resonator.worklet.js');
+        await state.audio.audioWorklet.addModule('/modal-preview-resonator.worklet.js');
         state.node = new AudioWorkletNode(state.audio, 'modal-bank', { numberOfOutputs: 1, outputChannelCount: [1] });
         watchWorklet(state);
         state.node.connect(state.audio.destination);
@@ -1269,7 +1269,7 @@ function playFallback(state) {
   const master = audio.createGain();
   let ampSum = 0;
   const gains = state.partials.map((partial, index) => {
-    const weight = Math.abs(Math.sin(Math.PI * (index + 1) * Math.min(0.98, Math.max(0.02, state.position))));
+    const weight = strikeWeight(index, state.position);
     const amp = 10 ** (partial.gainDb / 20) * weight * state.velocity;
     ampSum += amp;
     return amp;

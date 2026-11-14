@@ -5,9 +5,13 @@
 export function strikeWeight(index, position) {
   // String-like mode shape. n is the partial's place in the list, not a measured Zebra mode.
   // sin(pi * n * position) is an approximation, and a poor one for bells and plates.
+  // The slider floor matches the view and a CSV played with Zebra's Position at 0:
+  // no comb. A sine at 0.02 would drop the fundamental by about 24 dB.
+  const pos = Number(position);
+  if (!Number.isFinite(pos) || pos <= 0.02) return 1;
   const n = index + 1;
-  const pos = Math.min(0.98, Math.max(0.02, Number(position) || 0));
-  return Math.abs(Math.sin(Math.PI * n * pos));
+  const placed = Math.min(0.98, pos);
+  return Math.abs(Math.sin(Math.PI * n * placed));
 }
 
 export function modeCoeffs(freq, t60, sampleRate) {
