@@ -36,7 +36,7 @@ The Lovesac app made things worse in a two-person house. Only one phone can hold
 
 I fed the StealthTech with a WiiM music streamer, connected over an optical cable. (You can use aux, but optical gives you the best sound quality.) Then I put a tiny Bluetooth proxy next to the couch so Home Assistant could talk to the Lovesac, and built a shared phone remote, and set up Siri to mute the couch.
 
-Now when I AirPlay to the WiiM and the HomePods together, the couch joins the rest of the house's music automatically. When the music stops, it switches itself back to the TV. My wife and I can use the same remote at the same time, and Siri can control it from anywhere in the house.
+Now when I AirPlay to the WiiM and the HomePods together, the couch joins the rest of the house's music automatically and switches to its Music sound mode. When the music stops, it switches itself back to the TV and the TV sound mode. My wife and I can use the same remote at the same time, and Siri can control it from anywhere in the house.
 
 Let's get into the nerdier bits.
 
@@ -86,20 +86,21 @@ There's the same limit here as with the app: the hub only allows one Bluetooth c
 
 ## How we use it
 
-When the WiiM starts playing, the StealthTech wakes up if it's off, waits a few seconds, then switches to Optical. When the WiiM has been idle, paused or off for 30 seconds and the hub is still on Optical, it switches back to HDMI-ARC.
+When the WiiM starts playing, the StealthTech wakes up if it's off, waits a few seconds, then switches to Optical and sets the sound mode to Music. When the WiiM has been idle, paused or off for 30 seconds and the hub is still on Optical, it switches back to HDMI-ARC and sets the sound mode to TV.
 
-Two small gotchas. The source names have to match exactly, so it's `HDMI-ARC` with a hyphen. And the hub ignores input changes while it's off, so the first automation turns it on before switching.
+Two small gotchas. The source and sound mode names have to match exactly, so it's `HDMI-ARC` with a hyphen, and `Music` and `TV` for the modes. And the hub ignores input changes while it's off, so the first automation turns it on before switching.
 
 Here are the two automations, in case you want to copy them:
 
 ```yaml
 - id: stealthtech_optical_when_wiim_plays
-  alias: "StealthTech: switch to Optical when the WiiM plays"
+  alias: "StealthTech: Optical and Music mode when the WiiM plays"
   description: >-
     The WiiM feeds the StealthTech over optical. When it starts playing, power
-    the hub on if needed and select Optical, unless Optical is already selected.
-    Fires on any WiiM playback (AirPlay, Spotify Connect, app, etc.): the native
-    WiiM integration reports every streaming service as source "Network".
+    the hub on if needed, select Optical unless it's already selected, and set
+    the sound mode to Music. Fires on any WiiM playback (AirPlay, Spotify
+    Connect, app, etc.): the native WiiM integration reports every streaming
+    service as source "Network".
   mode: single
   max_exceeded: silent
   triggers:
@@ -130,13 +131,20 @@ Here are the two automations, in case you want to copy them:
             entity_id: media_player.living_room_lovesac_stealthtech
           data:
             source: "Optical"
+        - delay:
+            seconds: 2
+    - action: media_player.select_sound_mode
+      target:
+        entity_id: media_player.living_room_lovesac_stealthtech
+      data:
+        sound_mode: "Music"
 
 - id: stealthtech_hdmi_after_wiim_stops
-  alias: "StealthTech: back to HDMI-ARC 30 s after the WiiM stops"
+  alias: "StealthTech: back to HDMI-ARC and TV mode 30 s after the WiiM stops"
   description: >-
     After the WiiM has been idle, paused, or off for 30 seconds, return the
-    StealthTech to HDMI-ARC (TV). Only fires if the hub is on and still on
-    Optical, so it never overrides Bluetooth/AUX.
+    StealthTech to HDMI-ARC (TV) and set the sound mode back to TV. Only fires
+    if the hub is on and still on Optical, so it never overrides Bluetooth/AUX.
   mode: single
   max_exceeded: silent
   triggers:
@@ -170,6 +178,13 @@ Here are the two automations, in case you want to copy them:
         entity_id: media_player.living_room_lovesac_stealthtech
       data:
         source: "HDMI-ARC"
+    - delay:
+        seconds: 2
+    - action: media_player.select_sound_mode
+      target:
+        entity_id: media_player.living_room_lovesac_stealthtech
+      data:
+        sound_mode: "TV"
 ```
 
 ## One remote for both of us, plus Siri
