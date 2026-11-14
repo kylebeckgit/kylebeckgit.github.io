@@ -159,10 +159,10 @@ function expandedRange(material, wildness) {
   return range;
 }
 
-function sampleTarget(rng, material, wildness) {
+function sampleTarget(rng, material, wildness, family) {
   const w = clamp(Number(wildness) || 0, 0, 1);
-  const family = material === 'wild' ? pick(rng, FAMILIES) : material;
-  const knobs = sampleFromRange(rng, expandedRange(family, w));
+  const source = family || material;
+  const knobs = sampleFromRange(rng, expandedRange(source, w));
   if (w > 0 && rng() < w * 0.9) {
     const donor = pick(rng, FAMILIES.filter((name) => name !== family));
     const trait = pick(rng, ['normalize', 'absorb', 'decay', 'decayKf', 'disperse']);
@@ -178,7 +178,7 @@ function sampleTarget(rng, material, wildness) {
   }
   if (w > 0.55 && rng() < 0.35) knobs.density = 8;
   knobs.tune = Math.round(knobs.tune);
-  knobs.density = nearestDensity(knobs.density, w > 0.45 ? [8, 16, 32] : (RANGES[family] || RANGES.any).density);
+  knobs.density = nearestDensity(knobs.density, w > 0.45 ? [8, 16, 32] : (RANGES[source] || RANGES.any).density);
   knobs.position = clamp(knobs.position, 0.02, 0.98);
   knobs.detune = clamp(knobs.detune, -1, 1);
   return knobs;
@@ -331,19 +331,19 @@ function blendPartials(a, b, mix) {
   return dropClose(out, 25);
 }
 
-function profileFor(rng, material, wildness) {
+function profileFor(rng, material, wildness, family) {
   const w = clamp(Number(wildness) || 0, 0, 1);
-  const family = material === 'any' || material === 'wild' ? pick(rng, FAMILIES) : material;
-  const variant = family === 'wood' && w > 0.55 && rng() < w * 0.35 ? 'marimba' : '';
-  let partials = familyPartials(family, variant);
+  const chosen = family || material;
+  const variant = chosen === 'wood' && w > 0.55 && rng() < w * 0.35 ? 'marimba' : '';
+  let partials = familyPartials(chosen, variant);
   if ((material === 'wild' || material === 'any') && w > 0.2 && rng() < w * 0.85) {
-    const other = pick(rng, FAMILIES.filter((name) => name !== family));
+    const other = pick(rng, FAMILIES.filter((name) => name !== chosen));
     partials = blendPartials(partials, familyPartials(other), 0.2 + 0.55 * w * rng());
   } else if (material !== 'any' && material !== 'wild' && w > 0.35 && rng() < w * 0.7) {
-    const other = pick(rng, FAMILIES.filter((name) => name !== family));
+    const other = pick(rng, FAMILIES.filter((name) => name !== chosen));
     partials = blendPartials(partials, familyPartials(other), 0.15 + 0.4 * w * rng());
   }
-  return { family, partials };
+  return { family: chosen, partials };
 }
 
 function toShape(knobs) {
@@ -464,9 +464,10 @@ export function describeKnobs(knobs, material, partials = []) {
   if (compressed) unusual.push('tight spacing');
   if (fastHighs) unusual.push('upper notes that die fast');
   if (ringingHighs && highsOutlast) unusual.push('highs that outlast the low');
-  if (bright && muted) unusual.push('a glassy top and woody damping');
+  const woody = muted && knobs.absorb > 0.28;
+  if (bright && woody) unusual.push('a glassy top and woody damping');
   else if (bright && (named === 'wooden' || named === 'skin')) unusual.push('a glassy top');
-  else if (muted && knobs.absorb > 0.42 && (named === 'glass' || named === 'bell' || named === 'metal')) unusual.push('woody damping');
+  else if (woody && (named === 'glass' || named === 'bell' || named === 'metal')) unusual.push('woody damping');
   if (short && (named === 'bell' || inharmonic) && !unusual.some((item) => item.includes('skin'))) unusual.push('a skin-like decay');
 
   const lead = [];
@@ -533,8 +534,9 @@ export function rollSound({ base, current, material = 'any', amount = 1, wildnes
   const family = MATERIALS.includes(material) ? material : 'any';
   let best = null;
   for (let attempt = 0; attempt < 40; attempt++) {
-    const target = sampleTarget(rng, family, wildness);
-    const profile = profileFor(rng, family, wildness);
+    const picked = family === 'any' || family === 'wild' ? pick(rng, FAMILIES) : family;
+    const target = sampleTarget(rng, family, wildness, picked);
+    const profile = profileFor(rng, family, wildness, picked);
     const knobs = capDensity(mixKnobs(current || identityKnobs(), target, amount, locks), profile.partials, locks);
     const partials = shapePartials(profile.partials, toShape(knobs));
     const quality = assessQuality(partials, knobs);

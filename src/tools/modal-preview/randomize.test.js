@@ -160,6 +160,52 @@ test('short, long, and muted follow the rendered decays', () => {
   assert.equal(descriptionAgrees('Dark wooden knock, muted', knobs, knock), false);
 });
 
+test('woody damping is only claimed when absorb is high', () => {
+  const partials = [
+    { ratio: 1, gainDb: 0, decay: 4 },
+    { ratio: 2.8, gainDb: -4, decay: 0.4 },
+    { ratio: 5.2, gainDb: -8, decay: 0.3 },
+    { ratio: 8, gainDb: -12, decay: 0.2 },
+  ];
+  const bright = { ...identityKnobs(), normalize: 0.5, absorb: -0.2 };
+  const text = describeKnobs(bright, 'glass', partials);
+  assert.equal(/\bwoody\b/i.test(text), false, text);
+  assert.equal(descriptionAgrees(text, bright, partials), true, text);
+  const damped = { ...bright, absorb: 0.5 };
+  const woody = describeKnobs(damped, 'glass', partials);
+  assert.match(woody, /\bwoody\b/i);
+  assert.equal(descriptionAgrees(woody, damped, partials), true, woody);
+});
+
+test('any and wild keep one family at wildness 0', () => {
+  for (const material of ['any', 'wild']) {
+    for (let seed = 1; seed <= 40; seed++) {
+      const rolled = rollSound({ material, wildness: 0, amount: 1, seed });
+      const text = rolled.description.toLowerCase();
+      const second = rolled.partials[1].ratio / rolled.partials[0].ratio;
+      const third = rolled.partials[2].ratio / rolled.partials[0].ratio;
+      if (/\bskin\b/.test(text)) {
+        assert.ok(second > 1.4 && second < 1.9, `${text} ${second}`);
+        assert.ok(rolled.knobs.decay <= -0.2 && rolled.knobs.absorb >= 0.25, text);
+      } else if (/\bbell\b/.test(text)) {
+        assert.ok(rolled.partials[0].ratio < 0.75, text);
+        assert.ok(rolled.knobs.disperse >= 0.2, text);
+      } else if (/\bglass\b/.test(text)) {
+        assert.ok(second > 2.4 && third > 4.6, `${text} ${second} ${third}`);
+        assert.ok(rolled.knobs.decay >= 0.25, text);
+      } else if (/\bwooden\b/.test(text)) {
+        assert.ok(second > 2.4 && third > 4.6, `${text} ${second} ${third}`);
+        assert.ok(rolled.knobs.decay <= 0.1 && rolled.knobs.absorb >= 0.15, text);
+      } else if (/\bmetal\b/.test(text)) {
+        assert.ok(second > 2.2 && third < 5.2, `${text} ${second} ${third}`);
+        assert.ok(rolled.knobs.decay >= 0, text);
+      } else {
+        assert.fail(rolled.description);
+      }
+    }
+  }
+});
+
 test('each material starts from its own mode series', () => {
   const close = (actual, expected) => Math.abs(actual - expected) / expected < 0.04;
   const skin = familyPartials('skin').slice(0, 6).map((partial) => partial.ratio);
