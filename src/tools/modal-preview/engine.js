@@ -409,12 +409,87 @@ export function alignReference(partials, fundamental) {
   };
 }
 
-export function toCsv(partials) {
-  const lines = ['Ratio;GainDB;Decay'];
-  for (const partial of partials) {
-    lines.push(`${partial.ratio.toFixed(4)};${partial.gainDb.toFixed(2)};${partial.decay.toFixed(3)}`);
+// Zebra 3.0.2 turns the Decay column into seconds with
+// min(Decay, 1) * 2^((DecayKnob - 50) / 10). Knob 50 is 1 s and knob 100 is
+// 32 s; a measured build sits near 31.7 s, and anything above 1 in the column
+// is clipped. Ratio stays the real partial ratio. GainDB stays relative dB.
+export const A4_HZ = 440;
+export const ZEBRA_PARTIAL_LIMIT_HZ = 12000;
+export const ZEBRA_DECAY_MAX = 2 ** ((100 - 50) / 10);
+
+export function zebraDecayKnob(seconds) {
+  if (!(seconds > 0)) return 50;
+  return Math.min(100, Math.max(0, Math.round(50 + 10 * Math.log2(seconds))));
+}
+
+export function zebraDecaySeconds(unit, knob) {
+  const column = Math.min(Math.max(Number(unit) || 0, 0), 1);
+  const step = Math.min(100, Math.max(0, Number(knob) || 0));
+  return column * 2 ** ((step - 50) / 10);
+}
+
+export function audiblePartials(partials, { fundamental = A4_HZ, sampleRate = 48000 } = {}) {
+  const nyquist = (sampleRate > 0 ? sampleRate : 48000) / 2;
+  const note = fundamental > 0 ? fundamental : A4_HZ;
+  const kept = [];
+  for (const partial of partials || []) {
+    if (!(partial.ratio > 0) || !(partial.decay > 0)) continue;
+    const atA4 = partial.ratio * A4_HZ;
+    const atNote = partial.ratio * note;
+    if (atA4 > ZEBRA_PARTIAL_LIMIT_HZ || atNote > nyquist) continue;
+    kept.push({ ...partial, decay: Math.min(partial.decay, ZEBRA_DECAY_MAX) });
   }
-  return lines.join('\n') + '\n';
+  kept.sort((a, b) => a.ratio - b.ratio);
+  if (kept.length) return kept;
+  const lowest = [...(partials || [])].filter((partial) => partial.ratio > 0).sort((a, b) => a.ratio - b.ratio)[0];
+  if (!lowest) return [];
+  const ratio = Math.min(lowest.ratio, ZEBRA_PARTIAL_LIMIT_HZ / A4_HZ);
+  return [{ ...lowest, ratio, decay: Math.min(Math.max(lowest.decay, 0.001), ZEBRA_DECAY_MAX) }];
+}
+
+export function exportFileName(description, knob) {
+  let slug = String(description || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  if (slug.length > 48) slug = slug.slice(0, 48).replace(/-[^-]*$/, '');
+  return `${slug || 'modal-profile'}_decay${knob}.csv`;
+}
+
+export function zebraHint(knob) {
+  return `In Zebra, set Decay to ${knob}, Position 0, other modal knobs at 0.`;
+}
+
+function decayCell(unit, longest) {
+  if (longest) return '1.000000';
+  const text = unit.toFixed(6);
+  if (text === '1.000000') return '0.999999';
+  if (text === '0.000000') return '0.000001';
+  return text;
+}
+
+export function zebraExport(partials, options = {}) {
+  const audible = audiblePartials(partials, options);
+  const tmax = audible.reduce((max, partial) => Math.max(max, partial.decay), 0);
+  const knob = zebraDecayKnob(tmax);
+  let longest = 0;
+  audible.forEach((partial, index) => {
+    if (partial.decay > audible[longest].decay) longest = index;
+  });
+  const lines = ['Ratio;GainDB;Decay'];
+  audible.forEach((partial, index) => {
+    const unit = tmax > 0 ? partial.decay / tmax : 1;
+    lines.push(`${partial.ratio.toFixed(4)};${partial.gainDb.toFixed(2)};${decayCell(unit, index === longest)}`);
+  });
+  return {
+    csv: lines.join('\n') + '\n',
+    knob,
+    hint: zebraHint(knob),
+    filename: exportFileName(options.description, knob),
+    partials: audible,
+    tmax,
+  };
+}
+
+export function toCsv(partials, options) {
+  return zebraExport(partials, options).csv;
 }
 
 export function fromCsv(text) {

@@ -1,10 +1,9 @@
-import { PRESETS, NOTE_BUTTONS, buildPartials, previewPartials, toCsv, fromCsv, noteFrequency, defaultControls, sanitizeControls, alignReference } from './engine.js';
+import { PRESETS, NOTE_BUTTONS, buildPartials, previewPartials, zebraExport, audiblePartials, fromCsv, noteFrequency, defaultControls, sanitizeControls, alignReference } from './engine.js';
 import { analyzeSamples, decodeRecording, resampleMono, parseRoot, frequencyToNote } from './analyze.js';
 import { renderPreview, scaleToPeak } from './resonator.js';
 import { aimSlices, createFitMotion, createSliceMotion, defaultCamera, hitPartial, MORPH_MS, paintModalView, sampleSlices, slicesMoving } from './modal-view.js';
 import { shapePartials } from './shape.js';
 import { createRollHistory, defaultLocks, pushRoll, redoRoll, rollSound, undoRoll } from './randomize.js';
-import { fileSlug } from './recipes.js';
 import { mountStudio } from './studio.js';
 
 export function mount(root) {
@@ -140,7 +139,8 @@ export function mount(root) {
     const identity = shape.absorb === 0 && shape.disperse === 0 && shape.decay === 0
       && shape.decayKf === 0 && shape.normalize === 0 && shape.tune === 0
       && shape.density === state.profilePartials.length;
-    state.partials = identity ? state.profilePartials : shapePartials(state.profilePartials, shape);
+    const shaped = identity ? state.profilePartials : shapePartials(state.profilePartials, shape);
+    state.partials = audiblePartials(shaped, heardOptions());
     const first = !state.slicesReady;
     state.slicesReady = true;
     aimSlices(state.slices, state.partials, performance.now(), first ? 0 : duration);
@@ -174,7 +174,7 @@ export function mount(root) {
       state.profilePartials = capAudible(copy);
       publishShape();
     } else {
-      state.partials = copy;
+      state.partials = audiblePartials(copy, heardOptions());
     }
     if (custom != null) state.custom = custom;
   }
@@ -221,7 +221,16 @@ export function mount(root) {
     pushModes();
   }
 
+  function heardOptions() {
+    return {
+      fundamental: state.hearFundamental || noteFrequency(state.note),
+      sampleRate: state.audio?.sampleRate || 48000,
+    };
+  }
+
   function render() {
+    const hint = root.querySelector('[data-export-hint]');
+    if (hint) hint.textContent = zebraExport(state.partials, heardOptions()).hint;
     draw(canvas, state.partials, state);
     tableBody.innerHTML = state.partials.map((partial, index) => `
       <tr class="${index === state.selectedPartial ? 'is-selected' : ''}">
@@ -553,13 +562,19 @@ export function mount(root) {
   });
 
   root.querySelector('[data-export]').addEventListener('click', () => {
-    const blob = new Blob([toCsv(state.partials)], { type: 'text/csv' });
+    const description = root.querySelector('[data-ask]')?.value
+      || root.querySelector('[data-roll-read]')?.textContent
+      || state.profileName;
+    const exported = zebraExport(state.partials, { ...heardOptions(), description });
+    const blob = new Blob([exported.csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = state.profileName ? fileSlug(state.profileName) : 'zebra3_ai_profile.csv';
+    link.download = exported.filename;
     link.click();
     URL.revokeObjectURL(url);
+    const hint = root.querySelector('[data-export-hint]');
+    if (hint) hint.textContent = exported.hint;
   });
 
   root.querySelector('[data-import]').addEventListener('change', async (event) => {
@@ -984,11 +999,10 @@ function setPlayError(root, message) {
 }
 
 function capAudible(partials) {
-  // Drop partials above ratio 48 instead of folding them under a neighbor.
-  // Folding made the list unsorted and pulled real string and bar modes off
-  // their textbook ratios. What remains is still positive, sorted, and audible
-  // at A4.
-  const limit = 48;
+  // Drop partials Zebra rings past about 12 kHz at A4, instead of folding
+  // them under a neighbor. Folding made the list unsorted and pulled real
+  // modes off their ratios.
+  const limit = 12000 / 440;
   const kept = partials
     .filter((partial) => partial.ratio > 0 && partial.ratio <= limit)
     .sort((a, b) => a.ratio - b.ratio);
@@ -1013,7 +1027,8 @@ function playHeard(state, recipe) {
   const zebra = state.canvas?.dataset.view === 'zebra';
   const seconds = zebra ? 4 : (exciter === 'bow' ? 1.1 : 1.6);
   const fundamental = state.hearFundamental || noteFrequency(state.note);
-  const samples = renderPreview(state.partials, {
+  const partials = audiblePartials(state.partials, { fundamental, sampleRate: ctx.sampleRate });
+  const samples = renderPreview(partials, {
     fundamental,
     velocity: state.velocity,
     position: state.position,
