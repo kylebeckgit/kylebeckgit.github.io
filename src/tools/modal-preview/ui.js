@@ -497,7 +497,9 @@ export function mount(root) {
     state.detune = knobs.detune;
     state.position = knobs.position;
     const ask = root.querySelector('[data-ask]');
+    const readout = root.querySelector('[data-roll-read]');
     if (ask && text != null) ask.value = text;
+    if (readout && text != null) readout.textContent = text;
     publishShape(MORPH_MS);
     draw(canvas, state.partials, state);
     if (state.fit.moving) kickView();

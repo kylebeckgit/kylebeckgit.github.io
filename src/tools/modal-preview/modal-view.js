@@ -350,14 +350,12 @@ export function paintModalView(ctx, partials, options = {}) {
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
   const clock = longestSeconds(slices);
-  const weight = lineWeight(width) * (style === 'eco' ? 0.85 : style === 'glow' ? 1.12 : 1);
-  // Two stacked blooms. The wide one fills the gaps between close lines.
-  // The tighter one brightens the mesh those overlaps make.
-  // Cream bloom stays soft so neighbours keep a dark gap. Accent bloom
-  // is softer still, a tint rather than a second set of bars.
-  const wide = Math.max(3.4, weight * (style === 'eco' ? 0.85 : 1.35));
-  const tight = Math.max(1.8, weight * (style === 'eco' ? 0.5 : 0.72));
-  const scene = Math.max(7.5, weight * 1.7);
+  const weight = lineWeight(width, slices.length) * (style === 'eco' ? 0.85 : style === 'glow' ? 1.12 : 1);
+  // Blooms shrink with the stroke so a dense comb keeps a dark gap between posts.
+  const crowd = Math.min(3.2, Math.max(1, slices.length / 18));
+  const wide = Math.max(3.4 / crowd, weight * (style === 'eco' ? 0.85 : 1.35));
+  const tight = Math.max(1.8 / crowd, weight * (style === 'eco' ? 0.5 : 0.72));
+  const scene = Math.max(7.5 / crowd, weight * 1.7);
   ctx.save();
   ctx.filter = `blur(${scene}px)`;
   ctx.globalCompositeOperation = palette.bloom;
@@ -442,11 +440,32 @@ function floorBack(world, z = PLANE.ribbonZ) {
   return { x: world.x, y: 0, z };
 }
 
-// A bar is about 1.25% of the panel width. Tied to the canvas, not the
-// fit scale, so strokes stay thin when the comb is zoomed to fill the panel.
-function lineWeight(panelWidth) {
+// A bar is about 1.25% of the panel width at 16 partials. Denser combs
+// use a thinner stroke so neighboring posts do not melt into one slab.
+export function lineWeight(panelWidth, count = 16) {
   const panel = Math.max(320, Number(panelWidth) || 800);
-  return panel * 0.0125;
+  const crowd = Math.min(3.2, Math.max(1, (Number(count) || 16) / 18));
+  return panel * 0.0125 / crowd;
+}
+
+// True when the ink gaps stay wider than the stroke on the preview canvas.
+export function barsStayDistinct(partials, knobs = {}) {
+  const width = 640;
+  const height = 516;
+  const detune = Number(knobs.detune) || 0;
+  const slices = combHeights(
+    (partials || []).map((partial) => (partial && 't' in partial ? partial : sliceFromPartial(partial, 1))),
+    knobs.position,
+  );
+  const tris = layoutTriangles(slices, defaultCamera(), width, height, detune)
+    .filter((tri) => tri?.foot)
+    .sort((a, b) => a.foot.x - b.foot.x);
+  if (tris.length < 2) return false;
+  let gap = Infinity;
+  for (let i = 1; i < tris.length; i++) {
+    gap = Math.min(gap, Math.hypot(tris[i].foot.x - tris[i - 1].foot.x, tris[i].foot.y - tris[i - 1].foot.y));
+  }
+  return gap > lineWeight(width, tris.length) * 1.35;
 }
 
 // Every bar's tie stops on the back rail. The two rails stay a bar-step apart.

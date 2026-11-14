@@ -130,8 +130,9 @@ import Base from '../layouts/Base.astro';
           <button type="button" class="btn" data-roll-back disabled>Back</button>
           <button type="button" class="btn" data-roll-forward disabled>Forward</button>
         </div>
+        <p class="roll-line" data-roll-read></p>
       </div>
-      <p class="quiet">Detune spreads the slices along frequency and is not written into the file. Decay stretches them front to back. The other knobs are written. Position is where the strike hits. Roll stays in the browser. Tune starts locked.</p>
+      <p class="quiet">Tune starts locked.</p>
 
       <div class="save">
         <label>Name
@@ -406,6 +407,14 @@ import Base from '../layouts/Base.astro';
   }
   .roll-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
   .roll-actions .btn { min-height: 2.75rem; }
+  .roll-line {
+    grid-column: 1 / -1;
+    margin: 0;
+    min-height: 1.5rem;
+    font-size: 1.05rem;
+    color: var(--fg);
+  }
+  .roll-line:empty { display: none; }
   .roll .knob[hidden] { display: none; }
   .knob select {
     grid-column: 1 / -1;

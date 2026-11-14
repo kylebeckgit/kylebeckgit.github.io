@@ -2,6 +2,7 @@
 // picks a plausible hybrid, and a failed quality check is rolled again.
 
 import { shapePartials } from './shape.js';
+import { barsStayDistinct } from './modal-view.js';
 
 export const MATERIALS = ['metal', 'wood', 'glass', 'skin', 'bell', 'any', 'wild'];
 
@@ -10,12 +11,12 @@ export const KNOB_KEYS = ['tune', 'detune', 'decay', 'decayKf', 'position', 'den
 const DENSITIES = [8, 16, 32, 64, 128, 256];
 
 const RANGES = {
-  metal: { decay: [0.05, 0.7], decayKf: [-0.2, 0.4], absorb: [-0.15, 0.35], disperse: [-0.1, 0.4], normalize: [-0.05, 0.45], detune: [-0.18, 0.22], position: [0.08, 0.32], density: [16, 32, 64], tune: [-6, 6] },
+  metal: { decay: [0.05, 0.7], decayKf: [-0.2, 0.4], absorb: [-0.15, 0.35], disperse: [-0.1, 0.4], normalize: [-0.05, 0.45], detune: [-0.18, 0.22], position: [0.08, 0.32], density: [16, 32], tune: [-6, 6] },
   wood: { decay: [-0.65, 0.05], decayKf: [0.15, 0.7], absorb: [0.2, 0.7], disperse: [-0.2, 0.12], normalize: [-0.55, 0.0], detune: [-0.12, 0.12], position: [0.14, 0.5], density: [8, 16, 32], tune: [-6, 6] },
   glass: { decay: [0.3, 0.85], decayKf: [-0.15, 0.25], absorb: [-0.4, 0.1], disperse: [-0.05, 0.28], normalize: [0.1, 0.65], detune: [-0.1, 0.16], position: [0.06, 0.26], density: [8, 16, 32], tune: [-6, 6] },
   skin: { decay: [-0.9, -0.25], decayKf: [0.25, 0.8], absorb: [0.3, 0.8], disperse: [-0.08, 0.3], normalize: [-0.7, -0.15], detune: [-0.2, 0.2], position: [0.28, 0.7], density: [8, 16, 32], tune: [-6, 6] },
   bell: { decay: [0.1, 0.65], decayKf: [-0.05, 0.4], absorb: [-0.1, 0.3], disperse: [0.28, 0.72], normalize: [0.05, 0.5], detune: [-0.12, 0.18], position: [0.08, 0.36], density: [8, 16, 32], tune: [-6, 6] },
-  any: { decay: [-0.55, 0.75], decayKf: [-0.3, 0.55], absorb: [-0.35, 0.6], disperse: [-0.25, 0.55], normalize: [-0.5, 0.55], detune: [-0.22, 0.25], position: [0.06, 0.6], density: [8, 16, 32, 64], tune: [-8, 8] },
+  any: { decay: [-0.55, 0.75], decayKf: [-0.3, 0.55], absorb: [-0.35, 0.6], disperse: [-0.25, 0.55], normalize: [-0.5, 0.55], detune: [-0.22, 0.25], position: [0.06, 0.6], density: [8, 16, 32], tune: [-8, 8] },
 };
 
 function clamp(value, lo, hi) {
@@ -135,7 +136,7 @@ function sampleWild(rng, wildness) {
     decay: lerp(-0.92, 0.95, rng()),
     decayKf: lerp(-0.92, 0.92, rng()),
     position: lerp(0.04, 0.82, rng()),
-    density: pick(rng, amount > 0.5 ? [8, 16, 32, 64] : [8, 16, 32]),
+    density: pick(rng, [8, 16, 32]),
     absorb: lerp(-0.75, 0.85, rng()),
     disperse: lerp(-0.9, 0.92, rng()),
     normalize: lerp(-0.8, 0.8, rng()),
@@ -144,7 +145,7 @@ function sampleWild(rng, wildness) {
   const knobs = {};
   for (const key of KNOB_KEYS) knobs[key] = lerp(tame[key], extreme[key], mix);
   knobs.tune = Math.round(knobs.tune);
-  knobs.density = nearestDensity(knobs.density, [8, 16, 32, 64]);
+  knobs.density = nearestDensity(knobs.density, [8, 16, 32]);
   knobs.position = clamp(knobs.position, 0.02, 0.98);
   return knobs;
 }
@@ -233,6 +234,7 @@ export function assessQuality(partials, knobs) {
   const controlledNoise = knobs.density >= 16 && fund && fund.decay < 1.4 && peak - (list[Math.min(5, list.length - 1)]?.gainDb ?? -80) < 36;
   if (!clearPitch && !controlledNoise) reasons.push('center');
   if (Math.abs(knobs.detune) > 0.8) reasons.push('view');
+  if (list.length && !barsStayDistinct(list, knobs)) reasons.push('merged');
   const ok = reasons.length === 0;
   return { ok, reasons, score: ok ? 10 : 10 - reasons.length };
 }

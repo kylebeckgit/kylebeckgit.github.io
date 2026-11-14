@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { previewPartials, defaultControls } from './engine.js';
+import { barsStayDistinct } from './modal-view.js';
 import {
   MATERIALS,
   assessQuality,
@@ -56,6 +57,24 @@ test('one thousand wild rolls stay usable and the description matches', () => {
     });
     assert.equal(rolled.quality.ok, true, `wild ${i} ${rolled.quality.reasons.join(',')}`);
     assert.equal(descriptionAgrees(rolled.description, rolled.knobs, rolled.partials), true, `${rolled.description} ${JSON.stringify(rolled.knobs)}`);
+  }
+});
+
+test('no roll packs the bars into one slab', () => {
+  for (const material of MATERIALS) {
+    for (let i = 0; i < 40; i++) {
+      const rolled = rollSound({
+        base,
+        current: identityKnobs(),
+        material,
+        amount: 1,
+        wildness: 1,
+        locks: defaultLocks(),
+        seed: 9000 + i + material.length * 100,
+      });
+      assert.equal(rolled.quality.reasons.includes('merged'), false, `${material} ${i} density ${rolled.knobs.density}`);
+      assert.equal(barsStayDistinct(rolled.partials, rolled.knobs), true, `${material} ${rolled.knobs.density}`);
+    }
   }
 });
 
