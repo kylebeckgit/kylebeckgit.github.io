@@ -388,11 +388,22 @@ export function hitPartial(partials, camera, width, height, x, y, detune = 0, fi
   const place = placement(used, width, height);
   const clock = longestSeconds(slices);
   const air = airFrame(slices, clock, detune);
+  const placed = [];
+  for (let i = 0; i < slices.length; i++) {
+    if (!slices[i] || slices[i].alpha < 0.2 || slices[i].height < 0.02) continue;
+    placed.push({
+      index: i,
+      slice: slices[i],
+      tri: projectSlice(slices[i], detune, place, view, clock, air),
+      shape: drawShape(Math.max(0.05, Number(slices[i].seconds) || 0.2), clock, slices[i], air),
+    });
+  }
+  placed.sort((a, b) => worldOf(a.slice, detune).x - worldOf(b.slice, detune).x);
+  applyVisibleCrests(placed, air);
   let best = -1;
   let score = 14;
-  for (let i = 0; i < slices.length; i++) {
-    if (slices[i].alpha < 0.2) continue;
-    const tri = projectSlice(slices[i], detune, place, view, clock, air);
+  for (const item of placed) {
+    const tri = item.tri;
     const distance = Math.min(
       distanceToSegment(x, y, tri.foot.x, tri.foot.y, tri.crest.x, tri.crest.y),
       distanceToSegment(x, y, tri.crest.x, tri.crest.y, tri.back.x, tri.back.y),
@@ -400,7 +411,7 @@ export function hitPartial(partials, camera, width, height, x, y, detune = 0, fi
     );
     if (distance < score) {
       score = distance;
-      best = i;
+      best = item.index;
     }
   }
   return best;
@@ -733,6 +744,46 @@ function glow(ctx, points, color, look, alpha) {
   strokePath(ctx, points, color, look.width, look.alpha * alpha);
 }
 
+const POST_CROP = { 6: 0.97, 7: 1, 8: 0.98, 9: 0.97, 10: 0.96, 11: 0.96, 12: 0.95, 13: 0.95, 14: 0.94, 15: 0.94, 16: 0.94 };
+
+// The painted posts are taller than the raw partial heights. Hit testing and
+// the selection stroke have to use this same crest, or a click on the upper
+// post lands on the tail and the highlight stops short of the bar.
+function applyVisibleCrests(placed, air) {
+  const fund = placed.find((item) => item.shape.air && air.rankOf(item.slice) === 0);
+  if (!fund?.tri?.curve?.length) return placed;
+  const bend = fund.tri.curve.reduce((low, point) => (point.y > low.y ? point : low), fund.tri.curve[0]);
+  const tailAt = (x) => {
+    const curve = fund.tri.curve;
+    for (let i = 1; i < curve.length; i++) {
+      const a = curve[i - 1];
+      const b = curve[i];
+      const minX = Math.min(a.x, b.x);
+      const maxX = Math.max(a.x, b.x);
+      if (x < minX || x > maxX) continue;
+      const u = (x - a.x) / ((b.x - a.x) || 1);
+      return a.y + (b.y - a.y) * u;
+    }
+    return null;
+  };
+  for (const item of placed) {
+    if (item.shape.air || item.tri.crest.x > bend.x) continue;
+    const y = tailAt(item.tri.crest.x);
+    if (y != null) item.tri.crest = { x: item.tri.crest.x, y };
+  }
+  const bar1H = Math.max(4, placed[0].tri.foot.y - placed[0].tri.crest.y);
+  for (let i = 0; i < placed.length; i++) {
+    const frac = POST_CROP[i + 1];
+    if (frac == null) continue;
+    const item = placed[i];
+    let crestY = item.tri.foot.y - bar1H * frac;
+    const tailY = tailAt(item.tri.crest.x);
+    if (tailY != null) crestY = Math.max(crestY, tailY + 4);
+    item.tri.crest = { x: item.tri.crest.x, y: Math.min(crestY, item.tri.foot.y - 4) };
+  }
+  return placed;
+}
+
 function hatchLimit(placed, detune) {
   const xs = placed.map((item) => worldOf(item.slice, detune).x).sort((a, b) => a - b);
   if (xs.length < 2) return Infinity;
@@ -753,60 +804,25 @@ function drawSlices(ctx, slices, detune, place, camera, look, palette, clock, st
   const tailColor = mixHex(palette.wire, palette.paper, tune().tailCream);
   const octaveColor = mixHex(palette.wire, palette.paper, tune().octaveCream);
   const air = airFrame(slices, clock, detune);
-  const visible = [];
+  const placed = [];
   for (let index = 0; index < slices.length; index++) {
     const slice = slices[index];
     if (!slice || slice.alpha < 0.04 || slice.height < 0.02) continue;
-    visible.push(slice);
+    placed.push({
+      index,
+      slice,
+      tri: projectSlice(slice, detune, place, camera, clock, air),
+      shape: drawShape(Math.max(0.05, Number(slice.seconds) || 0.2), clock, slice, air),
+    });
   }
-  const placed = visible.map((slice) => ({
-    slice,
-    tri: projectSlice(slice, detune, place, camera, clock, air),
-    shape: drawShape(Math.max(0.05, Number(slice.seconds) || 0.2), clock, slice, air),
-  }));
   placed.sort((a, b) => worldOf(a.slice, detune).x - worldOf(b.slice, detune).x);
+  applyVisibleCrests(placed, air);
   const limit = hatchLimit(placed, detune);
   if (style !== 'eco') {
     const atDepth = (group, z) => group.map((item) => {
       const world = worldOf(item.slice, detune);
       return place(camera, world.x, 0, z);
     });
-    const fund = placed.find((item) => item.shape.air && air.rankOf(item.slice) === 0);
-    if (fund) {
-      const bend = fund.tri.curve.reduce((low, point) => (point.y > low.y ? point : low), fund.tri.curve[0]);
-      const tailAt = (x) => {
-        const curve = fund.tri.curve;
-        for (let i = 1; i < curve.length; i++) {
-          const a = curve[i - 1];
-          const b = curve[i];
-          const minX = Math.min(a.x, b.x);
-          const maxX = Math.max(a.x, b.x);
-          if (x < minX || x > maxX) continue;
-          const u = (x - a.x) / ((b.x - a.x) || 1);
-          return a.y + (b.y - a.y) * u;
-        }
-        return null;
-      };
-      // Tops on the way down to the bend follow the sag.
-      for (const item of placed) {
-        item.baseCrest = item.tri.crest.y;
-        if (item.shape.air || item.tri.crest.x > bend.x) continue;
-        const y = tailAt(item.tri.crest.x);
-        if (y != null) item.tri.crest = { x: item.tri.crest.x, y };
-      }
-      // Bars past the bend use the crop's measured lengths, and never rise through the tail.
-      const measured = { 6: 0.97, 7: 1, 8: 0.98, 9: 0.97, 10: 0.96, 11: 0.96, 12: 0.95, 13: 0.95, 14: 0.94, 15: 0.94, 16: 0.94 };
-      const bar1H = Math.max(4, placed[0].tri.foot.y - placed[0].tri.crest.y);
-      for (let i = 0; i < placed.length; i++) {
-        const frac = measured[i + 1];
-        if (frac == null) continue;
-        const item = placed[i];
-        let crestY = item.tri.foot.y - bar1H * frac;
-        const tailY = tailAt(item.tri.crest.x);
-        if (tailY != null) crestY = Math.max(crestY, tailY + 4);
-        item.tri.crest = { x: item.tri.crest.x, y: Math.min(crestY, item.tri.foot.y - 4) };
-      }
-    }
     const frontRail = atDepth(placed, 0);
     const backRail = atDepth(placed, PLANE.ribbonZ);
     // Dimmer than the bars, with thin ties, and only the wide blur so it hazes.
@@ -865,7 +881,8 @@ function drawSlices(ctx, slices, detune, place, camera, look, palette, clock, st
   }
   if (bloom || selected < 0 || !slices[selected]) return;
   const slice = slices[selected];
-  const tri = projectSlice(slice, detune, place, camera, clock, air);
+  const tri = placed.find((item) => item.index === selected)?.tri
+    || projectSlice(slice, detune, place, camera, clock, air);
   if (style !== 'eco') {
     glow(ctx, [tri.foot, tri.crest], palette.ink, { ...ink, width: ink.width + weight * 0.35 }, 1);
     glow(ctx, [tri.foot, tri.floor], palette.ink, ink, 1);
