@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { performance } from 'node:perf_hooks';
-import { aimSlices, clampCamera, createFitMotion, createSliceMotion, defaultCamera, detuneT, followFit, frameMotion, layoutTriangles, paintModalView, PLANE, sampleSlices, sliceFromPartial, worldOf } from './modal-view.js';
+import { aimSlices, clampCamera, createFitMotion, createSliceMotion, defaultCamera, detuneT, followFit, frameMotion, hitPartial, layoutTriangles, paintModalView, PLANE, sampleSlices, sliceFromPartial, spaceByLog, worldOf } from './modal-view.js';
 import { shapePartials } from './shape.js';
 
 function stubContext() {
@@ -131,6 +131,22 @@ test('the triangles stay inside the canvas at the resting angle and a full turn'
       }
     }
   }
+});
+
+test('a click on the cropped top of a right-hand post hits that post', () => {
+  const list = [];
+  for (let i = 0; i < 16; i++) {
+    const harm = i + 1;
+    list.push({ ratio: harm, gainDb: -20 * Math.log10(harm), decay: 8.6 / harm });
+  }
+  const slices = spaceByLog(list.map((partial) => sliceFromPartial(partial)));
+  const camera = defaultCamera();
+  const tris = layoutTriangles(slices, camera, 800, 520, 0);
+  const bar = Math.abs(tris[0].foot.y - tris[0].crest.y);
+  const paintedTop = tris[15].foot.y - bar * 0.94;
+  const y = (paintedTop + tris[15].crest.y) / 2;
+  assert.ok(y < tris[15].crest.y - 8, 'the cropped post rises above the raw crest');
+  assert.equal(hitPartial(slices, camera, 800, 520, tris[15].foot.x, y), 15);
 });
 
 test('zooming in eases and zooming out stays tight enough to fit', () => {
