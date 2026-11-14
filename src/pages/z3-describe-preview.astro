@@ -67,25 +67,42 @@ import Base from '../layouts/Base.astro';
 
       <div class="knob-groups">
         <div class="knobs knobs-4">
-          <label class="knob">Tune <button type="button" class="lock" data-lock="tune" aria-pressed="true" aria-label="Lock tune">Lock</button> <span data-tune-out>0</span>
-            <input data-tune type="range" min="-48" max="48" step="1" value="0">
-          </label>
-          <label class="knob">Detune <button type="button" class="lock" data-lock="detune" aria-pressed="false" aria-label="Lock detune">Lock</button> <span data-detune-out>0</span>
-            <input data-detune type="range" min="-100" max="100" step="1" value="0">
-          </label>
-          <label class="knob">Decay <button type="button" class="lock" data-lock="decay" aria-pressed="false" aria-label="Lock decay">Lock</button> <span data-modal-decay-out>0</span>
-            <input data-modal-decay type="range" min="-100" max="100" step="1" value="0">
-          </label>
-          <label class="knob">Decay KF <button type="button" class="lock" data-lock="decayKf" aria-pressed="false" aria-label="Lock decay KF">Lock</button> <span data-decay-kf-out>0</span>
-            <input data-decay-kf type="range" min="-100" max="100" step="1" value="0">
-          </label>
+          <div class="knob">
+            <label for="knob-tune">Tune</label>
+            <button type="button" class="lock" data-lock="tune" aria-pressed="true" aria-label="Lock tune">Lock</button>
+            <span data-tune-out>0</span>
+            <input id="knob-tune" data-tune type="range" min="-48" max="48" step="1" value="0">
+          </div>
+          <div class="knob">
+            <label for="knob-detune">Detune</label>
+            <button type="button" class="lock" data-lock="detune" aria-pressed="false" aria-label="Lock detune">Lock</button>
+            <span data-detune-out>0</span>
+            <input id="knob-detune" data-detune type="range" min="-100" max="100" step="1" value="0">
+          </div>
+          <div class="knob">
+            <label for="knob-decay">Decay</label>
+            <button type="button" class="lock" data-lock="decay" aria-pressed="false" aria-label="Lock decay">Lock</button>
+            <span data-modal-decay-out>0</span>
+            <input id="knob-decay" data-modal-decay type="range" min="-100" max="100" step="1" value="0">
+          </div>
+          <div class="knob">
+            <label for="knob-decay-kf">Decay KF</label>
+            <button type="button" class="lock" data-lock="decayKf" aria-pressed="false" aria-label="Lock decay KF">Lock</button>
+            <span data-decay-kf-out>0</span>
+            <input id="knob-decay-kf" data-decay-kf type="range" min="-100" max="100" step="1" value="0">
+          </div>
         </div>
         <div class="knobs knobs-2">
-          <label class="knob">Position <button type="button" class="lock" data-lock="position" aria-pressed="false" aria-label="Lock position">Lock</button> <span data-position-out>0.18</span>
-            <input data-position type="range" min="0.02" max="0.98" step="0.01" value="0.18">
-          </label>
-          <label class="knob">Density <button type="button" class="lock" data-lock="density" aria-pressed="false" aria-label="Lock density">Lock</button>
-            <select data-density>
+          <div class="knob">
+            <label for="knob-position">Position</label>
+            <button type="button" class="lock" data-lock="position" aria-pressed="false" aria-label="Lock position">Lock</button>
+            <span data-position-out>0.18</span>
+            <input id="knob-position" data-position type="range" min="0.02" max="0.98" step="0.01" value="0.18">
+          </div>
+          <div class="knob">
+            <label for="knob-density">Density</label>
+            <button type="button" class="lock" data-lock="density" aria-pressed="false" aria-label="Lock density">Lock</button>
+            <select id="knob-density" data-density>
               <option value="8">8</option>
               <option value="16" selected>16</option>
               <option value="32">32</option>
@@ -93,18 +110,27 @@ import Base from '../layouts/Base.astro';
               <option value="128">128</option>
               <option value="256">256</option>
             </select>
-          </label>
+          </div>
         </div>
         <div class="knobs knobs-3">
-          <label class="knob">Absorb <button type="button" class="lock" data-lock="absorb" aria-pressed="false" aria-label="Lock absorb">Lock</button> <span data-absorb-out>0</span>
-            <input data-absorb type="range" min="-100" max="100" step="1" value="0">
-          </label>
-          <label class="knob">Disperse <button type="button" class="lock" data-lock="disperse" aria-pressed="false" aria-label="Lock disperse">Lock</button> <span data-disperse-out>0</span>
-            <input data-disperse type="range" min="-100" max="100" step="1" value="0">
-          </label>
-          <label class="knob">Normalize <button type="button" class="lock" data-lock="normalize" aria-pressed="false" aria-label="Lock normalize">Lock</button> <span data-normalize-out>0</span>
-            <input data-normalize type="range" min="-100" max="100" step="1" value="0">
-          </label>
+          <div class="knob">
+            <label for="knob-absorb">Absorb</label>
+            <button type="button" class="lock" data-lock="absorb" aria-pressed="false" aria-label="Lock absorb">Lock</button>
+            <span data-absorb-out>0</span>
+            <input id="knob-absorb" data-absorb type="range" min="-100" max="100" step="1" value="0">
+          </div>
+          <div class="knob">
+            <label for="knob-disperse">Disperse</label>
+            <button type="button" class="lock" data-lock="disperse" aria-pressed="false" aria-label="Lock disperse">Lock</button>
+            <span data-disperse-out>0</span>
+            <input id="knob-disperse" data-disperse type="range" min="-100" max="100" step="1" value="0">
+          </div>
+          <div class="knob">
+            <label for="knob-normalize">Normalize</label>
+            <button type="button" class="lock" data-lock="normalize" aria-pressed="false" aria-label="Lock normalize">Lock</button>
+            <span data-normalize-out>0</span>
+            <input id="knob-normalize" data-normalize type="range" min="-100" max="100" step="1" value="0">
+          </div>
         </div>
       </div>
       <div class="roll">

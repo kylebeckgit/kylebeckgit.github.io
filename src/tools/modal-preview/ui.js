@@ -501,7 +501,8 @@ export function mount(root) {
     if (ask && text != null) ask.value = text;
     if (readout && text != null) readout.textContent = text;
     publishShape(MORPH_MS);
-    draw(canvas, state.partials, state);
+    render();
+    pushModes();
     if (state.fit.moving) kickView();
     const back = root.querySelector('[data-roll-back]');
     const forward = root.querySelector('[data-roll-forward]');
