@@ -160,6 +160,17 @@ export function mount(root) {
     if (!first && duration > 0) kickView();
   }
 
+  function followProfile(duration = MORPH_MS) {
+    if (state.profilePartials && state.partials !== state.profilePartials) {
+      publishShape(duration);
+      return;
+    }
+    const first = !state.slicesReady;
+    state.slicesReady = true;
+    aimSlices(state.slices, state.partials, performance.now(), first ? 0 : duration);
+    if (!first && duration > 0) kickView();
+  }
+
   function kickView() {
     if (state.viewFrame) return;
     const frame = (now) => {
@@ -312,7 +323,7 @@ export function mount(root) {
     if (!source) return;
     source[field] = value;
     state.custom = true;
-    if (state.profilePartials && state.partials !== state.profilePartials) publishShape();
+    followProfile();
     render();
     pushModes();
   });
@@ -769,7 +780,7 @@ export function mount(root) {
         pushHistory();
         const list = state.profilePartials || state.partials;
         for (const partial of list) partial.ratio = Math.min(64, Math.max(0.02, partial.ratio / factor));
-        if (state.profilePartials && state.partials !== state.profilePartials) publishShape();
+        followProfile();
         state.custom = true;
         render();
         pushModes();
@@ -792,7 +803,7 @@ export function mount(root) {
     else {
       pushHistory();
       for (const partial of (state.profilePartials || state.partials)) partial.ratio /= ratio;
-      if (state.profilePartials && state.partials !== state.profilePartials) publishShape();
+      followProfile();
       state.custom = true;
       render();
       pushModes();

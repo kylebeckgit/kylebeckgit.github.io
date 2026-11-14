@@ -450,9 +450,11 @@ export function audiblePartials(partials, { fundamental = A4_HZ, sampleRate = 48
 }
 
 export function decayKnobFromName(name) {
-  const match = /_decay(\d+)\.csv$/i.exec(String(name || '').trim());
-  if (!match) return null;
-  const knob = Number(match[1]);
+  // Chrome saves a second download as "name_decay79 (1).csv". The knob is the
+  // last _decayN in the name, not only a file that ends exactly at .csv.
+  const matches = [...String(name || '').matchAll(/_decay(\d+)/gi)];
+  if (!matches.length) return null;
+  const knob = Number(matches[matches.length - 1][1]);
   return knob >= 0 && knob <= 100 ? knob : null;
 }
 

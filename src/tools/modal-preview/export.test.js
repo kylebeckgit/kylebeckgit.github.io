@@ -88,6 +88,8 @@ test('an exported file imports back to the preview decays', () => {
     assert.ok(error <= step + 1e-9, `${partial.decay} vs ${preview[index].decay}`);
     assert.equal(partial.ratio, Number(preview[index].ratio.toFixed(4)));
   });
+  const renamed = fromCsv(exported.csv, { filename: exported.filename.replace(/\.csv$/, ' (1).csv') });
+  assert.ok(Math.abs(renamed[0].decay - restored[0].decay) < 1e-6);
   const legacy = fromCsv('Ratio;GainDB;Decay\n1.0000;0.00;4.500\n2.0000;-6.00;2.250\n', { filename: 'old-profile.csv' });
   assert.equal(legacy[0].decay, 4.5);
   assert.equal(legacy[1].decay, 2.25);
