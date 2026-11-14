@@ -3,6 +3,7 @@ import { analyzeSamples, decodeRecording, resampleMono, parseRoot, frequencyToNo
 import { renderPreview, scaleToPeak } from './resonator.js';
 import { aimSlices, createFitMotion, createSliceMotion, defaultCamera, hitPartial, MORPH_MS, paintModalView, sampleSlices, slicesMoving } from './modal-view.js';
 import { shapePartials } from './shape.js';
+import { createRollHistory, defaultLocks, pushRoll, redoRoll, rollSound, undoRoll } from './randomize.js';
 import { fileSlug } from './recipes.js';
 import { mountStudio } from './studio.js';
 
@@ -434,6 +435,107 @@ export function mount(root) {
       if (state.fit.moving) kickView();
     });
   }
+  const rollHistory = createRollHistory(10);
+  let rollSeed = 1;
+  const rollLocks = defaultLocks();
+  for (const button of root.querySelectorAll('[data-lock]')) {
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      const on = button.getAttribute('aria-pressed') !== 'true';
+      button.setAttribute('aria-pressed', String(on));
+      rollLocks[button.dataset.lock] = on;
+    });
+  }
+  const materialSelect = root.querySelector('[data-roll-material]');
+  const wildnessField = root.querySelector('[data-wildness-field]');
+  const syncWildness = () => {
+    if (wildnessField) wildnessField.hidden = materialSelect?.value !== 'wild';
+  };
+  materialSelect?.addEventListener('change', syncWildness);
+  syncWildness();
+  const amountSlider = root.querySelector('[data-roll-amount]');
+  amountSlider?.addEventListener('input', () => {
+    const out = root.querySelector('[data-roll-amount-out]');
+    if (out) out.textContent = Number(amountSlider.value).toFixed(2);
+  });
+  const wildnessSlider = root.querySelector('[data-roll-wildness]');
+  wildnessSlider?.addEventListener('input', () => {
+    const out = root.querySelector('[data-roll-wildness-out]');
+    if (out) out.textContent = Number(wildnessSlider.value).toFixed(2);
+  });
+  const readRollKnobs = () => ({
+    tune: Number(root.querySelector('[data-tune]')?.value || 0),
+    detune: Number(root.querySelector('[data-detune]')?.value || 0) / 100,
+    decay: Number(root.querySelector('[data-modal-decay]')?.value || 0) / 100,
+    decayKf: Number(root.querySelector('[data-decay-kf]')?.value || 0) / 100,
+    position: Number(root.querySelector('[data-position]')?.value || 0.18),
+    density: Number(root.querySelector('[data-density]')?.value || 16),
+    absorb: Number(root.querySelector('[data-absorb]')?.value || 0) / 100,
+    disperse: Number(root.querySelector('[data-disperse]')?.value || 0) / 100,
+    normalize: Number(root.querySelector('[data-normalize]')?.value || 0) / 100,
+  });
+  const writeRoll = (knobs, text) => {
+    const setNum = (selector, readout, value) => {
+      const input = root.querySelector(selector);
+      const out = root.querySelector(readout);
+      if (input) input.value = String(value);
+      if (out) out.textContent = String(value);
+    };
+    setNum('[data-tune]', '[data-tune-out]', Math.round(knobs.tune));
+    setNum('[data-detune]', '[data-detune-out]', Math.round(knobs.detune * 100));
+    setNum('[data-modal-decay]', '[data-modal-decay-out]', Math.round(knobs.decay * 100));
+    setNum('[data-decay-kf]', '[data-decay-kf-out]', Math.round(knobs.decayKf * 100));
+    setNum('[data-absorb]', '[data-absorb-out]', Math.round(knobs.absorb * 100));
+    setNum('[data-disperse]', '[data-disperse-out]', Math.round(knobs.disperse * 100));
+    setNum('[data-normalize]', '[data-normalize-out]', Math.round(knobs.normalize * 100));
+    const position = root.querySelector('[data-position]');
+    const positionOut = root.querySelector('[data-position-out]');
+    if (position) position.value = knobs.position.toFixed(2);
+    if (positionOut) positionOut.textContent = knobs.position.toFixed(2);
+    const density = root.querySelector('[data-density]');
+    if (density) density.value = String(knobs.density);
+    state.detune = knobs.detune;
+    state.position = knobs.position;
+    const ask = root.querySelector('[data-ask]');
+    const readout = root.querySelector('[data-roll-read]');
+    if (ask && text != null) ask.value = text;
+    if (readout && text != null) readout.textContent = text;
+    publishShape(MORPH_MS);
+    render();
+    pushModes();
+    if (state.fit.moving) kickView();
+    const back = root.querySelector('[data-roll-back]');
+    const forward = root.querySelector('[data-roll-forward]');
+    if (back) back.disabled = rollHistory.past.length === 0;
+    if (forward) forward.disabled = rollHistory.future.length === 0;
+  };
+  const snapshotRoll = () => ({
+    knobs: readRollKnobs(),
+    text: root.querySelector('[data-ask]')?.value || '',
+  });
+  root.querySelector('[data-roll]')?.addEventListener('click', () => {
+    const current = snapshotRoll();
+    pushRoll(rollHistory, current);
+    rollSeed = (rollSeed + 1) >>> 0;
+    const rolled = rollSound({
+      base: state.profilePartials || state.partials,
+      current: current.knobs,
+      material: materialSelect?.value || 'any',
+      amount: Number(amountSlider?.value || 1),
+      wildness: Number(wildnessSlider?.value || 0.7),
+      locks: rollLocks,
+      seed: (Date.now() ^ rollSeed) >>> 0,
+    });
+    writeRoll(rolled.knobs, rolled.description);
+  });
+  root.querySelector('[data-roll-back]')?.addEventListener('click', () => {
+    const restored = undoRoll(rollHistory, snapshotRoll());
+    if (restored) writeRoll(restored.knobs, restored.text);
+  });
+  root.querySelector('[data-roll-forward]')?.addEventListener('click', () => {
+    const restored = redoRoll(rollHistory, snapshotRoll());
+    if (restored) writeRoll(restored.knobs, restored.text);
+  });
   tableBody.addEventListener('focusin', (event) => {
     if (canvas.dataset.view !== 'zebra') return;
     const input = event.target.closest?.('[data-index]');

@@ -67,25 +67,42 @@ import Base from '../layouts/Base.astro';
 
       <div class="knob-groups">
         <div class="knobs knobs-4">
-          <label class="knob">Tune <span data-tune-out>0</span>
-            <input data-tune type="range" min="-48" max="48" step="1" value="0">
-          </label>
-          <label class="knob">Detune <span data-detune-out>0</span>
-            <input data-detune type="range" min="-100" max="100" step="1" value="0">
-          </label>
-          <label class="knob">Decay <span data-modal-decay-out>0</span>
-            <input data-modal-decay type="range" min="-100" max="100" step="1" value="0">
-          </label>
-          <label class="knob">Decay KF <span data-decay-kf-out>0</span>
-            <input data-decay-kf type="range" min="-100" max="100" step="1" value="0">
-          </label>
+          <div class="knob">
+            <label for="knob-tune">Tune</label>
+            <button type="button" class="lock" data-lock="tune" aria-pressed="true" aria-label="Lock tune">Lock</button>
+            <span data-tune-out>0</span>
+            <input id="knob-tune" data-tune type="range" min="-48" max="48" step="1" value="0">
+          </div>
+          <div class="knob">
+            <label for="knob-detune">Detune</label>
+            <button type="button" class="lock" data-lock="detune" aria-pressed="false" aria-label="Lock detune">Lock</button>
+            <span data-detune-out>0</span>
+            <input id="knob-detune" data-detune type="range" min="-100" max="100" step="1" value="0">
+          </div>
+          <div class="knob">
+            <label for="knob-decay">Decay</label>
+            <button type="button" class="lock" data-lock="decay" aria-pressed="false" aria-label="Lock decay">Lock</button>
+            <span data-modal-decay-out>0</span>
+            <input id="knob-decay" data-modal-decay type="range" min="-100" max="100" step="1" value="0">
+          </div>
+          <div class="knob">
+            <label for="knob-decay-kf">Decay KF</label>
+            <button type="button" class="lock" data-lock="decayKf" aria-pressed="false" aria-label="Lock decay KF">Lock</button>
+            <span data-decay-kf-out>0</span>
+            <input id="knob-decay-kf" data-decay-kf type="range" min="-100" max="100" step="1" value="0">
+          </div>
         </div>
         <div class="knobs knobs-2">
-          <label class="knob">Position <span data-position-out>0.18</span>
-            <input data-position type="range" min="0.02" max="0.98" step="0.01" value="0.18">
-          </label>
-          <label class="knob">Density
-            <select data-density>
+          <div class="knob">
+            <label for="knob-position">Position</label>
+            <button type="button" class="lock" data-lock="position" aria-pressed="false" aria-label="Lock position">Lock</button>
+            <span data-position-out>0.18</span>
+            <input id="knob-position" data-position type="range" min="0.02" max="0.98" step="0.01" value="0.18">
+          </div>
+          <div class="knob">
+            <label for="knob-density">Density</label>
+            <button type="button" class="lock" data-lock="density" aria-pressed="false" aria-label="Lock density">Lock</button>
+            <select id="knob-density" data-density>
               <option value="8">8</option>
               <option value="16" selected>16</option>
               <option value="32">32</option>
@@ -93,21 +110,55 @@ import Base from '../layouts/Base.astro';
               <option value="128">128</option>
               <option value="256">256</option>
             </select>
-          </label>
+          </div>
         </div>
         <div class="knobs knobs-3">
-          <label class="knob">Absorb <span data-absorb-out>0</span>
-            <input data-absorb type="range" min="-100" max="100" step="1" value="0">
-          </label>
-          <label class="knob">Disperse <span data-disperse-out>0</span>
-            <input data-disperse type="range" min="-100" max="100" step="1" value="0">
-          </label>
-          <label class="knob">Normalize <span data-normalize-out>0</span>
-            <input data-normalize type="range" min="-100" max="100" step="1" value="0">
-          </label>
+          <div class="knob">
+            <label for="knob-absorb">Absorb</label>
+            <button type="button" class="lock" data-lock="absorb" aria-pressed="false" aria-label="Lock absorb">Lock</button>
+            <span data-absorb-out>0</span>
+            <input id="knob-absorb" data-absorb type="range" min="-100" max="100" step="1" value="0">
+          </div>
+          <div class="knob">
+            <label for="knob-disperse">Disperse</label>
+            <button type="button" class="lock" data-lock="disperse" aria-pressed="false" aria-label="Lock disperse">Lock</button>
+            <span data-disperse-out>0</span>
+            <input id="knob-disperse" data-disperse type="range" min="-100" max="100" step="1" value="0">
+          </div>
+          <div class="knob">
+            <label for="knob-normalize">Normalize</label>
+            <button type="button" class="lock" data-lock="normalize" aria-pressed="false" aria-label="Lock normalize">Lock</button>
+            <span data-normalize-out>0</span>
+            <input id="knob-normalize" data-normalize type="range" min="-100" max="100" step="1" value="0">
+          </div>
         </div>
       </div>
-      <p class="quiet">Detune spreads the slices along frequency and is not written into the file. Decay stretches them front to back. The other knobs are written. Position is where the strike hits.</p>
+      <div class="roll">
+        <label class="knob">Material
+          <select data-roll-material>
+            <option value="any">Any</option>
+            <option value="metal">Metal</option>
+            <option value="wood">Wood</option>
+            <option value="glass">Glass</option>
+            <option value="skin">Skin</option>
+            <option value="bell">Bell</option>
+            <option value="wild">Wild</option>
+          </select>
+        </label>
+        <label class="knob">Amount <span data-roll-amount-out>1.00</span>
+          <input data-roll-amount type="range" min="0" max="1" step="0.01" value="1">
+        </label>
+        <label class="knob" data-wildness-field hidden>Wildness <span data-roll-wildness-out>0.70</span>
+          <input data-roll-wildness type="range" min="0" max="1" step="0.01" value="0.7">
+        </label>
+        <div class="roll-actions">
+          <button type="button" class="btn solid" data-roll>Roll</button>
+          <button type="button" class="btn" data-roll-back disabled>Back</button>
+          <button type="button" class="btn" data-roll-forward disabled>Forward</button>
+        </div>
+        <p class="roll-line" data-roll-read></p>
+      </div>
+      <p class="quiet">Tune starts locked.</p>
 
       <div class="save">
         <label>Name
@@ -347,13 +398,50 @@ import Base from '../layouts/Base.astro';
   .analyze-grid label.knob { display: grid; }
   .knob {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    column-gap: .6rem;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    column-gap: .45rem;
     row-gap: .15rem;
     align-items: baseline;
     font-size: .95rem;
   }
   .knob > span { color: var(--muted); font-variant-numeric: tabular-nums; justify-self: end; }
+  .knob .lock {
+    justify-self: end;
+    font: inherit;
+    font-size: .72rem;
+    line-height: 1;
+    padding: .2rem .4rem;
+    min-height: 1.5rem;
+    border: 1px solid var(--line);
+    background: transparent;
+    color: var(--muted);
+    border-radius: 4px;
+  }
+  .knob .lock[aria-pressed="true"] {
+    color: var(--bg);
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+  .roll {
+    display: grid;
+    gap: .85rem 1.15rem;
+    margin-top: 1rem;
+    align-items: end;
+  }
+  @media (min-width: 860px) {
+    .roll { grid-template-columns: minmax(0, 14rem) minmax(0, 1fr) minmax(0, 1fr) auto; }
+  }
+  .roll-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+  .roll-actions .btn { min-height: 2.75rem; }
+  .roll-line {
+    grid-column: 1 / -1;
+    margin: 0;
+    min-height: 1.5rem;
+    font-size: 1.05rem;
+    color: var(--fg);
+  }
+  .roll-line:empty { display: none; }
+  .roll .knob[hidden] { display: none; }
   .knob select {
     grid-column: 1 / -1;
     width: 100%;
