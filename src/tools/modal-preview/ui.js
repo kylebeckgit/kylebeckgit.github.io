@@ -139,8 +139,21 @@ export function mount(root) {
     const identity = shape.absorb === 0 && shape.disperse === 0 && shape.decay === 0
       && shape.decayKf === 0 && shape.normalize === 0 && shape.tune === 0
       && shape.density === state.profilePartials.length;
-    const shaped = identity ? state.profilePartials : shapePartials(state.profilePartials, shape);
-    state.partials = audiblePartials(shaped, heardOptions());
+    let next;
+    if (identity) {
+      const profile = state.profilePartials;
+      const audible = audiblePartials(profile.map((partial, index) => ({ ...partial, sourceIndex: index })), heardOptions());
+      const untouched = audible.length === profile.length && audible.every((partial, index) => {
+        const source = profile[index];
+        return partial.ratio === source.ratio && partial.gainDb === source.gainDb && partial.decay === source.decay;
+      });
+      // Share the profile while the shape is at rest so a table edit writes
+      // the same objects the next publish reads.
+      next = untouched ? profile : audible;
+    } else {
+      next = audiblePartials(shapePartials(state.profilePartials, shape), heardOptions());
+    }
+    state.partials = next;
     const first = !state.slicesReady;
     state.slicesReady = true;
     aimSlices(state.slices, state.partials, performance.now(), first ? 0 : duration);
@@ -582,7 +595,7 @@ export function mount(root) {
     event.target.value = '';
     if (!file) return;
     try {
-      const partials = fromCsv(await file.text());
+      const partials = fromCsv(await file.text(), { filename: file.name });
       pushHistory();
       adopt(partials, true);
       render();

@@ -447,6 +447,13 @@ export function audiblePartials(partials, { fundamental = A4_HZ, sampleRate = 48
   return [{ ...lowest, ratio, decay: Math.min(Math.max(lowest.decay, 0.001), ZEBRA_DECAY_MAX) }];
 }
 
+export function decayKnobFromName(name) {
+  const match = /_decay(\d+)\.csv$/i.exec(String(name || '').trim());
+  if (!match) return null;
+  const knob = Number(match[1]);
+  return knob >= 0 && knob <= 100 ? knob : null;
+}
+
 export function exportFileName(description, knob) {
   let slug = String(description || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
   if (slug.length > 48) slug = slug.slice(0, 48).replace(/-[^-]*$/, '');
@@ -492,7 +499,7 @@ export function toCsv(partials, options) {
   return zebraExport(partials, options).csv;
 }
 
-export function fromCsv(text) {
+export function fromCsv(text, options = {}) {
   const rows = String(text).replace(/^\uFEFF/, '').split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   const header = rows[0].split(/[;,]/).map((cell) => cell.trim().toLowerCase());
   const ratioAt = header.indexOf('ratio');
@@ -514,6 +521,12 @@ export function fromCsv(text) {
     if (partials.length === 256) break;
   }
   if (!partials.length) throw new Error('No partials were found in that file.');
+  // Files we export store Decay as Zebra's 0–1 column and put the knob in
+  // the file name. Older files store seconds and have no _decay knob.
+  const knob = options.knob ?? decayKnobFromName(options.filename);
+  if (knob != null && partials.every((partial) => partial.decay <= 1)) {
+    for (const partial of partials) partial.decay = zebraDecaySeconds(partial.decay, knob);
+  }
   return partials;
 }
 

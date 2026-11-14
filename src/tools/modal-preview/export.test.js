@@ -6,6 +6,7 @@ import {
   ZEBRA_PARTIAL_LIMIT_HZ,
   audiblePartials,
   exportFileName,
+  fromCsv,
   zebraDecayKnob,
   zebraDecaySeconds,
   zebraExport,
@@ -73,6 +74,23 @@ test('a decay longer than Zebra can play caps at knob 100', () => {
   for (const seconds of rendered) {
     assert.ok(Math.abs(seconds - Math.min(seconds, ZEBRA_DECAY_MAX)) < 1e-6);
   }
+});
+
+test('an exported file imports back to the preview decays', () => {
+  const rolled = rollSound({ material: 'bell', wildness: 1, amount: 1, seed: 4 });
+  const preview = audiblePartials(rolled.partials);
+  const exported = zebraExport(rolled.partials, { description: rolled.description });
+  const restored = fromCsv(exported.csv, { filename: exported.filename });
+  assert.equal(restored.length, preview.length);
+  const step = 2 ** (0.5 / 10) - 1;
+  restored.forEach((partial, index) => {
+    const error = Math.abs(partial.decay - preview[index].decay) / preview[index].decay;
+    assert.ok(error <= step + 1e-9, `${partial.decay} vs ${preview[index].decay}`);
+    assert.equal(partial.ratio, Number(preview[index].ratio.toFixed(4)));
+  });
+  const legacy = fromCsv('Ratio;GainDB;Decay\n1.0000;0.00;4.500\n2.0000;-6.00;2.250\n', { filename: 'old-profile.csv' });
+  assert.equal(legacy[0].decay, 4.5);
+  assert.equal(legacy[1].decay, 2.25);
 });
 
 test('rows above 12 kHz at A4 and above Nyquist stay out of the file', () => {
