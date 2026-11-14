@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { previewPartials, defaultControls } from './engine.js';
 import { shapePartials } from './shape.js';
-import { combHeights, defaultCamera, layoutTriangles, paintModalView, sliceFromPartial } from './modal-view.js';
+import { combHeights, decayStrandSegments, defaultCamera, layoutTriangles, paintModalView, sliceFromPartial } from './modal-view.js';
 
 const colors = { accent: '#d4421c', bg: '#f4efe6', fg: '#241f1a', muted: '#6d675f' };
 const WIDTH = 800;
@@ -70,11 +70,48 @@ function longTails(tris) {
   }).length;
 }
 
+function laneCrossings(tris, segments) {
+  const bars = tris
+    .map((tri) => tri)
+    .filter((tri) => tri?.foot && tri?.crest)
+    .sort((a, b) => a.foot.x - b.foot.x);
+  let crossings = 0;
+  for (const segment of segments) {
+    let owner = 0;
+    let best = Infinity;
+    for (let i = 0; i < bars.length; i++) {
+      const dx = Math.abs(bars[i].foot.x - segment.start.x);
+      if (dx < best) {
+        best = dx;
+        owner = i;
+      }
+    }
+    for (let step = 0; step <= 16; step++) {
+      const t = step / 16;
+      const x = segment.start.x + (segment.end.x - segment.start.x) * t;
+      const y = segment.start.y + (segment.end.y - segment.start.y) * t;
+      for (let i = 0; i < bars.length; i++) {
+        if (i === owner) continue;
+        const bar = bars[i];
+        const gap = Math.abs(bar.foot.x - bars[owner].foot.x);
+        const radius = Math.min(1.75, gap * 0.35);
+        const top = Math.min(bar.crest.y, bar.foot.y);
+        const bottom = Math.max(bar.crest.y, bar.foot.y);
+        // Inside a neighbor's post, not merely beside it on the back rail.
+        if (Math.abs(x - bar.foot.x) <= radius && y > top + 5 && y < bottom - 4) crossings += 1;
+      }
+    }
+  }
+  return crossings;
+}
+
 function assess(settings) {
   const partials = shaped(settings);
   const slices = combHeights(partials.map((partial) => sliceFromPartial(partial, 1)), settings.position);
   const camera = defaultCamera();
   const tris = layoutTriangles(slices, camera, WIDTH, HEIGHT, settings.detune);
+  const segments = decayStrandSegments(slices, camera, WIDTH, HEIGHT, settings.detune);
+  const crossings = laneCrossings(tris, segments);
   const tails = longTails(tris);
   const ctx = stubContext();
   paintModalView(ctx, partials, {
@@ -119,6 +156,7 @@ function assess(settings) {
   }
   return {
     tails,
+    crossings,
     outside,
     points: ctx.points.length,
     foot: tris[0].foot,
@@ -142,6 +180,7 @@ test('the reported knob settings keep the strands on the comb', () => {
   const frame = assess(settings);
   assert.ok(frame.points > 40, 'the figure drew');
   assert.ok(frame.tails <= 2, `${frame.tails} tails left the comb`);
+  assert.equal(frame.crossings, 0, `${frame.crossings} strand samples crossed a neighbor`);
   assert.equal(frame.outside, 0, `${frame.outside} points left the figure`);
 });
 
@@ -152,6 +191,7 @@ test('every knob, alone and in pairs, stays on the figure', () => {
     const frame = assess(settings);
     frames += 1;
     assert.ok(frame.tails <= 2, `${frame.tails} tails at ${JSON.stringify(settings)}`);
+    assert.equal(frame.crossings, 0, `${frame.crossings} strand samples crossed a neighbor at ${JSON.stringify(settings)}`);
     assert.equal(frame.outside, 0, `${frame.outside} points left the figure at ${JSON.stringify(settings)}`);
     if (previous) {
       const jump = Math.hypot(frame.foot.x - previous.foot.x, frame.foot.y - previous.foot.y);
