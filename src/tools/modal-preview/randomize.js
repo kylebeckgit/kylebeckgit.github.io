@@ -16,7 +16,7 @@ const RANGES = {
   wood: { decay: [-0.65, 0.05], decayKf: [0.15, 0.7], absorb: [0.2, 0.7], disperse: [-0.2, 0.12], normalize: [-0.55, 0.0], detune: [-0.12, 0.12], position: [0.14, 0.5], density: [8, 16, 32], tune: [-6, 6] },
   glass: { decay: [0.3, 0.85], decayKf: [-0.15, 0.25], absorb: [-0.4, 0.1], disperse: [-0.05, 0.28], normalize: [0.1, 0.65], detune: [-0.1, 0.16], position: [0.06, 0.26], density: [8, 16, 32], tune: [-6, 6] },
   skin: { decay: [-0.9, -0.25], decayKf: [0.25, 0.8], absorb: [0.3, 0.8], disperse: [-0.08, 0.3], normalize: [-0.7, -0.15], detune: [-0.2, 0.2], position: [0.28, 0.7], density: [8, 16, 32], tune: [-6, 6] },
-  bell: { decay: [0.1, 0.65], decayKf: [-0.05, 0.4], absorb: [-0.1, 0.3], disperse: [0.28, 0.72], normalize: [0.05, 0.5], detune: [-0.12, 0.18], position: [0.08, 0.36], density: [8, 16, 32], tune: [-6, 6] },
+  bell: { decay: [0.1, 0.65], decayKf: [-0.05, 0.4], absorb: [-0.1, 0.3], disperse: [-0.035, 0.035], normalize: [0.05, 0.5], detune: [-0.12, 0.18], position: [0.08, 0.36], density: [8, 16, 32], tune: [-6, 6] },
   any: { decay: [-0.55, 0.75], decayKf: [-0.3, 0.55], absorb: [-0.35, 0.6], disperse: [-0.25, 0.55], normalize: [-0.5, 0.55], detune: [-0.22, 0.25], position: [0.06, 0.6], density: [8, 16, 32], tune: [-8, 8] },
 };
 
@@ -179,6 +179,13 @@ function sampleTarget(rng, material, wildness, family) {
   if (w > 0.55 && rng() < 0.35) knobs.density = 8;
   knobs.tune = Math.round(knobs.tune);
   knobs.density = nearestDensity(knobs.density, w > 0.45 ? [8, 16, 32] : (RANGES[source] || RANGES.any).density);
+  // At rest, Disperse of a few hundredths keeps the main partials inside
+  // about 50 cents of the reference series. Absorb stays in the material range.
+  if (w <= 0) {
+    const absorb = (RANGES[source] || RANGES.metal).absorb;
+    knobs.disperse = clamp(knobs.disperse, -0.035, 0.035);
+    knobs.absorb = clamp(knobs.absorb, absorb[0], absorb[1]);
+  }
   knobs.position = clamp(knobs.position, 0.02, 0.98);
   knobs.detune = clamp(knobs.detune, -1, 1);
   return knobs;
@@ -305,7 +312,18 @@ export function familyPartials(family, variant) {
   // Glass and marimba already carry a measured T60 in the engine.
   const fundSeconds = { skin: 0.45, wood: 0.85, metal: 4.5, bell: 6.5 }[family];
   if (fundSeconds && variant !== 'marimba') partials = scaleFundDecay(partials, fundSeconds);
-  return partials;
+  // The bell series is stored from the hum at 0.5. Scale the whole set so
+  // the hum is ratio 1 and the prime stays an octave above it.
+  return normalizePitch(partials);
+}
+
+function normalizePitch(partials) {
+  const ratios = partials.map((partial) => partial.ratio).filter((ratio) => ratio > 0);
+  const lowest = Math.min(...ratios);
+  if (!(lowest > 0)) return partials;
+  return partials
+    .map((partial) => ({ ...partial, ratio: partial.ratio / lowest }))
+    .sort((a, b) => a.ratio - b.ratio);
 }
 
 function capDensity(knobs, partials, locks) {
@@ -317,18 +335,22 @@ function capDensity(knobs, partials, locks) {
 }
 
 function blendPartials(a, b, mix) {
-  const count = Math.min(a.length, b.length, 24);
+  // Both series already start at ratio 1. Pair them in ratio order and blend
+  // in log frequency, so a hum at 0.5 is never averaged with a bar at 1.
+  const lefts = normalizePitch(a);
+  const rights = normalizePitch(b);
+  const count = Math.min(lefts.length, rights.length, 24);
   const out = [];
   for (let i = 0; i < count; i++) {
-    const left = a[Math.min(i, a.length - 1)];
-    const right = b[Math.min(i, b.length - 1)];
+    const left = lefts[Math.min(i, lefts.length - 1)];
+    const right = rights[Math.min(i, rights.length - 1)];
     out.push({
       ratio: Math.exp((1 - mix) * Math.log(left.ratio) + mix * Math.log(Math.max(right.ratio, 1e-6))),
       gainDb: left.gainDb * (1 - mix) + right.gainDb * mix,
       decay: left.decay * (1 - mix) + right.decay * mix,
     });
   }
-  return dropClose(out, 25);
+  return normalizePitch(dropClose(out, 25));
 }
 
 function profileFor(rng, material, wildness, family) {
@@ -343,7 +365,7 @@ function profileFor(rng, material, wildness, family) {
     const other = pick(rng, FAMILIES.filter((name) => name !== chosen));
     partials = blendPartials(partials, familyPartials(other), 0.15 + 0.4 * w * rng());
   }
-  return { family: chosen, partials };
+  return { family: chosen, partials: normalizePitch(partials) };
 }
 
 function toShape(knobs) {
@@ -419,6 +441,29 @@ function cap(text) {
   return clean.charAt(0).toUpperCase() + clean.slice(1);
 }
 
+function centsOff(actual, expected) {
+  if (!(actual > 0) || !(expected > 0)) return 9999;
+  return Math.abs(1200 * Math.log2(actual / expected));
+}
+
+export function soundFacts(partials) {
+  const list = partials || [];
+  const lowest = Math.min(...list.map((partial) => partial.ratio).filter((ratio) => ratio > 0));
+  const rel = list.map((partial) => partial.ratio / (lowest || 1));
+  const near = (index, target, cents) => rel[index] != null && centsOff(rel[index], target) <= cents;
+  const harmonic = near(1, 2, 45) && near(2, 3, 45);
+  return {
+    harmonic,
+    inharmonic: !harmonic && rel.length > 2,
+    bar: near(1, 2.756, 80) && near(2, 5.404, 110),
+    membrane: near(1, 1.594, 70),
+    bowl: near(1, 2.8, 80) && near(2, 5.2, 110),
+    bellish: near(1, 2, 70) && near(2, 2.4, 90) && !near(2, 3, 40),
+    damped: highsDieQuickly(list),
+    fund: Number(list[0]?.decay) || 0,
+  };
+}
+
 function highsDieQuickly(partials) {
   if (!partials?.length) return false;
   const fund = partials[0];
@@ -445,14 +490,25 @@ export function describeKnobs(knobs, material, partials = []) {
   const later = partials[Math.min(6, Math.max(0, partials.length - 1))];
   const highsOutlast = fund && later && later.decay > fund.decay * 1.2 && later.ratio > fund.ratio * 2;
 
-  const named = { metal: 'metal', wood: 'wooden', glass: 'glass', skin: 'skin', bell: 'bell' }[material] || 'metal';
+  const facts = soundFacts(partials);
+  const heard = facts.membrane ? 'skin'
+    : facts.bar ? 'wooden'
+      : facts.bowl ? 'glass'
+        : facts.bellish ? 'bell'
+          : 'metal';
+  let named = { metal: 'metal', wood: 'wooden', glass: 'glass', skin: 'skin', bell: 'bell' }[material] || 'metal';
+  if (named === 'bell' && !facts.inharmonic) named = heard;
+  if (named === 'wooden' && !(facts.bar || facts.damped)) named = heard;
+  if (named === 'skin' && !facts.membrane) named = heard;
+  if (named === 'glass' && !facts.bowl) named = heard;
+  const brief = facts.fund > 0 && facts.fund < 1.5;
 
   const noun = named === 'glass'
-    ? (short ? 'ping' : 'shimmer')
+    ? (brief ? 'ping' : 'shimmer')
     : named === 'wooden'
-      ? 'knock'
+      ? (brief ? 'knock' : (long ? 'ring' : 'tone'))
       : named === 'skin'
-        ? 'thump'
+        ? (brief ? 'thump' : (long ? 'ring' : 'tone'))
         : named === 'bell'
           ? 'strike'
           : (long ? 'ring' : 'tone');
@@ -518,6 +574,12 @@ export function descriptionAgrees(text, knobs, partials = []) {
   if (/\btight\b/.test(lower) && !(knobs.disperse < -0.2)) return false;
   if (/\bdie fast\b/.test(lower) && !(knobs.decayKf > 0.35)) return false;
   if (/\bglassy\b/.test(lower) && !(knobs.normalize > 0.12 || (knobs.absorb < -0.12 && knobs.normalize > -0.15))) return false;
+  if (/\b(knock|thump|ping)\b/.test(lower) && !(fundDecay < 1.5)) return false;
+  const facts = soundFacts(partials);
+  if (/\bbell\b/.test(lower) && !facts.inharmonic) return false;
+  if (/\bwooden\b|\bwood\b/.test(lower) && !(facts.bar || facts.damped)) return false;
+  if (/\bskin\b/.test(lower) && !/skin-like/.test(lower) && !facts.membrane) return false;
+  if (/\bglass\b/.test(lower) && !facts.bowl) return false;
   if (/\bskin-like\b/.test(lower) && !(fundDecay < 1.2)) return false;
   if (/\bbeat\b/.test(lower)) return false;
   if (/\bclustered\b/.test(lower)) return false;
@@ -538,6 +600,11 @@ export function rollSound({ base, current, material = 'any', amount = 1, wildnes
     const target = sampleTarget(rng, family, wildness, picked);
     const profile = profileFor(rng, family, wildness, picked);
     const knobs = capDensity(mixKnobs(current || identityKnobs(), target, amount, locks), profile.partials, locks);
+    // Zebra is told to leave Position and Detune at 0. The page uses the
+    // same values, so the drawing and the note match the CSV. Detune is not
+    // baked into the ratios; that would move the series off its reference.
+    if (!locks?.detune) knobs.detune = 0;
+    if (!locks?.position) knobs.position = 0.02;
     const partials = shapePartials(profile.partials, toShape(knobs));
     const quality = assessQuality(partials, knobs);
     const description = describeKnobs(knobs, profile.family, partials);

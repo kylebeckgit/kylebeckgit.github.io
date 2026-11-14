@@ -437,6 +437,8 @@ export function audiblePartials(partials, { fundamental = A4_HZ, sampleRate = 48
     const atA4 = partial.ratio * A4_HZ;
     const atNote = partial.ratio * note;
     if (atA4 > ZEBRA_PARTIAL_LIMIT_HZ || atNote > nyquist) continue;
+    // 0.02 s is the shaper's clamp, not a measured decay. Leave those rows out.
+    if (partial.decay <= 0.021) continue;
     kept.push({ ...partial, decay: Math.min(partial.decay, ZEBRA_DECAY_MAX) });
   }
   kept.sort((a, b) => a.ratio - b.ratio);

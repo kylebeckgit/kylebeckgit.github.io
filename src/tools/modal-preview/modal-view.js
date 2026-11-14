@@ -508,16 +508,19 @@ function airFrame(slices, clock, detune) {
     return seconds / Math.max(0.05, clock) >= 0.34;
   }).slice(0, 2);
   if (!air.length) return { anchorX: 0, anchorY: PLANE.height, rankOf: () => -1, isAir: () => false };
-  const head = worldOf(air[0], detune);
   const rank = new Map(air.map((slice, index) => [slice, index]));
   const ordered = (slices || [])
     .filter((slice) => slice && slice.alpha >= 0.08 && slice.height >= 0.02)
     .map((slice) => worldOf(slice, detune))
     .sort((a, b) => a.x - b.x);
   const span = ordered.length > 1 ? ordered[ordered.length - 1].x - ordered[0].x : PLANE.span;
+  // The curve always leaves the left end of the comb. Anchoring it on a
+  // long high partial squashes the arc into the bottom-right corner.
+  const left = ordered[0] || worldOf(air[0], detune);
+  const crest = ordered.slice(0, 5).reduce((best, point) => (point.y > best.y ? point : best), left);
   return {
-    anchorX: head.x,
-    anchorY: head.y,
+    anchorX: left.x,
+    anchorY: crest.y,
     rankOf: (slice) => rank.get(slice) ?? -1,
     isAir: (slice) => rank.has(slice),
     crests: ordered.slice(0, 5),

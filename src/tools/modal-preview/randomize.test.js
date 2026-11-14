@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { previewPartials, defaultControls } from './engine.js';
-import { barsStayDistinct } from './modal-view.js';
+import { audiblePartials, defaultControls, previewPartials, zebraExport } from './engine.js';
+import { barsStayDistinct, decayStrandSegments, defaultCamera, layoutTriangles, sliceFromPartial } from './modal-view.js';
 import {
   MATERIALS,
   assessQuality,
@@ -188,8 +188,8 @@ test('any and wild keep one family at wildness 0', () => {
         assert.ok(second > 1.4 && second < 1.9, `${text} ${second}`);
         assert.ok(rolled.knobs.decay <= -0.2 && rolled.knobs.absorb >= 0.25, text);
       } else if (/\bbell\b/.test(text)) {
-        assert.ok(rolled.partials[0].ratio < 0.75, text);
-        assert.ok(rolled.knobs.disperse >= 0.2, text);
+        assert.ok(Math.abs(rolled.partials[0].ratio - 1) < 0.02, text);
+        assert.ok(second > 1.9 && second < 2.2, `${text} ${second}`);
       } else if (/\bglass\b/.test(text)) {
         assert.ok(second > 2.4 && third > 4.6, `${text} ${second} ${third}`);
         assert.ok(rolled.knobs.decay >= 0.25, text);
@@ -217,7 +217,7 @@ test('each material starts from its own mode series', () => {
     assert.ok(close(actual, expected), `wood ${wood.join(', ')}`);
   }
   const bell = familyPartials('bell').slice(0, 5).map((partial) => partial.ratio);
-  for (const [actual, expected] of [[bell[0], 0.5], [bell[1], 1], [bell[2], 1.2], [bell[3], 1.5], [bell[4], 2]]) {
+  for (const [actual, expected] of [[bell[0], 1], [bell[1], 2], [bell[2], 2.4], [bell[3], 3], [bell[4], 4]]) {
     assert.ok(close(actual, expected), `bell ${bell.join(', ')}`);
   }
   const metal = familyPartials('metal')[1].ratio;
@@ -241,6 +241,75 @@ test('each material starts from its own mode series', () => {
     assert.ok(skinRoll.partials[0].decay < 1.2, skinRoll.description);
     assert.equal(/\bshort\b/i.test(skinRoll.description) || /\bthump\b/i.test(skinRoll.description), true, skinRoll.description);
     if (/\blong\b/i.test(skinRoll.description)) assert.fail(skinRoll.description);
+  }
+});
+
+test('the lowest ratio of every roll is 1', () => {
+  for (const material of MATERIALS) {
+    for (const wildness of [0, 0.5, 1]) {
+      for (let seed = 1; seed <= 200; seed++) {
+        const rolled = rollSound({ material, wildness, amount: 1, seed: seed + wildness * 1000 });
+        const lowest = Math.min(...rolled.partials.map((partial) => partial.ratio));
+        assert.ok(Math.abs(lowest - 1) <= 0.001, `${material} ${wildness} ${lowest}`);
+        const exported = zebraExport(rolled.partials, { description: rolled.description });
+        const fileLowest = Math.min(...rowsOfExport(exported.csv));
+        assert.ok(Math.abs(fileLowest - 1) <= 0.001, `${exported.filename} ${fileLowest}`);
+      }
+    }
+  }
+});
+
+function rowsOfExport(csv) {
+  return csv.trim().split('\n').slice(1).map((line) => Number(line.split(';')[0]));
+}
+
+test('wildness 0 stays within 50 cents of the reference series', () => {
+  for (const material of ['metal', 'wood', 'glass', 'skin', 'bell']) {
+    const ref = familyPartials(material).map((partial) => partial.ratio);
+    for (let seed = 1; seed <= 40; seed++) {
+      const rolled = rollSound({ material, wildness: 0, amount: 1, seed });
+      const count = Math.min(5, ref.length, rolled.partials.length);
+      for (let i = 1; i < count; i++) {
+        const cents = Math.abs(1200 * Math.log2(rolled.partials[i].ratio / ref[i]));
+        assert.ok(cents <= 50, `${material} partial ${i + 1} is ${cents.toFixed(1)} cents off`);
+      }
+    }
+  }
+});
+
+test('knock, thump, ping, bell, and wood match the sound', () => {
+  const knobs = identityKnobs();
+  const harmonic = [1, 2, 3, 4, 5].map((ratio, index) => ({ ratio, gainDb: -index * 4, decay: 3.4 }));
+  assert.equal(descriptionAgrees('Short wooden knock', knobs, harmonic), false);
+  assert.equal(descriptionAgrees('Long metal bell strike', knobs, harmonic), false);
+  assert.equal(descriptionAgrees('Bright glass ping', knobs, harmonic), false);
+  const bar = familyPartials('wood').slice(0, 5).map((partial) => ({ ...partial, decay: partial.ratio === 1 ? 0.8 : partial.decay }));
+  const wooden = describeKnobs(knobs, 'wood', bar);
+  assert.match(wooden, /\bwooden\b/i);
+  assert.match(wooden, /\bknock\b/i);
+  assert.equal(descriptionAgrees(wooden, knobs, bar), true, wooden);
+  const ringing = bar.map((partial) => ({ ...partial, decay: 3.4 }));
+  assert.equal(/\bknock\b/i.test(describeKnobs(knobs, 'wood', ringing)), false);
+});
+
+test('rolled views keep a decay curve across the comb', () => {
+  const cases = [['metal', 0], ['wood', 0], ['glass', 0], ['skin', 0], ['bell', 0], ['any', 0], ['wild', 0], ['wood', 1], ['bell', 1], ['wild', 1]];
+  for (const [material, wildness] of cases) {
+    for (let seed = 1; seed <= 6; seed++) {
+      const rolled = rollSound({ material, wildness, amount: 1, seed });
+      const slices = audiblePartials(rolled.partials).map((partial) => sliceFromPartial(partial));
+      const tris = layoutTriangles(slices, defaultCamera(), 640, 516, 0);
+      const xs = tris.map((tri) => tri.foot.x);
+      const span = Math.max(...xs) - Math.min(...xs);
+      assert.ok(span > 200, `${material} w${wildness} span ${span.toFixed(0)}`);
+      assert.ok(Math.min(...xs) < 300, `${material} w${wildness} left ${Math.min(...xs).toFixed(0)}`);
+      const strands = decayStrandSegments(slices, defaultCamera(), 640, 516, 0);
+      const reach = Math.max(...strands.map((strand) => Math.hypot(strand.end.x - strand.start.x, strand.end.y - strand.start.y)));
+      assert.ok(reach > 70, `${material} w${wildness} reach ${reach.toFixed(0)}`);
+      for (const partial of audiblePartials(rolled.partials)) {
+        assert.ok(partial.decay > 0.021, `${material} decay ${partial.decay}`);
+      }
+    }
   }
 });
 
