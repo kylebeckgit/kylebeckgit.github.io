@@ -649,7 +649,9 @@ function strandEnd(place, camera, x, y, depth, bounds) {
   const positive = full.x >= origin.x;
   const edge = positive ? bounds.next : bounds.prev;
   const span = edge == null ? Math.abs(full.x - origin.x) : Math.abs(edge - origin.x);
-  const reach = Math.max(2, span * 0.38);
+  // Never floor the reach above the gap. A 2px minimum overshoots the next
+  // post when Density packs the bars closer than that.
+  const reach = span * 0.38;
   const limitX = origin.x + (positive ? reach : -reach);
   const crosses = (point) => (positive ? point.x > limitX : point.x < limitX);
   if (!crosses(full)) return full;

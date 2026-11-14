@@ -89,16 +89,14 @@ function laneCrossings(tris, segments) {
     for (let step = 0; step <= 16; step++) {
       const t = step / 16;
       const x = segment.start.x + (segment.end.x - segment.start.x) * t;
-      const y = segment.start.y + (segment.end.y - segment.start.y) * t;
       for (let i = 0; i < bars.length; i++) {
         if (i === owner) continue;
         const bar = bars[i];
         const gap = Math.abs(bar.foot.x - bars[owner].foot.x);
         const radius = Math.min(1.75, gap * 0.35);
-        const top = Math.min(bar.crest.y, bar.foot.y);
-        const bottom = Math.max(bar.crest.y, bar.foot.y);
-        // Inside a neighbor's post, not merely beside it on the back rail.
-        if (Math.abs(x - bar.foot.x) <= radius && y > top + 5 && y < bottom - 4) crossings += 1;
+        // Strands leave the crest and run up-screen, so a y window below the
+        // raw crest never sees them. Crossing is an x test against the post.
+        if (Math.abs(x - bar.foot.x) <= radius) crossings += 1;
       }
     }
   }
@@ -182,6 +180,38 @@ test('the reported knob settings keep the strands on the comb', () => {
   assert.ok(frame.tails <= 2, `${frame.tails} tails left the comb`);
   assert.equal(frame.crossings, 0, `${frame.crossings} strand samples crossed a neighbor`);
   assert.equal(frame.outside, 0, `${frame.outside} points left the figure`);
+});
+
+test('packed bars on a narrow canvas keep each strand short of the next post', () => {
+  const settings = { ...BASE, density: 256, decay: 1, decayKf: -1, detune: 1 };
+  const partials = shaped(settings);
+  const slices = combHeights(partials.map((partial) => sliceFromPartial(partial, 1)), settings.position);
+  const camera = defaultCamera();
+  const width = 320;
+  const height = 240;
+  const segments = decayStrandSegments(slices, camera, width, height, settings.detune);
+  const bars = layoutTriangles(slices, camera, width, height, settings.detune)
+    .filter((tri) => tri?.foot)
+    .sort((a, b) => a.foot.x - b.foot.x);
+  let overshoots = 0;
+  for (const segment of segments) {
+    let owner = 0;
+    let best = Infinity;
+    for (let i = 0; i < bars.length; i++) {
+      const dx = Math.abs(bars[i].foot.x - segment.start.x);
+      if (dx < best) {
+        best = dx;
+        owner = i;
+      }
+    }
+    const next = bars[owner + 1];
+    if (!next) continue;
+    const gap = next.foot.x - bars[owner].foot.x;
+    const travel = segment.end.x - segment.start.x;
+    if (travel > gap * 0.45) overshoots += 1;
+  }
+  assert.equal(overshoots, 0, `${overshoots} strands reached past the near half of the gap`);
+  assert.equal(laneCrossings(bars, segments), 0);
 });
 
 test('every knob, alone and in pairs, stays on the figure', () => {
