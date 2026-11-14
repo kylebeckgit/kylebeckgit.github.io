@@ -1,7 +1,7 @@
 import { PRESETS, NOTE_BUTTONS, buildPartials, previewPartials, toCsv, fromCsv, noteFrequency, defaultControls, sanitizeControls, alignReference } from './engine.js';
 import { analyzeSamples, decodeRecording, resampleMono, parseRoot, frequencyToNote } from './analyze.js';
 import { renderPreview, scaleToPeak } from './resonator.js';
-import { aimSlices, clampCamera, createFitMotion, createSliceMotion, defaultCamera, hitPartial, MORPH_MS, paintModalView, sampleSlices, slicesMoving } from './modal-view.js';
+import { aimSlices, createFitMotion, createSliceMotion, defaultCamera, hitPartial, MORPH_MS, paintModalView, sampleSlices, slicesMoving } from './modal-view.js';
 import { shapePartials } from './shape.js';
 import { fileSlug } from './recipes.js';
 import { mountStudio } from './studio.js';
@@ -157,18 +157,10 @@ export function mount(root) {
     state.viewFrame = requestAnimationFrame(frame);
   }
 
-  function stepCamera(now) {
-    const aim = state.cameraAim;
-    if (!aim) return false;
-    const t = aim.dur <= 0 ? 1 : Math.min(1, (now - aim.t0) / aim.dur);
-    const eased = 1 - (1 - t) ** 3;
-    const turn = Math.atan2(Math.sin(aim.to.yaw - aim.from.yaw), Math.cos(aim.to.yaw - aim.from.yaw));
-    state.camera = clampCamera({
-      yaw: aim.from.yaw + turn * eased,
-      pitch: aim.from.pitch + (aim.to.pitch - aim.from.pitch) * eased,
-    });
-    if (t >= 1) state.cameraAim = null;
-    return t < 1;
+  function stepCamera() {
+    state.camera = defaultCamera();
+    state.cameraAim = null;
+    return false;
   }
 
   function adopt(partials, custom) {
@@ -342,11 +334,9 @@ export function mount(root) {
     const point = canvasPoint(canvas, event);
     if (canvas.dataset.view === 'zebra') {
       state.gesture = {
-        orbit: true,
+        select: true,
         x: point.x,
         y: point.y,
-        yaw: state.camera.yaw,
-        pitch: state.camera.pitch,
         moved: false,
       };
       return;
@@ -364,21 +354,7 @@ export function mount(root) {
   canvas.addEventListener('pointermove', (event) => {
     if (!state.gesture) return;
     const point = canvasPoint(canvas, event);
-    if (state.gesture.orbit) {
-      const dx = point.x - state.gesture.x;
-      const dy = point.y - state.gesture.y;
-      if (!state.gesture.moved && Math.hypot(dx, dy) < 3) return;
-      state.gesture.moved = true;
-      state.cameraAim = null;
-      const span = Math.max(canvas.clientWidth || 320, 240);
-      state.camera = clampCamera({
-        yaw: state.gesture.yaw - dx * (Math.PI * 2) / span,
-        pitch: state.gesture.pitch + dy * 0.0048,
-      });
-      draw(canvas, state.partials, state);
-      if (state.fit.moving) kickView();
-      return;
-    }
+    if (state.gesture.select) return;
     const travel = Math.hypot(point.x - state.gesture.x, point.y - state.gesture.y);
     if (!state.gesture.moved && travel < 5) return;
     if (!state.gesture.moved) {
@@ -391,22 +367,20 @@ export function mount(root) {
     state.gesture.lastY = point.y;
   });
   canvas.addEventListener('pointerup', (event) => {
-    if (state.gesture?.orbit) {
-      if (!state.gesture.moved) {
-        const point = canvasPoint(canvas, event);
-        state.selectedPartial = hitPartial(
-          sampleSlices(state.slices, performance.now()),
-          state.camera,
-          canvas.clientWidth,
-          canvas.clientHeight,
-          point.x,
-          point.y,
-          state.detune || 0,
-          state.fit.shown,
-        );
-        render();
-      }
+    if (state.gesture?.select) {
+      const point = canvasPoint(canvas, event);
+      state.selectedPartial = hitPartial(
+        sampleSlices(state.slices, performance.now()),
+        defaultCamera(),
+        canvas.clientWidth,
+        canvas.clientHeight,
+        point.x,
+        point.y,
+        state.detune || 0,
+        state.fit.shown,
+      );
       state.gesture = null;
+      render();
       return;
     }
     if (state.gesture && !state.gesture.moved && !state.drawMode) {
@@ -416,16 +390,6 @@ export function mount(root) {
     state.gesture = null;
   });
   canvas.addEventListener('pointercancel', () => { state.gesture = null; });
-  canvas.addEventListener('dblclick', () => {
-    if (canvas.dataset.view !== 'zebra') return;
-    state.cameraAim = {
-      from: { ...state.camera },
-      to: defaultCamera(),
-      t0: performance.now(),
-      dur: MORPH_MS,
-    };
-    kickView();
-  });
   const styleSelect = root.querySelector('[data-draw-style]');
   if (styleSelect) {
     state.drawStyle = styleSelect.value || 'fast';
@@ -984,7 +948,7 @@ function drawZebra(canvas, partials, state) {
     paintModalView(ctx, partials, {
     width,
     height,
-    camera: state.camera,
+    camera: defaultCamera(),
     style: state.drawStyle || 'fast',
     colors,
     invertPanel: canvas.dataset.panel !== 'cream',

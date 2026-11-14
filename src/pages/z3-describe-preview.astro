@@ -36,9 +36,9 @@ import Base from '../layouts/Base.astro';
     <section class="panel" aria-labelledby="modal-heading">
       <h2 id="modal-heading">Modal</h2>
       <div class="stage">
-      <canvas data-view="zebra" aria-label="Modal partials. Drag to rotate. Click a mode to highlight it."></canvas>
+      <canvas data-view="zebra" aria-label="Modal partials. Click a mode to highlight it."></canvas>
       <div class="stage-play">
-      <p class="quiet">Drag to rotate. Double-click to reset. Click a line, or a row under More, to highlight it. Hold a key for the bow.</p>
+      <p class="quiet">Click a line, or a row under More, to highlight it. Hold a key for the bow.</p>
       <p class="status" data-play-error role="status"></p>
       <div class="keys" data-keys role="group" aria-label="Pitch"></div>
       <div class="play-tools">
@@ -310,9 +310,8 @@ import Base from '../layouts/Base.astro';
     border: 1px solid var(--line);
     border-radius: 4px;
     touch-action: none;
-    cursor: grab;
+    cursor: default;
   }
-  canvas:active { cursor: grabbing; }
   canvas.is-drawing { cursor: crosshair; }
   .keys { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .9rem; }
   :global(.key) { min-width: 2.75rem; min-height: 2.75rem; padding: .4rem .55rem; }
