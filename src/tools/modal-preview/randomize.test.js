@@ -7,7 +7,9 @@ import {
   assessQuality,
   createRollHistory,
   defaultLocks,
+  describeKnobs,
   descriptionAgrees,
+  familyPartials,
   identityKnobs,
   knobDistance,
   pushRoll,
@@ -39,8 +41,13 @@ test('one thousand seeded rolls per material pass the quality check', () => {
       assert.equal(rolled.quality.ok, true, `${material} ${i} ${rolled.quality.reasons.join(',')}`);
       assert.equal(rolled.knobs.tune, 0, `${material} moved locked tune`);
       assert.equal(descriptionAgrees(rolled.description, rolled.knobs, rolled.partials), true, rolled.description);
-      if (rolled.knobs.decay > 0.4) assert.equal(/\bshort\b/i.test(rolled.description), false, rolled.description);
-      if (rolled.knobs.decay < -0.4) assert.equal(/\blong\b/i.test(rolled.description), false, rolled.description);
+      const seconds = rolled.partials[0].decay;
+      if (seconds >= 1.2) assert.equal(/\bshort\b/i.test(rolled.description), false, `${rolled.description} ${seconds}`);
+      if (seconds <= 3) assert.equal(/\blong\b/i.test(rolled.description), false, `${rolled.description} ${seconds}`);
+      if (/\bmuted\b/i.test(rolled.description)) {
+        const highs = rolled.partials.filter((partial) => partial.ratio > rolled.partials[0].ratio * 2.2);
+        assert.ok(highs.length >= 2 && highs.every((partial) => partial.decay < seconds * 0.4 && partial.decay < 1));
+      }
     }
   }
 });
@@ -126,6 +133,68 @@ test('wildness 1 descriptions stay specific', () => {
     const generic = lines.filter(isGeneric).length;
     assert.ok(distinct / lines.length >= 0.4, `${material} distinct ${distinct}/50`);
     assert.ok(generic / lines.length < 0.2, `${material} generic ${generic}/50`);
+  }
+});
+
+test('short, long, and muted follow the rendered decays', () => {
+  const knobs = identityKnobs();
+  const ringing = [
+    { ratio: 1, gainDb: 0, decay: 5.5 },
+    { ratio: 2.1, gainDb: -6, decay: 4.2 },
+    { ratio: 3.4, gainDb: -10, decay: 3.1 },
+    { ratio: 5, gainDb: -14, decay: 2.4 },
+  ];
+  const text = describeKnobs({ ...knobs, decay: -0.8 }, 'skin', ringing);
+  assert.equal(/\bshort\b/i.test(text), false, text);
+  assert.equal(descriptionAgrees('Short skin thump', knobs, ringing), false);
+  const thump = ringing.map((partial, index) => ({ ...partial, decay: index === 0 ? 0.5 : 0.15 }));
+  const shortText = describeKnobs(knobs, 'skin', thump);
+  assert.match(shortText, /\bshort\b/i);
+  assert.equal(descriptionAgrees(shortText, knobs, thump), true, shortText);
+  const knock = [
+    { ratio: 1, gainDb: 0, decay: 7 },
+    { ratio: 2.76, gainDb: -8, decay: 2.2 },
+    { ratio: 5.4, gainDb: -14, decay: 1.1 },
+  ];
+  assert.equal(/\bshort\b/i.test(describeKnobs(knobs, 'wood', knock)), false);
+  assert.equal(descriptionAgrees('Dark wooden knock, muted', knobs, knock), false);
+});
+
+test('each material starts from its own mode series', () => {
+  const close = (actual, expected) => Math.abs(actual - expected) / expected < 0.04;
+  const skin = familyPartials('skin').slice(0, 6).map((partial) => partial.ratio);
+  for (const [actual, expected] of [[skin[0], 1], [skin[1], 1.594], [skin[2], 2.136], [skin[3], 2.296]]) {
+    assert.ok(close(actual, expected), `skin ${skin.join(', ')}`);
+  }
+  const wood = familyPartials('wood').slice(0, 4).map((partial) => partial.ratio);
+  for (const [actual, expected] of [[wood[0], 1], [wood[1], 2.756], [wood[2], 5.404], [wood[3], 8.933]]) {
+    assert.ok(close(actual, expected), `wood ${wood.join(', ')}`);
+  }
+  const bell = familyPartials('bell').slice(0, 5).map((partial) => partial.ratio);
+  for (const [actual, expected] of [[bell[0], 0.5], [bell[1], 1], [bell[2], 1.2], [bell[3], 1.5], [bell[4], 2]]) {
+    assert.ok(close(actual, expected), `bell ${bell.join(', ')}`);
+  }
+  const metal = familyPartials('metal')[1].ratio;
+  assert.ok(Math.abs(metal - 2) > 0.2, `metal second ratio ${metal}`);
+  const glass = familyPartials('glass').slice(0, 4).map((partial) => partial.ratio);
+  assert.ok(close(glass[1], 2.8), `glass ${glass.join(', ')}`);
+  assert.ok(familyPartials('skin')[0].decay < 1.2);
+  assert.ok(familyPartials('glass')[0].decay > 3);
+  for (let seed = 1; seed <= 24; seed++) {
+    const skinRoll = rollSound({ material: 'skin', wildness: 0, amount: 1, seed });
+    const skinRatio = skinRoll.partials[1].ratio / skinRoll.partials[0].ratio;
+    assert.ok(skinRatio > 1.45 && skinRatio < 1.8, `skin roll ${skinRatio}`);
+    const woodRoll = rollSound({ material: 'wood', wildness: 0, amount: 1, seed });
+    const woodRatio = woodRoll.partials[1].ratio / woodRoll.partials[0].ratio;
+    assert.ok(woodRatio > 2.5 && woodRatio < 3.0, `wood roll ${woodRatio}`);
+    const bellRoll = rollSound({ material: 'bell', wildness: 0, amount: 1, seed });
+    const humToPrime = bellRoll.partials[1].ratio / bellRoll.partials[0].ratio;
+    const primeToTierce = bellRoll.partials[2].ratio / bellRoll.partials[1].ratio;
+    assert.ok(humToPrime > 1.9 && humToPrime < 2.45, `bell roll ${humToPrime}`);
+    assert.ok(Math.abs(primeToTierce - 1.2) < 0.08, `bell tierce ${primeToTierce}`);
+    assert.ok(skinRoll.partials[0].decay < 1.2, skinRoll.description);
+    assert.equal(/\bshort\b/i.test(skinRoll.description) || /\bthump\b/i.test(skinRoll.description), true, skinRoll.description);
+    if (/\blong\b/i.test(skinRoll.description)) assert.fail(skinRoll.description);
   }
 });
 

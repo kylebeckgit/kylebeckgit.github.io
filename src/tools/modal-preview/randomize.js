@@ -1,6 +1,7 @@
 // Client-side rolls. No network. A material picks a musical range, Wild
 // picks a plausible hybrid, and a failed quality check is rolled again.
 
+import { buildPartials } from './engine.js';
 import { shapePartials } from './shape.js';
 import { barsStayDistinct } from './modal-view.js';
 
@@ -233,6 +234,118 @@ function mixKnobs(current, target, amount, locks) {
   return next;
 }
 
+// Mode sets are the physical series already used by the preview engine.
+// Skin: circular-membrane Bessel zeros (Fletcher & Rossing).
+// Wood: free-free bar, (βn/β1)^2 with β from cos βL cosh βL = 1, so
+// 1, 2.756, 5.404, 8.933… A tuned marimba bar is the optional voice.
+// Metal: simply supported square plate, frequency ∝ m² + n².
+// Bell: minor-third church bell relative to the prime: hum 0.5, prime 1,
+// tierce 1.2, quint 1.5, nominal 2 (Fletcher & Rossing; Rossing, Acoustics of Bells).
+// Glass: singing-bowl / wine-glass (n,0) series 1, 2.8, 5.2, 8.1…
+// (Inácio, Henrique & Antunes, Acta Acustica 92, 2006), with the glass T60.
+// Factory Zebra CSVs were only a listening reference and are not shipped.
+const FAMILY_CONTROLS = {
+  skin: { preset: 'membrane', damping: 1, brightness: -0.55 },
+  wood: { preset: 'bar', damping: 0.86, brightness: -0.35 },
+  metal: { preset: 'plate', damping: 0.22, brightness: 0.2 },
+  bell: { preset: 'bell', damping: 0.12, brightness: 0.05 },
+  glass: { preset: 'plate', voice: 'glass', damping: 0.08, brightness: 0.45 },
+};
+
+function dropClose(partials, minCents = 30) {
+  const sorted = [...partials].sort((a, b) => a.ratio - b.ratio);
+  const kept = [];
+  for (const partial of sorted) {
+    if (!kept.length) {
+      kept.push(partial);
+      continue;
+    }
+    if (centsBetween(kept[kept.length - 1].ratio, partial.ratio) < minCents) continue;
+    if (partial.ratio / kept[0].ratio > 48) break;
+    kept.push(partial);
+  }
+  return kept;
+}
+
+function scaleFundDecay(partials, seconds) {
+  const fund = partials[0]?.decay || 1;
+  const gain = seconds / fund;
+  return partials.map((partial) => ({
+    ...partial,
+    decay: clamp(partial.decay * gain, 0.04, 30),
+  }));
+}
+
+function extendBowl(partials) {
+  // Inácio's Bowl 1 stops at the (8,0) mode. Higher circumferential modes
+  // follow the thin-shell (n² − 1) trend so a denser comb still begins on
+  // the measured 1, 2.8, 5.2, 8.1… series instead of interpolating it.
+  const out = partials.slice();
+  const fundDecay = partials[0]?.decay || 8;
+  for (let n = 9; out.length < 36; n++) {
+    const ratio = (n * n - 1) / 3;
+    const rise = Math.max(ratio - 1, 0) ** 0.85;
+    out.push({
+      ratio,
+      gainDb: -4 - 1.4 * (n - 8),
+      decay: clamp(fundDecay / (1 + 0.42 * rise), 0.08, 30),
+    });
+  }
+  return out;
+}
+
+export function familyPartials(family, variant) {
+  const controls = { ...(FAMILY_CONTROLS[family] || FAMILY_CONTROLS.metal) };
+  if (family === 'wood' && variant === 'marimba') controls.voice = 'marimba';
+  let partials = buildPartials(controls);
+  if (family === 'glass') partials = extendBowl(partials);
+  partials = dropClose(partials);
+  // The engine's generic T60 tops out just under 3 s. Scale the whole slope
+  // so a plate or bell can actually ring, and a membrane can thump.
+  // Glass and marimba already carry a measured T60 in the engine.
+  const fundSeconds = { skin: 0.45, wood: 0.85, metal: 4.5, bell: 6.5 }[family];
+  if (fundSeconds && variant !== 'marimba') partials = scaleFundDecay(partials, fundSeconds);
+  return partials;
+}
+
+function capDensity(knobs, partials, locks) {
+  if (locks?.density) return knobs;
+  const room = Math.max(4, partials.length);
+  const allowed = DENSITIES.filter((step) => step <= room);
+  const choices = allowed.length ? allowed : [Math.min(room, 8)];
+  return { ...knobs, density: nearestDensity(knobs.density, choices) };
+}
+
+function blendPartials(a, b, mix) {
+  const count = Math.min(a.length, b.length, 24);
+  const out = [];
+  for (let i = 0; i < count; i++) {
+    const left = a[Math.min(i, a.length - 1)];
+    const right = b[Math.min(i, b.length - 1)];
+    out.push({
+      ratio: Math.exp((1 - mix) * Math.log(left.ratio) + mix * Math.log(Math.max(right.ratio, 1e-6))),
+      gainDb: left.gainDb * (1 - mix) + right.gainDb * mix,
+      decay: left.decay * (1 - mix) + right.decay * mix,
+    });
+  }
+  return dropClose(out, 25);
+}
+
+function profileFor(rng, material, wildness) {
+  const w = clamp(Number(wildness) || 0, 0, 1);
+  const family = material === 'any' || material === 'wild' ? pick(rng, FAMILIES) : material;
+  const variant = family === 'wood' && w > 0.55 && rng() < w * 0.35 ? 'marimba' : '';
+  let partials = familyPartials(family, variant);
+  if ((material === 'wild' || material === 'any') && w > 0.2 && rng() < w * 0.85) {
+    const other = pick(rng, FAMILIES.filter((name) => name !== family));
+    partials = blendPartials(partials, familyPartials(other), 0.2 + 0.55 * w * rng());
+  } else if (material !== 'any' && material !== 'wild' && w > 0.35 && rng() < w * 0.7) {
+    const other = pick(rng, FAMILIES.filter((name) => name !== family));
+    partials = blendPartials(partials, familyPartials(other), 0.15 + 0.4 * w * rng());
+  }
+  return { family, partials };
+}
+
 function toShape(knobs) {
   return {
     absorb: knobs.absorb,
@@ -288,7 +401,7 @@ export function assessQuality(partials, knobs) {
     .reduce((sum, partial) => sum + 10 ** (partial.gainDb / 20), 0);
   const harsh = highEnergy > energy * 0.62 && list.some((partial) => partial.ratio > list[0].ratio * 6 && partial.decay > 2 && partial.gainDb > peak - 8);
   if (harsh) reasons.push('harsh');
-  const clearPitch = loudIndex >= 0 && loudIndex < 4;
+  const clearPitch = loudIndex >= 0 && loudIndex < 6;
   const controlledNoise = knobs.density >= 16 && fund && fund.decay < 1.4 && peak - (list[Math.min(5, list.length - 1)]?.gainDb ?? -80) < 36;
   if (!clearPitch && !controlledNoise) reasons.push('center');
   if (Math.abs(knobs.detune) > 0.8) reasons.push('view');
@@ -306,27 +419,33 @@ function cap(text) {
   return clean.charAt(0).toUpperCase() + clean.slice(1);
 }
 
+function highsDieQuickly(partials) {
+  if (!partials?.length) return false;
+  const fund = partials[0];
+  const highs = partials.filter((partial) => partial.ratio > fund.ratio * 2.2);
+  if (highs.length < 2) return false;
+  return highs.every((partial) => partial.decay < fund.decay * 0.4 && partial.decay < 1);
+}
+
 export function describeKnobs(knobs, material, partials = []) {
-  const decay = knobs.decay;
-  const long = decay > 0.32;
-  const short = decay < -0.28;
+  const seconds = Number(partials[0]?.decay);
+  const long = seconds > 3;
+  const short = seconds > 0 && seconds < 1.2;
   const bright = knobs.normalize > 0.18 || (knobs.absorb < -0.18 && knobs.normalize > -0.15);
   const dark = !bright && (knobs.normalize < -0.22 || knobs.absorb > 0.38);
-  const muted = knobs.absorb > 0.42;
+  const muted = highsDieQuickly(partials);
   const detuned = Math.abs(knobs.detune) > 0.12;
   const slight = detuned && Math.abs(knobs.detune) <= 0.3;
   const inharmonic = knobs.disperse > 0.3;
   const compressed = knobs.disperse < -0.28;
   const fastHighs = knobs.decayKf > 0.38;
   const ringingHighs = knobs.decayKf < -0.38;
-  const sparse = knobs.density <= 8;
+  const sparse = knobs.density <= 8 && material !== 'glass' && material !== 'wood';
   const fund = partials[0];
   const later = partials[Math.min(6, Math.max(0, partials.length - 1))];
   const highsOutlast = fund && later && later.decay > fund.decay * 1.2 && later.ratio > fund.ratio * 2;
 
-  const named = material === 'wild' || material === 'any'
-    ? (inharmonic ? 'bell' : short && muted ? 'wooden' : long && bright ? 'glass' : short ? 'skin' : 'metal')
-    : { metal: 'metal', wood: 'wooden', glass: 'glass', skin: 'skin', bell: 'bell' }[material] || 'metal';
+  const named = { metal: 'metal', wood: 'wooden', glass: 'glass', skin: 'skin', bell: 'bell' }[material] || 'metal';
 
   const noun = named === 'glass'
     ? (short ? 'ping' : 'shimmer')
@@ -347,7 +466,7 @@ export function describeKnobs(knobs, material, partials = []) {
   if (ringingHighs && highsOutlast) unusual.push('highs that outlast the low');
   if (bright && muted) unusual.push('a glassy top and woody damping');
   else if (bright && (named === 'wooden' || named === 'skin')) unusual.push('a glassy top');
-  else if (muted && (named === 'glass' || named === 'bell' || named === 'metal')) unusual.push('woody damping');
+  else if (muted && knobs.absorb > 0.42 && (named === 'glass' || named === 'bell' || named === 'metal')) unusual.push('woody damping');
   if (short && (named === 'bell' || inharmonic) && !unusual.some((item) => item.includes('skin'))) unusual.push('a skin-like decay');
 
   const lead = [];
@@ -358,17 +477,23 @@ export function describeKnobs(knobs, material, partials = []) {
 
   let text = `${lead.join(' ')} ${named} ${noun}`.replace(/\s+/g, ' ').trim();
   if (unusual.length) text += ` with ${unusual.slice(0, 2).join(' and ')}`;
-  else {
-    const tail = [];
-    if (muted) tail.push('muted');
-    if (detuned) tail.push(slight ? 'slightly detuned' : 'detuned');
-    if (tail.length) text += `, ${tail.join(', ')}`;
+  const tail = [];
+  if (!unusual.length && muted) tail.push('muted');
+  if (detuned) tail.push(slight ? 'slightly detuned' : 'detuned');
+  if (tail.length) {
+    const extra = `${text}, ${tail.join(', ')}`;
+    if (wordCount(extra) <= 12) text = extra;
   }
   text = cap(text);
   if (wordCount(text) > 12 && unusual.length > 1) {
     text = cap(`${lead.join(' ')} ${named} ${noun} with ${unusual[0]}`.replace(/\s+/g, ' ').trim());
   }
   if (wordCount(text) > 12) text = cap(`${lead.join(' ')} ${named} ${noun}`.trim());
+  const rounded = Math.round(seconds);
+  if (rounded >= 2) {
+    const timed = `${text}, about ${rounded} seconds`;
+    if (wordCount(timed) <= 12) text = timed;
+  }
   return text;
 }
 
@@ -377,10 +502,13 @@ export function descriptionAgrees(text, knobs, partials = []) {
   const lower = line.toLowerCase();
   if (wordCount(line) > 12 || wordCount(line) < 2) return false;
   if (line !== cap(line)) return false;
-  if (knobs.decay > 0.4 && /\bshort\b/.test(lower)) return false;
-  if (knobs.decay < -0.4 && /\blong\b/.test(lower)) return false;
-  if (/\bglass\b/.test(lower) && !(knobs.normalize > 0.05 || knobs.absorb < 0.15 || knobs.decay > 0.2)) return false;
-  if (/\bwoody\b|\bdamped\b|\bmuted\b/.test(lower) && !(knobs.absorb > 0.28)) return false;
+  const fundDecay = Number(partials[0]?.decay);
+  const about = lower.match(/about (\d+) seconds?/);
+  if (about && Math.abs(Number(about[1]) - fundDecay) > 0.55) return false;
+  if (/\bshort\b/.test(lower) && !(fundDecay < 1.2)) return false;
+  if (/\blong\b/.test(lower) && !(fundDecay > 3)) return false;
+  if (/\bmuted\b/.test(lower) && !highsDieQuickly(partials)) return false;
+  if (/\bwoody\b|\bdamped\b/.test(lower) && !(knobs.absorb > 0.28)) return false;
   if (/\bbright\b/.test(lower) && !(knobs.normalize > 0.12 || (knobs.absorb < -0.12 && knobs.normalize > -0.15))) return false;
   if (/\bdark\b/.test(lower) && !(knobs.normalize < -0.12 || knobs.absorb > 0.28)) return false;
   if (/\bdetuned\b/.test(lower) && !(Math.abs(knobs.detune) > 0.1)) return false;
@@ -389,7 +517,7 @@ export function descriptionAgrees(text, knobs, partials = []) {
   if (/\btight\b/.test(lower) && !(knobs.disperse < -0.2)) return false;
   if (/\bdie fast\b/.test(lower) && !(knobs.decayKf > 0.35)) return false;
   if (/\bglassy\b/.test(lower) && !(knobs.normalize > 0.12 || (knobs.absorb < -0.12 && knobs.normalize > -0.15))) return false;
-  if (/\bskin-like\b/.test(lower) && !(knobs.decay < -0.2)) return false;
+  if (/\bskin-like\b/.test(lower) && !(fundDecay < 1.2)) return false;
   if (/\bbeat\b/.test(lower)) return false;
   if (/\bclustered\b/.test(lower)) return false;
   const fund = partials[0];
@@ -406,11 +534,12 @@ export function rollSound({ base, current, material = 'any', amount = 1, wildnes
   let best = null;
   for (let attempt = 0; attempt < 40; attempt++) {
     const target = sampleTarget(rng, family, wildness);
-    const knobs = mixKnobs(current || identityKnobs(), target, amount, locks);
-    const partials = shapePartials(base, toShape(knobs));
+    const profile = profileFor(rng, family, wildness);
+    const knobs = capDensity(mixKnobs(current || identityKnobs(), target, amount, locks), profile.partials, locks);
+    const partials = shapePartials(profile.partials, toShape(knobs));
     const quality = assessQuality(partials, knobs);
-    const description = describeKnobs(knobs, family, partials);
-    const candidate = { knobs, partials, quality, description, material: family };
+    const description = describeKnobs(knobs, profile.family, partials);
+    const candidate = { knobs, partials, profile: profile.partials, quality, description, material: family };
     if (!best || quality.score > best.quality.score) best = candidate;
     if (quality.ok && descriptionAgrees(description, knobs, partials)) return candidate;
   }

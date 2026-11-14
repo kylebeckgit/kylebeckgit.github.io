@@ -468,7 +468,7 @@ export function mount(root) {
     disperse: Number(root.querySelector('[data-disperse]')?.value || 0) / 100,
     normalize: Number(root.querySelector('[data-normalize]')?.value || 0) / 100,
   });
-  const writeRoll = (knobs, text) => {
+  const writeRoll = (knobs, text, profile) => {
     const setNum = (selector, readout, value) => {
       const input = root.querySelector(selector);
       const out = root.querySelector(readout);
@@ -488,6 +488,13 @@ export function mount(root) {
     if (positionOut) positionOut.textContent = knobs.position.toFixed(2);
     const density = root.querySelector('[data-density]');
     if (density) density.value = String(knobs.density);
+    if (profile?.length) {
+      state.profilePartials = profile.map((partial) => ({
+        ratio: partial.ratio,
+        gainDb: partial.gainDb,
+        decay: partial.decay,
+      }));
+    }
     state.detune = knobs.detune;
     state.position = knobs.position;
     const ask = root.querySelector('[data-ask]');
@@ -506,6 +513,11 @@ export function mount(root) {
   const snapshotRoll = () => ({
     knobs: readRollKnobs(),
     text: root.querySelector('[data-ask]')?.value || '',
+    profile: (state.profilePartials || []).map((partial) => ({
+      ratio: partial.ratio,
+      gainDb: partial.gainDb,
+      decay: partial.decay,
+    })),
   });
   root.querySelector('[data-roll]')?.addEventListener('click', () => {
     const current = snapshotRoll();
@@ -520,15 +532,15 @@ export function mount(root) {
       locks: rollLocks,
       seed: (Date.now() ^ rollSeed) >>> 0,
     });
-    writeRoll(rolled.knobs, rolled.description);
+    writeRoll(rolled.knobs, rolled.description, rolled.profile);
   });
   root.querySelector('[data-roll-back]')?.addEventListener('click', () => {
     const restored = undoRoll(rollHistory, snapshotRoll());
-    if (restored) writeRoll(restored.knobs, restored.text);
+    if (restored) writeRoll(restored.knobs, restored.text, restored.profile);
   });
   root.querySelector('[data-roll-forward]')?.addEventListener('click', () => {
     const restored = redoRoll(rollHistory, snapshotRoll());
-    if (restored) writeRoll(restored.knobs, restored.text);
+    if (restored) writeRoll(restored.knobs, restored.text, restored.profile);
   });
   tableBody.addEventListener('focusin', (event) => {
     if (canvas.dataset.view !== 'zebra') return;
