@@ -112,8 +112,20 @@ function nearestDensity(value, allowed = DENSITIES) {
   return best;
 }
 
-function sampleMaterialKnobs(rng, material) {
-  const range = RANGES[material] || RANGES.any;
+const FAMILIES = ['metal', 'wood', 'glass', 'skin', 'bell'];
+
+const LIMITS = {
+  tune: [-12, 12],
+  detune: [-0.62, 0.62],
+  decay: [-0.95, 0.95],
+  decayKf: [-0.92, 0.92],
+  position: [0.03, 0.88],
+  absorb: [-0.8, 0.88],
+  disperse: [-0.92, 0.92],
+  normalize: [-0.85, 0.85],
+};
+
+function sampleFromRange(rng, range) {
   return {
     tune: Math.round(sampleRange(rng, range.tune)),
     detune: sampleRange(rng, range.detune),
@@ -127,27 +139,73 @@ function sampleMaterialKnobs(rng, material) {
   };
 }
 
-function sampleWild(rng, wildness) {
-  const tame = sampleMaterialKnobs(rng, pick(rng, ['metal', 'wood', 'glass', 'skin', 'bell']));
-  const amount = clamp(Number(wildness) || 0, 0, 1);
-  const extreme = {
-    tune: Math.round(lerp(-12, 12, rng())),
-    detune: lerp(-0.55, 0.55, rng()) * (0.45 + 0.55 * amount),
-    decay: lerp(-0.92, 0.95, rng()),
-    decayKf: lerp(-0.92, 0.92, rng()),
-    position: lerp(0.04, 0.82, rng()),
-    density: pick(rng, [8, 16, 32]),
-    absorb: lerp(-0.75, 0.85, rng()),
-    disperse: lerp(-0.9, 0.92, rng()),
-    normalize: lerp(-0.8, 0.8, rng()),
+function sampleMaterialKnobs(rng, material) {
+  return sampleFromRange(rng, RANGES[material] || RANGES.any);
+}
+
+function expandedRange(material, wildness) {
+  const base = RANGES[material] || RANGES.any;
+  const w = clamp(Number(wildness) || 0, 0, 1);
+  const range = {
+    density: w > 0.45 ? [8, 16, 32] : base.density.slice(),
   };
-  const mix = 0.4 + 0.6 * amount;
-  const knobs = {};
-  for (const key of KNOB_KEYS) knobs[key] = lerp(tame[key], extreme[key], mix);
+  for (const key of ['tune', 'detune', 'decay', 'decayKf', 'position', 'absorb', 'disperse', 'normalize']) {
+    range[key] = [
+      lerp(base[key][0], LIMITS[key][0], w),
+      lerp(base[key][1], LIMITS[key][1], w),
+    ];
+  }
+  return range;
+}
+
+function sampleTarget(rng, material, wildness) {
+  const w = clamp(Number(wildness) || 0, 0, 1);
+  const family = material === 'wild' ? pick(rng, FAMILIES) : material;
+  const knobs = sampleFromRange(rng, expandedRange(family, w));
+  if (w > 0 && rng() < w * 0.9) {
+    const donor = pick(rng, FAMILIES.filter((name) => name !== family));
+    const trait = pick(rng, ['normalize', 'absorb', 'decay', 'decayKf', 'disperse']);
+    const borrowed = sampleRange(rng, RANGES[donor][trait]);
+    knobs[trait] = lerp(knobs[trait], borrowed, 0.5 + 0.5 * w);
+  }
+  if (w > 0.05 && rng() < w) {
+    const key = pick(rng, ['disperse', 'decayKf', 'absorb', 'detune', 'normalize']);
+    const corner = key === 'detune'
+      ? (rng() < 0.5 ? LIMITS.detune[0] : LIMITS.detune[1])
+      : (rng() < 0.5 ? LIMITS[key][0] : LIMITS[key][1]);
+    knobs[key] = lerp(knobs[key], corner, 0.35 + 0.65 * w);
+  }
+  if (w > 0.55 && rng() < 0.35) knobs.density = 8;
   knobs.tune = Math.round(knobs.tune);
-  knobs.density = nearestDensity(knobs.density, [8, 16, 32]);
+  knobs.density = nearestDensity(knobs.density, w > 0.45 ? [8, 16, 32] : (RANGES[family] || RANGES.any).density);
   knobs.position = clamp(knobs.position, 0.02, 0.98);
+  knobs.detune = clamp(knobs.detune, -1, 1);
   return knobs;
+}
+
+export function materialCenter(material) {
+  const range = RANGES[material === 'wild' ? 'any' : material] || RANGES.any;
+  const knobs = {};
+  for (const key of ['tune', 'detune', 'decay', 'decayKf', 'position', 'absorb', 'disperse', 'normalize']) {
+    knobs[key] = (range[key][0] + range[key][1]) / 2;
+  }
+  knobs.density = range.density[Math.floor((range.density.length - 1) / 2)];
+  return knobs;
+}
+
+export function knobDistance(knobs, material) {
+  const center = materialCenter(material);
+  const range = RANGES[material === 'wild' ? 'any' : material] || RANGES.any;
+  let sum = 0;
+  let count = 0;
+  for (const key of ['decay', 'decayKf', 'absorb', 'disperse', 'normalize', 'detune', 'position']) {
+    const half = Math.max(0.04, (range[key][1] - range[key][0]) / 2);
+    sum += Math.abs(knobs[key] - center[key]) / half;
+    count += 1;
+  }
+  const span = Math.max(...range.density) - Math.min(...range.density);
+  sum += Math.abs(knobs.density - center.density) / Math.max(8, span / 2);
+  return sum / (count + 1);
 }
 
 function mixKnobs(current, target, amount, locks) {
@@ -245,9 +303,7 @@ function wordCount(text) {
 
 function cap(text) {
   const clean = text.replace(/\s+/g, ' ').trim().replace(/[.!]+$/, '');
-  const words = clean.split(' ');
-  const cut = words.slice(0, 12).join(' ');
-  return cut.charAt(0).toUpperCase() + cut.slice(1);
+  return clean.charAt(0).toUpperCase() + clean.slice(1);
 }
 
 export function describeKnobs(knobs, material, partials = []) {
@@ -268,17 +324,6 @@ export function describeKnobs(knobs, material, partials = []) {
   const later = partials[Math.min(6, Math.max(0, partials.length - 1))];
   const highsOutlast = fund && later && later.decay > fund.decay * 1.2 && later.ratio > fund.ratio * 2;
 
-  if (material === 'wild') {
-    if (bright && muted) return cap('bright glass with a woody, damped tail');
-    if (inharmonic && short) return cap('inharmonic bell with a skin-like decay');
-    if (inharmonic && fastHighs && !long) return cap('stretched bell partials, upper notes die fast');
-    if (compressed && long && detuned) return cap('tight metal partials, long and slightly detuned');
-    if (sparse && long) return cap('sparse shimmer with a long tail');
-    if (ringingHighs && highsOutlast) return cap('lows fall away while the highs keep ringing');
-    if (fastHighs && dark) return cap('dark knock with a fast upper decay');
-    if (long && bright && muted) return cap('long bright tone with a damped tail');
-  }
-
   const named = material === 'wild' || material === 'any'
     ? (inharmonic ? 'bell' : short && muted ? 'wooden' : long && bright ? 'glass' : short ? 'skin' : 'metal')
     : { metal: 'metal', wood: 'wooden', glass: 'glass', skin: 'skin', bell: 'bell' }[material] || 'metal';
@@ -293,21 +338,37 @@ export function describeKnobs(knobs, material, partials = []) {
           ? 'strike'
           : (long ? 'ring' : 'tone');
 
-  const bits = [];
-  if (long) bits.push('long');
-  else if (short) bits.push('short');
-  if (bright) bits.push('bright');
-  else if (dark) bits.push('dark');
-  bits.push(named, noun);
-  const extra = [];
-  if (muted) extra.push('muted');
-  if (detuned) extra.push(slight ? 'slightly detuned' : 'detuned');
-  else if (fastHighs && !short) extra.push('fast upper decay');
-  else if (ringingHighs && highsOutlast) extra.push('ringing highs');
-  let text = bits.join(' ');
-  if (extra.length) text += `, ${extra.join(', ')}`;
+  const unusual = [];
+  if (sparse && long) unusual.push('a sparse long tail');
+  else if (sparse) unusual.push('sparse partials');
+  if (inharmonic) unusual.push('stretched partials');
+  if (compressed) unusual.push('tight spacing');
+  if (fastHighs) unusual.push('upper notes that die fast');
+  if (ringingHighs && highsOutlast) unusual.push('highs that outlast the low');
+  if (bright && muted) unusual.push('a glassy top and woody damping');
+  else if (bright && (named === 'wooden' || named === 'skin')) unusual.push('a glassy top');
+  else if (muted && (named === 'glass' || named === 'bell' || named === 'metal')) unusual.push('woody damping');
+  if (short && (named === 'bell' || inharmonic) && !unusual.some((item) => item.includes('skin'))) unusual.push('a skin-like decay');
+
+  const lead = [];
+  if (long && !unusual.some((item) => item.includes('long'))) lead.push('long');
+  else if (short && !unusual.some((item) => item.includes('skin-like'))) lead.push('short');
+  if (bright && !unusual.some((item) => item.includes('glassy'))) lead.push('bright');
+  else if (dark && !unusual.some((item) => item.includes('woody'))) lead.push('dark');
+
+  let text = `${lead.join(' ')} ${named} ${noun}`.replace(/\s+/g, ' ').trim();
+  if (unusual.length) text += ` with ${unusual.slice(0, 2).join(' and ')}`;
+  else {
+    const tail = [];
+    if (muted) tail.push('muted');
+    if (detuned) tail.push(slight ? 'slightly detuned' : 'detuned');
+    if (tail.length) text += `, ${tail.join(', ')}`;
+  }
   text = cap(text);
-  if (wordCount(text) > 12) text = cap(bits.join(' '));
+  if (wordCount(text) > 12 && unusual.length > 1) {
+    text = cap(`${lead.join(' ')} ${named} ${noun} with ${unusual[0]}`.replace(/\s+/g, ' ').trim());
+  }
+  if (wordCount(text) > 12) text = cap(`${lead.join(' ')} ${named} ${noun}`.trim());
   return text;
 }
 
@@ -326,6 +387,9 @@ export function descriptionAgrees(text, knobs, partials = []) {
   if (/\bsparse\b/.test(lower) && !(knobs.density <= 8)) return false;
   if (/\bstretched\b|\binharmonic\b/.test(lower) && !(knobs.disperse > 0.25)) return false;
   if (/\btight\b/.test(lower) && !(knobs.disperse < -0.2)) return false;
+  if (/\bdie fast\b/.test(lower) && !(knobs.decayKf > 0.35)) return false;
+  if (/\bglassy\b/.test(lower) && !(knobs.normalize > 0.12 || (knobs.absorb < -0.12 && knobs.normalize > -0.15))) return false;
+  if (/\bskin-like\b/.test(lower) && !(knobs.decay < -0.2)) return false;
   if (/\bbeat\b/.test(lower)) return false;
   if (/\bclustered\b/.test(lower)) return false;
   const fund = partials[0];
@@ -336,12 +400,12 @@ export function descriptionAgrees(text, knobs, partials = []) {
   return true;
 }
 
-export function rollSound({ base, current, material = 'any', amount = 1, wildness = 0.6, locks = defaultLocks(), seed = 1 }) {
+export function rollSound({ base, current, material = 'any', amount = 1, wildness = 0.3, locks = defaultLocks(), seed = 1 }) {
   const rng = mulberry32(seed);
   const family = MATERIALS.includes(material) ? material : 'any';
   let best = null;
-  for (let attempt = 0; attempt < 32; attempt++) {
-    const target = family === 'wild' ? sampleWild(rng, wildness) : sampleMaterialKnobs(rng, family);
+  for (let attempt = 0; attempt < 40; attempt++) {
+    const target = sampleTarget(rng, family, wildness);
     const knobs = mixKnobs(current || identityKnobs(), target, amount, locks);
     const partials = shapePartials(base, toShape(knobs));
     const quality = assessQuality(partials, knobs);

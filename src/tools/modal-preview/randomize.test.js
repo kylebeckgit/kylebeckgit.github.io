@@ -9,6 +9,7 @@ import {
   defaultLocks,
   descriptionAgrees,
   identityKnobs,
+  knobDistance,
   pushRoll,
   redoRoll,
   rollSound,
@@ -75,6 +76,56 @@ test('no roll packs the bars into one slab', () => {
       assert.equal(rolled.quality.reasons.includes('merged'), false, `${material} ${i} density ${rolled.knobs.density}`);
       assert.equal(barsStayDistinct(rolled.partials, rolled.knobs), true, `${material} ${rolled.knobs.density}`);
     }
+  }
+});
+
+function isGeneric(text) {
+  return /^(long |short )?(bright |dark )?(metal|wooden|glass|skin|bell) (tone|ring|knock|ping|shimmer|thump|strike)(, (muted|slightly detuned|detuned))*$/i.test(text);
+}
+
+test('wildness pulls rolls away from the material center', () => {
+  for (const material of MATERIALS) {
+    const means = [0, 0.5, 1].map((wildness) => {
+      let sum = 0;
+      for (let i = 0; i < 200; i++) {
+        const rolled = rollSound({
+          base,
+          current: identityKnobs(),
+          material,
+          amount: 1,
+          wildness,
+          locks: defaultLocks(),
+          seed: 20000 + i + wildness * 1000 + material.length * 50,
+        });
+        assert.equal(rolled.quality.ok, true, `${material} ${wildness} ${rolled.quality.reasons.join(',')}`);
+        assert.equal(descriptionAgrees(rolled.description, rolled.knobs, rolled.partials), true, rolled.description);
+        sum += knobDistance(rolled.knobs, material);
+      }
+      return sum / 200;
+    });
+    assert.ok(means[0] < means[1] && means[1] < means[2], `${material} distances ${means.map((n) => n.toFixed(3)).join(' < ')}`);
+  }
+});
+
+test('wildness 1 descriptions stay specific', () => {
+  for (const material of MATERIALS) {
+    const lines = [];
+    for (let i = 0; i < 50; i++) {
+      const rolled = rollSound({
+        base,
+        current: identityKnobs(),
+        material,
+        amount: 1,
+        wildness: 1,
+        locks: defaultLocks(),
+        seed: 30000 + i + material.length * 20,
+      });
+      lines.push(rolled.description);
+    }
+    const distinct = new Set(lines).size;
+    const generic = lines.filter(isGeneric).length;
+    assert.ok(distinct / lines.length >= 0.4, `${material} distinct ${distinct}/50`);
+    assert.ok(generic / lines.length < 0.2, `${material} generic ${generic}/50`);
   }
 });
 

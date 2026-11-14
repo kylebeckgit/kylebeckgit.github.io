@@ -447,12 +447,6 @@ export function mount(root) {
     });
   }
   const materialSelect = root.querySelector('[data-roll-material]');
-  const wildnessField = root.querySelector('[data-wildness-field]');
-  const syncWildness = () => {
-    if (wildnessField) wildnessField.hidden = materialSelect?.value !== 'wild';
-  };
-  materialSelect?.addEventListener('change', syncWildness);
-  syncWildness();
   const amountSlider = root.querySelector('[data-roll-amount]');
   amountSlider?.addEventListener('input', () => {
     const out = root.querySelector('[data-roll-amount-out]');
@@ -522,7 +516,7 @@ export function mount(root) {
       current: current.knobs,
       material: materialSelect?.value || 'any',
       amount: Number(amountSlider?.value || 1),
-      wildness: Number(wildnessSlider?.value || 0.7),
+      wildness: Number(wildnessSlider?.value ?? 0.3),
       locks: rollLocks,
       seed: (Date.now() ^ rollSeed) >>> 0,
     });
