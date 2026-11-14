@@ -271,6 +271,7 @@ export function measureFit(slices, camera, width, height, detune = 0) {
     const samples = [
       { x: world.x, y: 0, z: 0 },
       { x: world.x, y: world.y, z: 0 },
+      { x: world.x, y: world.y, z: strandDepthZ(shape.rel) },
       floorBack(world, landingDepth(shape)),
       ...tail,
     ];
@@ -639,54 +640,29 @@ function tailWorld(slice, world, maxSeconds, air) {
   return straight;
 }
 
-// A decay strand leaves its own crest and runs back in that bar's depth.
-// Screen travel stays inside the near half of the gap, so it cannot reach
-// the next post even when Decay, Decay KF, or Detune is at an extreme.
-function strandEnd(place, camera, x, y, depth, bounds) {
-  const at = (z) => place(camera, x, y, Math.max(0, z));
-  const origin = at(0);
-  const full = at(depth);
-  const positive = full.x >= origin.x;
-  const edge = positive ? bounds.next : bounds.prev;
-  const span = edge == null ? Math.abs(full.x - origin.x) : Math.abs(edge - origin.x);
-  // Never floor the reach above the gap. A 2px minimum overshoots the next
-  // post when Density packs the bars closer than that.
-  const reach = span * 0.38;
-  const limitX = origin.x + (positive ? reach : -reach);
-  const crosses = (point) => (positive ? point.x > limitX : point.x < limitX);
-  if (!crosses(full)) return full;
-  let lo = 0;
-  let hi = depth;
-  for (let i = 0; i < 14; i++) {
-    const mid = (lo + hi) / 2;
-    if (crosses(at(mid))) hi = mid;
-    else lo = mid;
-  }
-  return at(lo);
+// Decay length is depth along this post's own x, behind the front face.
+// It is not clipped to the next post in screen space. A long decay reaches
+// well past the floor band; a short one stays a stub.
+function strandDepthZ(rel) {
+  const t = clamp(Number(rel) || 0, 0, 1);
+  return PLANE.ribbonZ * (0.2 + 2.6 * t);
 }
 
 function laneStrands(placed, place, camera, detune) {
-  const rows = placed.map((item) => ({
-    item,
-    world: worldOf(item.slice, detune),
-    footX: item.tri.foot.x,
-  })).sort((a, b) => a.footX - b.footX);
-  return rows.map((row, index) => {
-    const rel = clamp(row.item.shape?.rel || 0, 0, 1);
-    const depth = PLANE.ribbonZ * (0.34 + 0.66 * rel);
-    const worldEnd = strandEnd(place, camera, row.world.x, row.world.y, depth, {
-      prev: index > 0 ? rows[index - 1].footX : null,
-      next: index + 1 < rows.length ? rows[index + 1].footX : null,
-    });
-    const origin = place(camera, row.world.x, row.world.y, 0);
-    const start = { x: row.item.tri.crest.x, y: row.item.tri.crest.y };
+  return placed.map((item) => {
+    const world = worldOf(item.slice, detune);
+    const depth = strandDepthZ(item.shape?.rel);
+    const origin = place(camera, world.x, world.y, 0);
+    const worldEnd = place(camera, world.x, world.y, depth);
+    const start = { x: item.tri.crest.x, y: item.tri.crest.y };
     return {
       start,
       end: {
         x: worldEnd.x + (start.x - origin.x),
         y: worldEnd.y + (start.y - origin.y),
       },
-      alpha: row.item.slice.alpha || 1,
+      depth,
+      alpha: item.slice.alpha || 1,
     };
   });
 }
@@ -846,8 +822,9 @@ function drawSlices(ctx, slices, detune, place, camera, look, palette, clock, st
     // and stops before the next post. The two longest use the same lane.
     if (!bloom || bulk > 1.12) {
       const lanes = laneStrands(placed, place, camera, detune);
+      const laneLook = { ...strand, width: weight * 0.62 };
       for (const lane of lanes) {
-        fadeLine(ctx, lane.start, lane.end, meshTint, strand, (bloom ? 0.06 : 0.72) * lane.alpha);
+        glow(ctx, [lane.start, lane.end], meshTint, laneLook, (bloom ? 0.08 : 0.82) * lane.alpha);
       }
     }
     for (const item of placed) {
