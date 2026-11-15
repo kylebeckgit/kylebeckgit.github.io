@@ -203,13 +203,13 @@ function fadeResponse(partial, fundamental, sampleRate) {
 }
 
 function balancePartials(partials, options, sampleRate) {
-  // The 4 ms fade sits on the click. A high, short partial peaks inside that
-  // fade and would otherwise play several dB quiet. Scale each row from its
-  // own faded peak. Cap the lift at 12 dB so a dead row cannot be boosted
-  // into the foreground.
+  // The 4 ms fade sits on the click. A short partial peaks inside that fade
+  // and would otherwise play quiet. Scale each row from its own faded peak.
   return partials.map((partial) => {
     const response = fadeResponse(partial, options.fundamental, sampleRate);
-    const factor = response > 0.2 ? Math.min(4, 1 / response) : 1;
+    // A 5 ms partial at a low note can sit 20 dB under the fade. Correct it.
+    // Stop at 30 dB so a row that never speaks is not turned into a click.
+    const factor = response > 0.02 ? Math.min(32, 1 / response) : 1;
     return { ...partial, gainDb: partial.gainDb + 20 * Math.log10(factor) };
   });
 }

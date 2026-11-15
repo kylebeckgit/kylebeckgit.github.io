@@ -129,6 +129,22 @@ test('each rendered row stays within 2 dB of its GainDB', () => {
       assert.ok(error <= 2, `${material} t60 ${partial.decay.toFixed(3)} err ${error.toFixed(2)} dB`);
     }
   }
+  for (const [hz, decay] of [[80, 0.005], [80, 0.012], [261, 0.005], [261, 0.012]]) {
+    const partial = { ratio: hz / 440, gainDb: -12, decay };
+    const samples = renderPreview([partial], {
+      fundamental: 440,
+      sampleRate: 48000,
+      seconds: 0.08,
+      matchGains: true,
+      unitGain: true,
+      flat: true,
+    });
+    let max = 0;
+    for (const sample of samples) max = Math.max(max, Math.abs(sample));
+    const amp = 10 ** (partial.gainDb / 20);
+    const error = Math.abs(20 * Math.log10(max / amp));
+    assert.ok(error <= 2, `${hz} Hz t60 ${decay} err ${error.toFixed(2)} dB`);
+  }
 });
 
 test('rows above 6 kHz at A4 and above Nyquist stay out of the file', () => {
