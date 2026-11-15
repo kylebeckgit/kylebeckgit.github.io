@@ -105,45 +105,69 @@ test('a resting position does not duck the fundamental', () => {
   assert.match(worklet, /pos <= 0\.02\) return 1/);
 });
 
-test('each rendered row stays within 2 dB of its GainDB', () => {
-  function peak(samples) {
-    let max = 0;
-    for (const sample of samples) max = Math.max(max, Math.abs(sample));
-    return max;
+function mixedRowLevels(samples, partials, fundamental, sampleRate) {
+  // One damped sinusoid per row, solved together so a short neighbor is not
+  // counted as part of a louder mode.
+  const n = Math.min(samples.length, Math.floor(0.2 * sampleRate));
+  const count = partials.length;
+  const cols = count * 2;
+  const column = Array.from({ length: cols }, () => new Float64Array(n));
+  partials.forEach((partial, index) => {
+    const tau = partial.decay / Math.log(1000);
+    const radius = Math.exp(-1 / (tau * sampleRate));
+    const omega = (2 * Math.PI * fundamental * partial.ratio) / sampleRate;
+    let env = 1;
+    for (let i = 0; i < n; i++) {
+      column[index * 2][i] = env * Math.cos(omega * i);
+      column[index * 2 + 1][i] = env * Math.sin(omega * i);
+      env *= radius;
+    }
+  });
+  const y = Float64Array.from(samples.subarray(0, n));
+  const ata = Array.from({ length: cols }, () => new Float64Array(cols));
+  const atb = new Float64Array(cols);
+  for (let a = 0; a < cols; a++) {
+    let dot = 0;
+    for (let i = 0; i < n; i++) dot += column[a][i] * y[i];
+    atb[a] = dot;
+    for (let b = a; b < cols; b++) {
+      let prod = 0;
+      for (let i = 0; i < n; i++) prod += column[a][i] * column[b][i];
+      ata[a][b] = prod;
+      ata[b][a] = prod;
+    }
   }
+  const matrix = ata.map((row, index) => { const copy = Array.from(row); copy.push(atb[index]); return copy; });
+  for (let i = 0; i < cols; i++) {
+    let pivot = i;
+    for (let row = i + 1; row < cols; row++) if (Math.abs(matrix[row][i]) > Math.abs(matrix[pivot][i])) pivot = row;
+    [matrix[i], matrix[pivot]] = [matrix[pivot], matrix[i]];
+    const scale = matrix[i][i] || 1e-30;
+    for (let col = i; col <= cols; col++) matrix[i][col] /= scale;
+    for (let row = 0; row < cols; row++) {
+      if (row === i) continue;
+      const factor = matrix[row][i];
+      for (let col = i; col <= cols; col++) matrix[row][col] -= factor * matrix[i][col];
+    }
+  }
+  return partials.map((_, index) => Math.hypot(matrix[index * 2][cols], matrix[index * 2 + 1][cols]));
+}
+
+test('a mixed preview stays within 2 dB of GainDB on every row', () => {
   for (const material of ['wood', 'skin', 'any', 'wild']) {
     const rolled = rollSound({ material, wildness: 0, amount: 1, seed: 3 });
     const partials = audiblePartials(rolled.partials).slice(0, 8);
     assert.ok(partials.some((partial) => partial.decay < 0.12), material);
-    for (const partial of partials) {
-      const samples = renderPreview([partial], {
-        fundamental: 440,
-        sampleRate: 48000,
-        seconds: 0.12,
-        matchGains: true,
-        unitGain: true,
-        flat: true,
-      });
-      const amp = 10 ** (partial.gainDb / 20);
-      const error = Math.abs(20 * Math.log10(peak(samples) / amp));
-      assert.ok(error <= 2, `${material} t60 ${partial.decay.toFixed(3)} err ${error.toFixed(2)} dB`);
-    }
-  }
-  for (const [hz, decay] of [[80, 0.005], [80, 0.012], [261, 0.005], [261, 0.012]]) {
-    const partial = { ratio: hz / 440, gainDb: -12, decay };
-    const samples = renderPreview([partial], {
-      fundamental: 440,
-      sampleRate: 48000,
-      seconds: 0.08,
-      matchGains: true,
-      unitGain: true,
-      flat: true,
+    const sampleRate = 48000;
+    const fundamental = 440;
+    const samples = renderPreview(partials, { fundamental, sampleRate, seconds: 0.25, matchGains: true });
+    const levels = mixedRowLevels(samples, partials, fundamental, sampleRate);
+    partials.forEach((partial, index) => {
+      const heard = 20 * Math.log10(levels[index] / levels[0]);
+      const wanted = partial.gainDb - partials[0].gainDb;
+      const error = Math.abs(heard - wanted);
+      assert.ok(error <= 2, `${material} row ${index + 1} t60 ${partial.decay.toFixed(3)} err ${error.toFixed(2)} dB`);
     });
-    let max = 0;
-    for (const sample of samples) max = Math.max(max, Math.abs(sample));
-    const amp = 10 ** (partial.gainDb / 20);
-    const error = Math.abs(20 * Math.log10(max / amp));
-    assert.ok(error <= 2, `${hz} Hz t60 ${decay} err ${error.toFixed(2)} dB`);
   }
 });
 

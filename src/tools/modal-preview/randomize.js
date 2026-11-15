@@ -478,7 +478,7 @@ export function soundFacts(partials) {
     bar: near(1, 2.756, 80) && near(2, 5.404, 110),
     membrane: near(1, 1.594, 70),
     bowl: near(1, 2.8, 80) && near(2, 5.2, 110),
-    bellish: near(1, 2, 70) && near(2, 2.4, 90) && !near(2, 3, 40),
+    bellish: near(1, 2, 40) && near(2, 2.4, 40) && near(3, 3, 40),
     damped: highsDieQuickly(list),
     fund: Number(list[0]?.decay) || 0,
   };

@@ -191,27 +191,28 @@ export function processSample(state) {
   return shaped > 0.99 ? 0.99 : shaped < -0.99 ? -0.99 : shaped;
 }
 
-function fadeResponse(partial, fundamental, sampleRate) {
-  const probe = { ratio: partial.ratio, gainDb: 0, decay: partial.decay };
-  const samples = renderFlat([probe], { fundamental, flat: true, fadeIn: 0.004 }, sampleRate, 0.06);
-  let peak = 0;
-  for (let i = 0; i < samples.length; i++) {
-    const value = Math.abs(samples[i]);
-    if (value > peak) peak = value;
+function renderModalSum(partials, options, sampleRate, seconds) {
+  // Each row is amp * r^n * sin, with amp from GainDB. A two-pole click is not
+  // that waveform: its startup, plus a fade, makes a short row fit several dB
+  // off. Zebra's partials are the exponential itself.
+  const fundamental = options.fundamental;
+  const length = Math.max(8, Math.floor(sampleRate * seconds));
+  const out = new Float32Array(length);
+  for (const partial of partials) {
+    const freq = fundamental * partial.ratio;
+    if (!(freq >= 20) || freq > sampleRate * 0.45 || !(partial.decay > 0)) continue;
+    const amp = 10 ** (partial.gainDb / 20);
+    if (!(amp > 0)) continue;
+    const tau = partial.decay / Math.log(1000);
+    const radius = Math.exp(-1 / (tau * sampleRate));
+    const omega = (2 * Math.PI * freq) / sampleRate;
+    let env = 1;
+    for (let i = 1; i < length; i++) {
+      env *= radius;
+      out[i] += amp * env * Math.sin(omega * i);
+    }
   }
-  return peak / 0.45;
-}
-
-function balancePartials(partials, options, sampleRate) {
-  // The 4 ms fade sits on the click. A short partial peaks inside that fade
-  // and would otherwise play quiet. Scale each row from its own faded peak.
-  return partials.map((partial) => {
-    const response = fadeResponse(partial, options.fundamental, sampleRate);
-    // A 5 ms partial at a low note can sit 20 dB under the fade. Correct it.
-    // Stop at 30 dB so a row that never speaks is not turned into a click.
-    const factor = response > 0.02 ? Math.min(32, 1 / response) : 1;
-    return { ...partial, gainDb: partial.gainDb + 20 * Math.log10(factor) };
-  });
+  return out;
 }
 
 function renderFlat(partials, options, sampleRate, seconds) {
@@ -219,8 +220,6 @@ function renderFlat(partials, options, sampleRate, seconds) {
   const length = Math.max(8, Math.floor(sampleRate * seconds));
   const out = new Float32Array(length);
   for (let i = 0; i < length; i++) out[i] = processSample(state);
-  // 4 ms cosine rise. The impulse still excites every partial; the rise
-  // only keeps the first sample from stepping.
   fadeInPlace(out, sampleRate, options.fadeIn || 0.004);
   return out;
 }
@@ -228,11 +227,8 @@ function renderFlat(partials, options, sampleRate, seconds) {
 export function renderPreview(partials, options) {
   const sampleRate = options.sampleRate || 44100;
   const seconds = options.seconds || 3;
-  // GainDB is already the partial level. The old 20 ms sinusoid fit treated a
-  // 30 ms T60 as a quiet steady tone and boosted it, up to about 30 dB.
   if (options.matchGains) {
-    const shaped = balancePartials(partials, options, sampleRate);
-    return renderFlat(shaped, options, sampleRate, seconds);
+    return renderModalSum(partials, options, sampleRate, seconds);
   }
   const length = Math.floor(sampleRate * seconds);
   const state = createVoice(partials, options, sampleRate);

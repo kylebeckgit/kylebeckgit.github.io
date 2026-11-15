@@ -305,6 +305,16 @@ test('knock, thump, ping, bell, and wood match the sound', () => {
   const brightLine = describeKnobs(knobs, 'metal', brightRows);
   assert.match(brightLine, /\bbright\b/i);
   assert.equal(descriptionAgrees(brightLine, knobs, brightRows), true, brightLine);
+  for (let seed = 1; seed <= 80; seed++) {
+    const rolled = rollSound({ material: 'bell', wildness: 1, amount: 1, seed });
+    if (!/\bbell\b/i.test(rolled.description)) continue;
+    const reference = familyPartials('bell');
+    const count = Math.min(4, reference.length, rolled.partials.length);
+    for (let i = 1; i < count; i++) {
+      const cents = Math.abs(1200 * Math.log2(rolled.partials[i].ratio / reference[i].ratio));
+      assert.ok(cents <= 40, `${rolled.description} partial ${i + 1} is ${cents.toFixed(0)} cents off`);
+    }
+  }
   const bell = familyPartials('bell').slice(0, 6);
   const stretch = 1 - 0.92 * 0.28;
   const squashed = bell.map((partial) => ({
