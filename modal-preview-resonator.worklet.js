@@ -12,7 +12,7 @@ function strikeWeight(index, position) {
 }
 
 function modeCoeffs(freq, t60, sampleRate) {
-  const safe = Math.min(60, Math.max(0.02, Number(t60) || 0.02));
+  const safe = Math.min(60, Math.max(0.005, Number(t60) || 0.005));
   const tau = safe / Math.log(1000);
   const R = Math.exp(-1 / (tau * sampleRate));
   const theta = (2 * Math.PI * freq) / sampleRate;

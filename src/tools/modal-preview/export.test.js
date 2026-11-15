@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
-import { strikeWeight } from './resonator.js';
+import { renderPreview, strikeWeight } from './resonator.js';
 import {
   A4_HZ,
   ZEBRA_DECAY_MAX,
@@ -43,7 +43,7 @@ function assertRoundTrip(partials, description) {
   });
   assert.match(exported.filename, new RegExp(`_decay${exported.knob}\\.csv$`));
   assert.equal(exported.filename.includes('zebra3_ai_profile'), false);
-  assert.equal(exported.hint, `In Zebra, set Decay to ${exported.knob}, Position 0, other modal knobs at 0.`);
+  assert.equal(exported.hint, `In Zebra, set Decay to ${exported.knob}, Position 0, other modal knobs at 0. Rows stop at 6 kHz when the fundamental is A4.`);
   return exported;
 }
 
@@ -105,7 +105,33 @@ test('a resting position does not duck the fundamental', () => {
   assert.match(worklet, /pos <= 0\.02\) return 1/);
 });
 
-test('rows above 12 kHz at A4 and above Nyquist stay out of the file', () => {
+test('each rendered row stays within 2 dB of its GainDB', () => {
+  function peak(samples) {
+    let max = 0;
+    for (const sample of samples) max = Math.max(max, Math.abs(sample));
+    return max;
+  }
+  for (const material of ['wood', 'skin', 'any', 'wild']) {
+    const rolled = rollSound({ material, wildness: 0, amount: 1, seed: 3 });
+    const partials = audiblePartials(rolled.partials).slice(0, 8);
+    assert.ok(partials.some((partial) => partial.decay < 0.12), material);
+    for (const partial of partials) {
+      const samples = renderPreview([partial], {
+        fundamental: 440,
+        sampleRate: 48000,
+        seconds: 0.12,
+        matchGains: true,
+        unitGain: true,
+        flat: true,
+      });
+      const amp = 10 ** (partial.gainDb / 20);
+      const error = Math.abs(20 * Math.log10(peak(samples) / amp));
+      assert.ok(error <= 2, `${material} t60 ${partial.decay.toFixed(3)} err ${error.toFixed(2)} dB`);
+    }
+  }
+});
+
+test('rows above 6 kHz at A4 and above Nyquist stay out of the file', () => {
   const exported = zebraExport([
     { ratio: 1, gainDb: 0, decay: 2 },
     { ratio: 10, gainDb: -6, decay: 1.2 },

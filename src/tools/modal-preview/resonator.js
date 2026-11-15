@@ -15,7 +15,7 @@ export function strikeWeight(index, position) {
 }
 
 export function modeCoeffs(freq, t60, sampleRate) {
-  const safe = Math.min(60, Math.max(0.02, Number(t60) || 0.02));
+  const safe = Math.min(60, Math.max(0.005, Number(t60) || 0.005));
   const tau = safe / Math.log(1000);
   const R = Math.exp(-1 / (tau * sampleRate));
   const theta = (2 * Math.PI * freq) / sampleRate;
@@ -90,7 +90,7 @@ export function createVoice(partials, options, sampleRate) {
   const bowCutoff = 3200;
   return {
     modes,
-    norm: 0.45 / Math.max(ampSum, 1e-8),
+    norm: options.unitGain === true ? 1 : 0.45 / Math.max(ampSum, 1e-8),
     exciter,
     sampleRate,
     pos: 0,
@@ -105,6 +105,7 @@ export function createVoice(partials, options, sampleRate) {
     holding: true,
     impulse: !flat && options.impulse ? 1 : 0,
     linear: flat,
+    unitGain: options.unitGain === true,
     glide: options.glide || null,
     n: 0,
   };
@@ -190,28 +191,27 @@ export function processSample(state) {
   return shaped > 0.99 ? 0.99 : shaped < -0.99 ? -0.99 : shaped;
 }
 
-function lsMagnitude(samples, freq, sampleRate) {
-  const n = Math.min(samples.length, Math.round(sampleRate * 0.02));
-  const w = (2 * Math.PI * freq) / sampleRate;
-  let s00 = 0;
-  let s01 = 0;
-  let s11 = 0;
-  let b0 = 0;
-  let b1 = 0;
-  for (let i = 0; i < n; i++) {
-    const c = Math.cos(w * i);
-    const s = Math.sin(w * i);
-    const y = samples[i];
-    s00 += c * c;
-    s11 += s * s;
-    s01 += c * s;
-    b0 += y * c;
-    b1 += y * s;
+function fadeResponse(partial, fundamental, sampleRate) {
+  const probe = { ratio: partial.ratio, gainDb: 0, decay: partial.decay };
+  const samples = renderFlat([probe], { fundamental, flat: true, fadeIn: 0.004 }, sampleRate, 0.06);
+  let peak = 0;
+  for (let i = 0; i < samples.length; i++) {
+    const value = Math.abs(samples[i]);
+    if (value > peak) peak = value;
   }
-  const det = s00 * s11 - s01 * s01 || 1e-18;
-  const a = (b0 * s11 - b1 * s01) / det;
-  const b = (s00 * b1 - s01 * b0) / det;
-  return Math.hypot(a, b);
+  return peak / 0.45;
+}
+
+function balancePartials(partials, options, sampleRate) {
+  // The 4 ms fade sits on the click. A high, short partial peaks inside that
+  // fade and would otherwise play several dB quiet. Scale each row from its
+  // own faded peak. Cap the lift at 12 dB so a dead row cannot be boosted
+  // into the foreground.
+  return partials.map((partial) => {
+    const response = fadeResponse(partial, options.fundamental, sampleRate);
+    const factor = response > 0.2 ? Math.min(4, 1 / response) : 1;
+    return { ...partial, gainDb: partial.gainDb + 20 * Math.log10(factor) };
+  });
 }
 
 function renderFlat(partials, options, sampleRate, seconds) {
@@ -225,52 +225,13 @@ function renderFlat(partials, options, sampleRate, seconds) {
   return out;
 }
 
-function gainsForHear(partials, options, sampleRate) {
-  const scales = partials.map(() => 1);
-  const active = partials.map((partial) => {
-    const freq = options.fundamental * partial.ratio;
-    return partial.gainDb > -70 && freq >= 20 && freq < sampleRate * 0.45;
-  });
-  for (let pass = 0; pass < 12; pass++) {
-    const shaped = partials.map((partial, index) => ({
-      ...partial,
-      gainDb: partial.gainDb + 20 * Math.log10(scales[index]),
-    }));
-    const chunk = renderFlat(shaped, options, sampleRate, 0.02);
-    const mags = partials.map((partial, index) => (
-      active[index] ? lsMagnitude(chunk, options.fundamental * partial.ratio, sampleRate) : 0
-    ));
-    let loud = 0;
-    let wantLoud = 0;
-    for (let i = 0; i < partials.length; i++) {
-      if (!active[i]) continue;
-      if (mags[i] > loud) loud = mags[i];
-      const want = 10 ** (partials[i].gainDb / 20);
-      if (want > wantLoud) wantLoud = want;
-    }
-    if (!(loud > 0) || !(wantLoud > 0)) break;
-    let worst = 0;
-    for (let i = 0; i < partials.length; i++) {
-      if (!active[i] || !(mags[i] > 1e-12)) continue;
-      const want = (10 ** (partials[i].gainDb / 20)) / wantLoud;
-      const got = mags[i] / loud;
-      const err = Math.abs(20 * Math.log10(got / want));
-      if (err > worst) worst = err;
-      scales[i] = Math.min(80, Math.max(0.02, scales[i] * (want / got)));
-    }
-    if (worst < 0.4) break;
-  }
-  return partials.map((partial, index) => ({
-    ...partial,
-    gainDb: partial.gainDb + 20 * Math.log10(scales[index]),
-  }));
-}
-
 export function renderPreview(partials, options) {
   const sampleRate = options.sampleRate || 44100;
   const seconds = options.seconds || 3;
+  // GainDB is already the partial level. The old 20 ms sinusoid fit treated a
+  // 30 ms T60 as a quiet steady tone and boosted it, up to about 30 dB.
   if (options.matchGains) {
-    const shaped = gainsForHear(partials, options, sampleRate);
+    const shaped = balancePartials(partials, options, sampleRate);
     return renderFlat(shaped, options, sampleRate, seconds);
   }
   const length = Math.floor(sampleRate * seconds);

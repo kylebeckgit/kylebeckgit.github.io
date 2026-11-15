@@ -290,6 +290,28 @@ test('knock, thump, ping, bell, and wood match the sound', () => {
   assert.equal(descriptionAgrees(wooden, knobs, bar), true, wooden);
   const ringing = bar.map((partial) => ({ ...partial, decay: 3.4 }));
   assert.equal(/\bknock\b/i.test(describeKnobs(knobs, 'wood', ringing)), false);
+  const medium = bar.map((partial) => ({ ...partial, decay: 1.2 }));
+  assert.equal(/\bknock\b/i.test(describeKnobs(knobs, 'wood', medium)), false);
+  const darkRows = [1, 2, 3, 4, 5, 6].map((ratio, index) => ({ ratio, gainDb: -index * 14, decay: 2 }));
+  const falselyBright = describeKnobs({ ...knobs, normalize: 0.8 }, 'metal', darkRows);
+  assert.equal(/\bbright\b/i.test(falselyBright), false, falselyBright);
+  const brightRows = [
+    { ratio: 1, gainDb: -20, decay: 2 },
+    { ratio: 2.2, gainDb: -14, decay: 2 },
+    { ratio: 3.5, gainDb: -6, decay: 1.4 },
+    { ratio: 5, gainDb: -2, decay: 1 },
+    { ratio: 7.5, gainDb: 0, decay: 0.8 },
+  ];
+  const brightLine = describeKnobs(knobs, 'metal', brightRows);
+  assert.match(brightLine, /\bbright\b/i);
+  assert.equal(descriptionAgrees(brightLine, knobs, brightRows), true, brightLine);
+  const bell = familyPartials('bell').slice(0, 6);
+  const stretch = 1 - 0.92 * 0.28;
+  const squashed = bell.map((partial) => ({
+    ...partial,
+    ratio: 2 ** (Math.log2(partial.ratio) * stretch),
+  }));
+  assert.equal(/\bbell\b/i.test(describeKnobs(knobs, 'bell', squashed)), false);
 });
 
 test('rolled views keep a decay curve across the comb', () => {
@@ -307,7 +329,7 @@ test('rolled views keep a decay curve across the comb', () => {
       const reach = Math.max(...strands.map((strand) => Math.hypot(strand.end.x - strand.start.x, strand.end.y - strand.start.y)));
       assert.ok(reach > 70, `${material} w${wildness} reach ${reach.toFixed(0)}`);
       for (const partial of audiblePartials(rolled.partials)) {
-        assert.ok(partial.decay > 0.021, `${material} decay ${partial.decay}`);
+        assert.ok(partial.decay >= 0.005, `${material} decay ${partial.decay}`);
       }
     }
   }

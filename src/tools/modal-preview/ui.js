@@ -1,4 +1,4 @@
-import { PRESETS, NOTE_BUTTONS, buildPartials, previewPartials, zebraExport, audiblePartials, fromCsv, noteFrequency, defaultControls, sanitizeControls, alignReference } from './engine.js';
+import { A4_HZ, PRESETS, NOTE_BUTTONS, ZEBRA_PARTIAL_LIMIT_HZ, buildPartials, previewPartials, zebraExport, audiblePartials, fromCsv, noteFrequency, defaultControls, sanitizeControls, alignReference } from './engine.js';
 import { analyzeSamples, decodeRecording, resampleMono, parseRoot, frequencyToNote } from './analyze.js';
 import { renderPreview, scaleToPeak, strikeWeight } from './resonator.js';
 import { aimSlices, createFitMotion, createSliceMotion, defaultCamera, hitPartial, MORPH_MS, paintModalView, sampleSlices, slicesMoving } from './modal-view.js';
@@ -1026,7 +1026,7 @@ function capAudible(partials) {
   // Drop partials Zebra rings past about 12 kHz at A4, instead of folding
   // them under a neighbor. Folding made the list unsorted and pulled real
   // modes off their ratios.
-  const limit = 12000 / 440;
+  const limit = ZEBRA_PARTIAL_LIMIT_HZ / A4_HZ;
   const kept = partials
     .filter((partial) => partial.ratio > 0 && partial.ratio <= limit)
     .sort((a, b) => a.ratio - b.ratio);

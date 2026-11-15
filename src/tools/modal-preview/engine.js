@@ -414,7 +414,9 @@ export function alignReference(partials, fundamental) {
 // 32 s; a measured build sits near 31.7 s, and anything above 1 in the column
 // is clipped. Ratio stays the real partial ratio. GainDB stays relative dB.
 export const A4_HZ = 440;
-export const ZEBRA_PARTIAL_LIMIT_HZ = 12000;
+// Zebra rings partials above about 5 kHz longer and a few dB louder.
+// 6 kHz at A4 (440 Hz) keeps the file in the range it renders faithfully.
+export const ZEBRA_PARTIAL_LIMIT_HZ = 6000;
 export const ZEBRA_DECAY_MAX = 2 ** ((100 - 50) / 10);
 
 export function zebraDecayKnob(seconds) {
@@ -437,8 +439,7 @@ export function audiblePartials(partials, { fundamental = A4_HZ, sampleRate = 48
     const atA4 = partial.ratio * A4_HZ;
     const atNote = partial.ratio * note;
     if (atA4 > ZEBRA_PARTIAL_LIMIT_HZ || atNote > nyquist) continue;
-    // 0.02 s is the shaper's clamp, not a measured decay. Leave those rows out.
-    if (partial.decay <= 0.021) continue;
+    if (!(partial.decay >= 0.005)) continue;
     kept.push({ ...partial, decay: Math.min(partial.decay, ZEBRA_DECAY_MAX) });
   }
   kept.sort((a, b) => a.ratio - b.ratio);
@@ -465,7 +466,7 @@ export function exportFileName(description, knob) {
 }
 
 export function zebraHint(knob) {
-  return `In Zebra, set Decay to ${knob}, Position 0, other modal knobs at 0.`;
+  return `In Zebra, set Decay to ${knob}, Position 0, other modal knobs at 0. Rows stop at 6 kHz when the fundamental is A4.`;
 }
 
 function decayCell(unit, longest) {

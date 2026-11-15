@@ -405,10 +405,10 @@ export function assessQuality(partials, knobs) {
   if (slammed >= 4) reasons.push('clipped');
   const fund = list[0];
   if (fund) {
-    if (fund.decay < 0.05 || fund.decay > 36) reasons.push('decay');
+    if (fund.decay < 0.005 || fund.decay > 36) reasons.push('decay');
   }
   const decays = list.map((partial) => partial.decay);
-  if (decays.some((value) => value < 0.02 || value > 48)) reasons.push('decay');
+  if (decays.some((value) => value < 0.005 || value > 48)) reasons.push('decay');
   let clumps = 0;
   for (let i = 1; i < Math.min(list.length, 8); i++) {
     if (centsBetween(list[i - 1].ratio, list[i].ratio) < 8) clumps += 1;
@@ -446,6 +446,26 @@ function centsOff(actual, expected) {
   return Math.abs(1200 * Math.log2(actual / expected));
 }
 
+export function spectrumTone(partials) {
+  const list = partials || [];
+  const lowest = Math.min(...list.map((partial) => partial.ratio).filter((ratio) => ratio > 0));
+  let high = 0;
+  let all = 0;
+  let moment = 0;
+  for (const partial of list) {
+    const power = 10 ** (partial.gainDb / 10);
+    const ratio = partial.ratio / (lowest || 1);
+    all += power;
+    moment += power * ratio;
+    if (ratio >= 3) high += power;
+  }
+  const share = all > 0 ? high / all : 0;
+  const centroid = all > 0 ? moment / all : 1;
+  const bright = share >= 0.2 || centroid >= 3;
+  const dark = !bright && share <= 0.1 && centroid <= 2.2;
+  return { share, centroid, bright, dark };
+}
+
 export function soundFacts(partials) {
   const list = partials || [];
   const lowest = Math.min(...list.map((partial) => partial.ratio).filter((ratio) => ratio > 0));
@@ -476,8 +496,9 @@ export function describeKnobs(knobs, material, partials = []) {
   const seconds = Number(partials[0]?.decay);
   const long = seconds > 3;
   const short = seconds > 0 && seconds < 1.2;
-  const bright = knobs.normalize > 0.18 || (knobs.absorb < -0.18 && knobs.normalize > -0.15);
-  const dark = !bright && (knobs.normalize < -0.22 || knobs.absorb > 0.38);
+  const tone = spectrumTone(partials);
+  const bright = tone.bright;
+  const dark = tone.dark;
   const muted = highsDieQuickly(partials);
   const detuned = Math.abs(knobs.detune) > 0.12;
   const slight = detuned && Math.abs(knobs.detune) <= 0.3;
@@ -497,16 +518,17 @@ export function describeKnobs(knobs, material, partials = []) {
         : facts.bellish ? 'bell'
           : 'metal';
   let named = { metal: 'metal', wood: 'wooden', glass: 'glass', skin: 'skin', bell: 'bell' }[material] || 'metal';
-  if (named === 'bell' && !facts.inharmonic) named = heard;
+  if (named === 'bell' && !facts.bellish) named = heard;
   if (named === 'wooden' && !(facts.bar || facts.damped)) named = heard;
   if (named === 'skin' && !facts.membrane) named = heard;
   if (named === 'glass' && !facts.bowl) named = heard;
   const brief = facts.fund > 0 && facts.fund < 1.5;
+  const knock = facts.fund > 0 && facts.fund < 1;
 
   const noun = named === 'glass'
     ? (brief ? 'ping' : 'shimmer')
     : named === 'wooden'
-      ? (brief ? 'knock' : (long ? 'ring' : 'tone'))
+      ? (knock ? 'knock' : (long ? 'ring' : 'tone'))
       : named === 'skin'
         ? (brief ? 'thump' : (long ? 'ring' : 'tone'))
         : named === 'bell'
@@ -566,17 +588,19 @@ export function descriptionAgrees(text, knobs, partials = []) {
   if (/\blong\b/.test(lower) && !(fundDecay > 3)) return false;
   if (/\bmuted\b/.test(lower) && !highsDieQuickly(partials)) return false;
   if (/\bwoody\b|\bdamped\b/.test(lower) && !(knobs.absorb > 0.28)) return false;
-  if (/\bbright\b/.test(lower) && !(knobs.normalize > 0.12 || (knobs.absorb < -0.12 && knobs.normalize > -0.15))) return false;
-  if (/\bdark\b/.test(lower) && !(knobs.normalize < -0.12 || knobs.absorb > 0.28)) return false;
+  const tone = spectrumTone(partials);
+  if (/\bbright\b/.test(lower) && !tone.bright) return false;
+  if (/\bdark\b/.test(lower) && !tone.dark) return false;
   if (/\bdetuned\b/.test(lower) && !(Math.abs(knobs.detune) > 0.1)) return false;
   if (/\bsparse\b/.test(lower) && !(knobs.density <= 8)) return false;
   if (/\bstretched\b|\binharmonic\b/.test(lower) && !(knobs.disperse > 0.25)) return false;
   if (/\btight\b/.test(lower) && !(knobs.disperse < -0.2)) return false;
   if (/\bdie fast\b/.test(lower) && !(knobs.decayKf > 0.35)) return false;
-  if (/\bglassy\b/.test(lower) && !(knobs.normalize > 0.12 || (knobs.absorb < -0.12 && knobs.normalize > -0.15))) return false;
-  if (/\b(knock|thump|ping)\b/.test(lower) && !(fundDecay < 1.5)) return false;
+  if (/\bglassy\b/.test(lower) && !tone.bright) return false;
+  if (/\bknock\b/.test(lower) && !(fundDecay < 1)) return false;
+  if (/\b(thump|ping)\b/.test(lower) && !(fundDecay < 1.5)) return false;
   const facts = soundFacts(partials);
-  if (/\bbell\b/.test(lower) && !facts.inharmonic) return false;
+  if (/\bbell\b/.test(lower) && !facts.bellish) return false;
   if (/\bwooden\b|\bwood\b/.test(lower) && !(facts.bar || facts.damped)) return false;
   if (/\bskin\b/.test(lower) && !/skin-like/.test(lower) && !facts.membrane) return false;
   if (/\bglass\b/.test(lower) && !facts.bowl) return false;
