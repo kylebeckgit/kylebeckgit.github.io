@@ -198,6 +198,7 @@ function renderModalSum(partials, options, sampleRate, seconds) {
   const fundamental = options.fundamental;
   const length = Math.max(8, Math.floor(sampleRate * seconds));
   const out = new Float32Array(length);
+  const glide = options.glide;
   for (const partial of partials) {
     const freq = fundamental * partial.ratio;
     if (!(freq >= 20) || freq > sampleRate * 0.45 || !(partial.decay > 0)) continue;
@@ -206,10 +207,24 @@ function renderModalSum(partials, options, sampleRate, seconds) {
     const tau = partial.decay / Math.log(1000);
     const radius = Math.exp(-1 / (tau * sampleRate));
     const omega = (2 * Math.PI * freq) / sampleRate;
+    const bends = glide && partial.ratio < (glide.maxRatio ?? 6) && glide.seconds > 0;
     let env = 1;
+    if (!bends) {
+      for (let i = 1; i < length; i++) {
+        env *= radius;
+        out[i] += amp * env * Math.sin(omega * i);
+      }
+      continue;
+    }
+    // Same bend the two-pole used: up to `cents` over `seconds`, then hold.
+    const rise = Math.LN2 * glide.cents / (1200 * glide.seconds);
+    const held = omega * 2 ** (glide.cents / 1200);
+    let phase = 0;
     for (let i = 1; i < length; i++) {
+      const t = i / sampleRate;
+      phase += t < glide.seconds ? omega * Math.exp(rise * t) : held;
       env *= radius;
-      out[i] += amp * env * Math.sin(omega * i);
+      out[i] += amp * env * Math.sin(phase);
     }
   }
   return out;

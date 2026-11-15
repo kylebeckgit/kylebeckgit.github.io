@@ -97,6 +97,34 @@ test('an exported file imports back to the preview decays', () => {
   assert.equal(legacy[1].decay, 2.25);
 });
 
+test('a gong glide bends the low partials', () => {
+  const sampleRate = 48000;
+  const options = { fundamental: 220, sampleRate, seconds: 1.6, matchGains: true };
+  const plain = renderPreview([{ ratio: 1, gainDb: 0, decay: 4 }], options);
+  const bent = renderPreview([{ ratio: 1, gainDb: 0, decay: 4 }], {
+    ...options,
+    glide: { cents: 35, seconds: 0.45, maxRatio: 6 },
+  });
+  function rate(samples) {
+    const start = Math.floor(0.6 * sampleRate);
+    const end = Math.floor(1.5 * sampleRate);
+    let count = 0;
+    for (let i = start + 1; i < end; i++) {
+      if (samples[i - 1] <= 0 && samples[i] > 0) count += 1;
+    }
+    return count;
+  }
+  const cents = 1200 * Math.log2(rate(bent) / rate(plain));
+  assert.ok(Math.abs(cents - 35) < 8, `glide landed at ${cents.toFixed(1)} cents`);
+  const high = renderPreview([{ ratio: 8, gainDb: 0, decay: 4 }], {
+    ...options,
+    glide: { cents: 35, seconds: 0.45, maxRatio: 6 },
+  });
+  const highPlain = renderPreview([{ ratio: 8, gainDb: 0, decay: 4 }], options);
+  const highCents = 1200 * Math.log2(rate(high) / rate(highPlain));
+  assert.ok(Math.abs(highCents) < 8, `a partial above the glide limit moved ${highCents.toFixed(1)} cents`);
+});
+
 test('a resting position does not duck the fundamental', () => {
   assert.equal(strikeWeight(0, 0.02), 1);
   assert.equal(strikeWeight(7, 0.02), 1);
