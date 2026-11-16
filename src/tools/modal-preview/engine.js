@@ -465,6 +465,48 @@ export function exportFileName(description, knob) {
   return `${slug || 'modal-profile'}_decay${knob}.csv`;
 }
 
+// Zebra 3 measurement with the fundamental at A4 (440 Hz). Rows above
+// about 3 kHz play hotter and longer. The export subtracts the dB from
+// GainDB and divides T60 by the factor. Piecewise-linear in log frequency.
+// Below 3 kHz the correction is zero. The 5.8 kHz value holds up to the
+// 6 kHz cap.
+export const ZEBRA_HIGH_ROW_BIAS = [
+  { hz: 3000, db: 0, t60: 1 },
+  { hz: 3500, db: 1.3, t60: 1.04 },
+  { hz: 4500, db: 2.0, t60: 1.06 },
+  { hz: 5300, db: 2.5, t60: 1.09 },
+  { hz: 5800, db: 2.8, t60: 1.10 },
+];
+
+export function zebraHighRowBias(hz) {
+  const table = ZEBRA_HIGH_ROW_BIAS;
+  if (!(hz > 0) || hz <= table[0].hz) return { db: 0, t60: 1 };
+  const last = table[table.length - 1];
+  if (hz >= last.hz) return { db: last.db, t60: last.t60 };
+  const x = Math.log(hz);
+  for (let i = 1; i < table.length; i++) {
+    const left = table[i - 1];
+    const right = table[i];
+    if (hz > right.hz) continue;
+    const span = Math.log(right.hz) - Math.log(left.hz);
+    const t = span > 0 ? (x - Math.log(left.hz)) / span : 0;
+    return {
+      db: left.db + (right.db - left.db) * t,
+      t60: left.t60 + (right.t60 - left.t60) * t,
+    };
+  }
+  return { db: last.db, t60: last.t60 };
+}
+
+function compensateForZebra(partial) {
+  const bias = zebraHighRowBias(partial.ratio * A4_HZ);
+  return {
+    ...partial,
+    gainDb: partial.gainDb - bias.db,
+    decay: partial.decay / bias.t60,
+  };
+}
+
 export function zebraHint(knob) {
   return `In Zebra, set Decay to ${knob}, Position 0, other modal knobs at 0. Rows stop at 6 kHz when the fundamental is A4.`;
 }
@@ -478,7 +520,7 @@ function decayCell(unit, longest) {
 }
 
 export function zebraExport(partials, options = {}) {
-  const audible = audiblePartials(partials, options);
+  const audible = audiblePartials(partials, options).map(compensateForZebra);
   const tmax = audible.reduce((max, partial) => Math.max(max, partial.decay), 0);
   const knob = zebraDecayKnob(tmax);
   let longest = 0;
