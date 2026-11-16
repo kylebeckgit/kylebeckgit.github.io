@@ -145,7 +145,7 @@ function chordDistance(point, a, b) {
   return Math.hypot(point.x - (a.x + t * dx), point.y - (a.y + t * dy));
 }
 
-test('a click on the bowed decay curve hits that partial', () => {
+test('a click near the midpoint of a sagging tail hits that partial', () => {
   const list = [];
   for (let i = 0; i < 16; i++) {
     const harm = i + 1;
@@ -156,17 +156,10 @@ test('a click on the bowed decay curve hits that partial', () => {
   const tris = layoutTriangles(slices, camera, 800, 520, 0);
   for (const index of [0, 2]) {
     const curve = tris[index].curve;
-    let sag = curve[0];
-    let gap = 0;
-    for (const point of curve) {
-      const distance = chordDistance(point, tris[index].crest, tris[index].back);
-      if (distance > gap) {
-        gap = distance;
-        sag = point;
-      }
-    }
-    assert.ok(gap > 14, `partial ${index} sags ${gap.toFixed(1)}px off the chord`);
-    assert.equal(hitPartial(slices, camera, 800, 520, sag.x, sag.y), index);
+    const mid = curve[Math.floor(curve.length / 2)];
+    const gap = chordDistance(mid, tris[index].crest, tris[index].back);
+    assert.ok(gap > 14, `partial ${index} midpoint is ${gap.toFixed(1)}px off the straight chord`);
+    assert.equal(hitPartial(slices, camera, 800, 520, mid.x, mid.y), index);
   }
 });
 
