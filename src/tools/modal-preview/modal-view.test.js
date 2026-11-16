@@ -136,6 +136,33 @@ test('the triangles stay inside the canvas at the resting angle and a full turn'
   }
 });
 
+function chordDistance(point, a, b) {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const len = dx * dx + dy * dy;
+  if (len < 1e-6) return Math.hypot(point.x - a.x, point.y - a.y);
+  const t = Math.max(0, Math.min(1, ((point.x - a.x) * dx + (point.y - a.y) * dy) / len));
+  return Math.hypot(point.x - (a.x + t * dx), point.y - (a.y + t * dy));
+}
+
+test('a click near the midpoint of a sagging tail hits that partial', () => {
+  const list = [];
+  for (let i = 0; i < 16; i++) {
+    const harm = i + 1;
+    list.push({ ratio: harm, gainDb: -20 * Math.log10(harm), decay: 8.6 / harm });
+  }
+  const slices = spaceByLog(list.map((partial) => sliceFromPartial(partial)));
+  const camera = defaultCamera();
+  const tris = layoutTriangles(slices, camera, 800, 520, 0);
+  for (const index of [0, 2]) {
+    const curve = tris[index].curve;
+    const mid = curve[Math.floor(curve.length / 2)];
+    const gap = chordDistance(mid, tris[index].crest, tris[index].back);
+    assert.ok(gap > 14, `partial ${index} midpoint is ${gap.toFixed(1)}px off the straight chord`);
+    assert.equal(hitPartial(slices, camera, 800, 520, mid.x, mid.y), index);
+  }
+});
+
 test('a click on the cropped top of a right-hand post hits that post', () => {
   const list = [];
   for (let i = 0; i < 16; i++) {

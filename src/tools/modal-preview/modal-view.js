@@ -392,7 +392,7 @@ export function hitPartial(partials, camera, width, height, x, y, detune = 0, fi
     const tri = item.tri;
     const distance = Math.min(
       distanceToSegment(x, y, tri.foot.x, tri.foot.y, tri.crest.x, tri.crest.y),
-      distanceToSegment(x, y, tri.crest.x, tri.crest.y, tri.back.x, tri.back.y),
+      distanceToPolyline(x, y, tri.curve),
       distanceToSegment(x, y, tri.foot.x, tri.foot.y, tri.back.x, tri.back.y),
     );
     if (distance < score) {
@@ -806,6 +806,16 @@ function line(ctx, a, b) {
 
 function clamp(value, lo, hi) {
   return Math.min(hi, Math.max(lo, value));
+}
+
+function distanceToPolyline(px, py, points) {
+  if (!points || points.length < 2) return Infinity;
+  let best = Infinity;
+  for (let i = 1; i < points.length; i++) {
+    const distance = distanceToSegment(px, py, points[i - 1].x, points[i - 1].y, points[i].x, points[i].y);
+    if (distance < best) best = distance;
+  }
+  return best;
 }
 
 function distanceToSegment(px, py, x0, y0, x1, y1) {
