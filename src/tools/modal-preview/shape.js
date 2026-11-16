@@ -35,7 +35,7 @@ export function shapePartials(partials, shape = {}) {
     return {
       ratio,
       gainDb,
-      decay: clamp(partial.decay * decayGain * damp, 0.02, 60),
+      decay: clamp(partial.decay * decayGain * damp, 0.005, 60),
       sourceIndex,
     };
   });

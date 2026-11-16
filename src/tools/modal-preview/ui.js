@@ -1,10 +1,9 @@
-import { PRESETS, NOTE_BUTTONS, buildPartials, previewPartials, toCsv, fromCsv, noteFrequency, defaultControls, sanitizeControls, alignReference } from './engine.js';
+import { A4_HZ, PRESETS, NOTE_BUTTONS, ZEBRA_PARTIAL_LIMIT_HZ, buildPartials, previewPartials, zebraExport, audiblePartials, fromCsv, noteFrequency, defaultControls, sanitizeControls, alignReference } from './engine.js';
 import { analyzeSamples, decodeRecording, resampleMono, parseRoot, frequencyToNote } from './analyze.js';
-import { renderPreview, scaleToPeak } from './resonator.js';
+import { renderPreview, scaleToPeak, strikeWeight } from './resonator.js';
 import { aimSlices, createFitMotion, createSliceMotion, defaultCamera, hitPartial, MORPH_MS, paintModalView, sampleSlices, slicesMoving } from './modal-view.js';
 import { shapePartials } from './shape.js';
 import { createRollHistory, defaultLocks, pushRoll, redoRoll, rollSound, undoRoll } from './randomize.js';
-import { fileSlug } from './recipes.js';
 import { mountStudio } from './studio.js';
 
 export function mount(root) {
@@ -140,7 +139,32 @@ export function mount(root) {
     const identity = shape.absorb === 0 && shape.disperse === 0 && shape.decay === 0
       && shape.decayKf === 0 && shape.normalize === 0 && shape.tune === 0
       && shape.density === state.profilePartials.length;
-    state.partials = identity ? state.profilePartials : shapePartials(state.profilePartials, shape);
+    let next;
+    if (identity) {
+      const profile = state.profilePartials;
+      const audible = audiblePartials(profile.map((partial, index) => ({ ...partial, sourceIndex: index })), heardOptions());
+      const untouched = audible.length === profile.length && audible.every((partial, index) => {
+        const source = profile[index];
+        return partial.ratio === source.ratio && partial.gainDb === source.gainDb && partial.decay === source.decay;
+      });
+      // Share the profile while the shape is at rest so a table edit writes
+      // the same objects the next publish reads.
+      next = untouched ? profile : audible;
+    } else {
+      next = audiblePartials(shapePartials(state.profilePartials, shape), heardOptions());
+    }
+    state.partials = next;
+    const first = !state.slicesReady;
+    state.slicesReady = true;
+    aimSlices(state.slices, state.partials, performance.now(), first ? 0 : duration);
+    if (!first && duration > 0) kickView();
+  }
+
+  function followProfile(duration = MORPH_MS) {
+    if (state.profilePartials && state.partials !== state.profilePartials) {
+      publishShape(duration);
+      return;
+    }
     const first = !state.slicesReady;
     state.slicesReady = true;
     aimSlices(state.slices, state.partials, performance.now(), first ? 0 : duration);
@@ -174,7 +198,7 @@ export function mount(root) {
       state.profilePartials = capAudible(copy);
       publishShape();
     } else {
-      state.partials = copy;
+      state.partials = audiblePartials(copy, heardOptions());
     }
     if (custom != null) state.custom = custom;
   }
@@ -221,7 +245,16 @@ export function mount(root) {
     pushModes();
   }
 
+  function heardOptions() {
+    return {
+      fundamental: state.hearFundamental || noteFrequency(state.note),
+      sampleRate: state.audio?.sampleRate || 48000,
+    };
+  }
+
   function render() {
+    const hint = root.querySelector('[data-export-hint]');
+    if (hint) hint.textContent = zebraExport(state.partials, heardOptions()).hint;
     draw(canvas, state.partials, state);
     tableBody.innerHTML = state.partials.map((partial, index) => `
       <tr class="${index === state.selectedPartial ? 'is-selected' : ''}">
@@ -290,7 +323,7 @@ export function mount(root) {
     if (!source) return;
     source[field] = value;
     state.custom = true;
-    if (state.profilePartials && state.partials !== state.profilePartials) publishShape();
+    followProfile();
     render();
     pushModes();
   });
@@ -447,12 +480,6 @@ export function mount(root) {
     });
   }
   const materialSelect = root.querySelector('[data-roll-material]');
-  const wildnessField = root.querySelector('[data-wildness-field]');
-  const syncWildness = () => {
-    if (wildnessField) wildnessField.hidden = materialSelect?.value !== 'wild';
-  };
-  materialSelect?.addEventListener('change', syncWildness);
-  syncWildness();
   const amountSlider = root.querySelector('[data-roll-amount]');
   amountSlider?.addEventListener('input', () => {
     const out = root.querySelector('[data-roll-amount-out]');
@@ -474,7 +501,7 @@ export function mount(root) {
     disperse: Number(root.querySelector('[data-disperse]')?.value || 0) / 100,
     normalize: Number(root.querySelector('[data-normalize]')?.value || 0) / 100,
   });
-  const writeRoll = (knobs, text) => {
+  const writeRoll = (knobs, text, profile) => {
     const setNum = (selector, readout, value) => {
       const input = root.querySelector(selector);
       const out = root.querySelector(readout);
@@ -494,6 +521,13 @@ export function mount(root) {
     if (positionOut) positionOut.textContent = knobs.position.toFixed(2);
     const density = root.querySelector('[data-density]');
     if (density) density.value = String(knobs.density);
+    if (profile?.length) {
+      state.profilePartials = profile.map((partial) => ({
+        ratio: partial.ratio,
+        gainDb: partial.gainDb,
+        decay: partial.decay,
+      }));
+    }
     state.detune = knobs.detune;
     state.position = knobs.position;
     const ask = root.querySelector('[data-ask]');
@@ -512,6 +546,11 @@ export function mount(root) {
   const snapshotRoll = () => ({
     knobs: readRollKnobs(),
     text: root.querySelector('[data-ask]')?.value || '',
+    profile: (state.profilePartials || []).map((partial) => ({
+      ratio: partial.ratio,
+      gainDb: partial.gainDb,
+      decay: partial.decay,
+    })),
   });
   root.querySelector('[data-roll]')?.addEventListener('click', () => {
     const current = snapshotRoll();
@@ -522,19 +561,19 @@ export function mount(root) {
       current: current.knobs,
       material: materialSelect?.value || 'any',
       amount: Number(amountSlider?.value || 1),
-      wildness: Number(wildnessSlider?.value || 0.7),
+      wildness: Number(wildnessSlider?.value ?? 0.3),
       locks: rollLocks,
       seed: (Date.now() ^ rollSeed) >>> 0,
     });
-    writeRoll(rolled.knobs, rolled.description);
+    writeRoll(rolled.knobs, rolled.description, rolled.profile);
   });
   root.querySelector('[data-roll-back]')?.addEventListener('click', () => {
     const restored = undoRoll(rollHistory, snapshotRoll());
-    if (restored) writeRoll(restored.knobs, restored.text);
+    if (restored) writeRoll(restored.knobs, restored.text, restored.profile);
   });
   root.querySelector('[data-roll-forward]')?.addEventListener('click', () => {
     const restored = redoRoll(rollHistory, snapshotRoll());
-    if (restored) writeRoll(restored.knobs, restored.text);
+    if (restored) writeRoll(restored.knobs, restored.text, restored.profile);
   });
   tableBody.addEventListener('focusin', (event) => {
     if (canvas.dataset.view !== 'zebra') return;
@@ -547,13 +586,19 @@ export function mount(root) {
   });
 
   root.querySelector('[data-export]').addEventListener('click', () => {
-    const blob = new Blob([toCsv(state.partials)], { type: 'text/csv' });
+    const description = root.querySelector('[data-ask]')?.value
+      || root.querySelector('[data-roll-read]')?.textContent
+      || state.profileName;
+    const exported = zebraExport(state.partials, { ...heardOptions(), description });
+    const blob = new Blob([exported.csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = state.profileName ? fileSlug(state.profileName) : 'zebra3_ai_profile.csv';
+    link.download = exported.filename;
     link.click();
     URL.revokeObjectURL(url);
+    const hint = root.querySelector('[data-export-hint]');
+    if (hint) hint.textContent = exported.hint;
   });
 
   root.querySelector('[data-import]').addEventListener('change', async (event) => {
@@ -561,7 +606,7 @@ export function mount(root) {
     event.target.value = '';
     if (!file) return;
     try {
-      const partials = fromCsv(await file.text());
+      const partials = fromCsv(await file.text(), { filename: file.name });
       pushHistory();
       adopt(partials, true);
       render();
@@ -735,7 +780,7 @@ export function mount(root) {
         pushHistory();
         const list = state.profilePartials || state.partials;
         for (const partial of list) partial.ratio = Math.min(64, Math.max(0.02, partial.ratio / factor));
-        if (state.profilePartials && state.partials !== state.profilePartials) publishShape();
+        followProfile();
         state.custom = true;
         render();
         pushModes();
@@ -758,7 +803,7 @@ export function mount(root) {
     else {
       pushHistory();
       for (const partial of (state.profilePartials || state.partials)) partial.ratio /= ratio;
-      if (state.profilePartials && state.partials !== state.profilePartials) publishShape();
+      followProfile();
       state.custom = true;
       render();
       pushModes();
@@ -978,11 +1023,10 @@ function setPlayError(root, message) {
 }
 
 function capAudible(partials) {
-  // Drop partials above ratio 48 instead of folding them under a neighbor.
-  // Folding made the list unsorted and pulled real string and bar modes off
-  // their textbook ratios. What remains is still positive, sorted, and audible
-  // at A4.
-  const limit = 48;
+  // Drop partials Zebra rings past about 12 kHz at A4, instead of folding
+  // them under a neighbor. Folding made the list unsorted and pulled real
+  // modes off their ratios.
+  const limit = ZEBRA_PARTIAL_LIMIT_HZ / A4_HZ;
   const kept = partials
     .filter((partial) => partial.ratio > 0 && partial.ratio <= limit)
     .sort((a, b) => a.ratio - b.ratio);
@@ -1007,7 +1051,8 @@ function playHeard(state, recipe) {
   const zebra = state.canvas?.dataset.view === 'zebra';
   const seconds = zebra ? 4 : (exciter === 'bow' ? 1.1 : 1.6);
   const fundamental = state.hearFundamental || noteFrequency(state.note);
-  const samples = renderPreview(state.partials, {
+  const partials = audiblePartials(state.partials, { fundamental, sampleRate: ctx.sampleRate });
+  const samples = renderPreview(partials, {
     fundamental,
     velocity: state.velocity,
     position: state.position,
@@ -1149,7 +1194,7 @@ async function ensureAudio(state, resume = true) {
   if (!state.workletReady && !state.workletFailed && !state.workletLoading) {
     state.workletLoading = (async () => {
       try {
-        await state.audio.audioWorklet.addModule('/modal-resonator.worklet.js');
+        await state.audio.audioWorklet.addModule('/modal-preview-resonator.worklet.js');
         state.node = new AudioWorkletNode(state.audio, 'modal-bank', { numberOfOutputs: 1, outputChannelCount: [1] });
         watchWorklet(state);
         state.node.connect(state.audio.destination);
@@ -1224,7 +1269,7 @@ function playFallback(state) {
   const master = audio.createGain();
   let ampSum = 0;
   const gains = state.partials.map((partial, index) => {
-    const weight = Math.abs(Math.sin(Math.PI * (index + 1) * Math.min(0.98, Math.max(0.02, state.position))));
+    const weight = strikeWeight(index, state.position);
     const amp = 10 ** (partial.gainDb / 20) * weight * state.velocity;
     ampSum += amp;
     return amp;
