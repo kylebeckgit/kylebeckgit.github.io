@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { performance } from 'node:perf_hooks';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { deflateSync } from 'node:zlib';
 import { aimSlices, clampCamera, createFitMotion, createSliceMotion, defaultCamera, detuneT, followFit, frameMotion, hitPartial, layoutTriangles, paintModalView, PLANE, sampleSlices, sliceFromPartial, spaceByLog, worldOf } from './modal-view.js';
 import { shapePartials } from './shape.js';
+import { rollSound } from './randomize.js';
 
 function stubContext() {
   const ctx = {
@@ -229,4 +232,197 @@ test('density keeps the outline while absorb only nudges the highs', () => {
 
   const spread = shapePartials(list, { disperse: 1, density: 16 });
   assert.ok(spread[15].ratio > list[15].ratio * 1.2);
+});
+
+function stringProfile(count = 16) {
+  const rows = [];
+  for (let n = 1; n <= count; n++) {
+    rows.push({ ratio: n, gainDb: -20 * Math.log10(n), decay: 1 / n });
+  }
+  return rows;
+}
+
+function assertOwnDecayCurves(partials, label) {
+  const slices = spaceByLog(partials.map((partial) => sliceFromPartial(partial)));
+  const tris = layoutTriangles(slices, defaultCamera(), 800, 520, 0);
+  assert.equal(tris.length, slices.length, label);
+  const longest = Math.max(...slices.map((slice) => slice.seconds));
+  const rows = slices.map((slice, index) => ({ slice, tri: tris[index], index }));
+  const qualifying = rows.filter((row) => row.slice.seconds >= longest * 0.25 - 1e-9);
+  assert.ok(qualifying.length >= 2, `${label} has ${qualifying.length} long partials`);
+  const starts = [];
+  const scales = [];
+  for (const row of qualifying) {
+    const curve = row.tri.worldCurve;
+    assert.ok(curve && curve.length >= 2, `${label} partial ${row.index} has no curve`);
+    const top = worldOf(row.slice);
+    assert.ok(Math.abs(curve[0].x - top.x) < 1e-6, `${label} partial ${row.index} leaves another bar`);
+    assert.ok(Math.abs(curve[0].y - top.y) < 1e-6, `${label} partial ${row.index} misses the bar top`);
+    assert.ok(Math.abs(curve[0].z) < 1e-6, `${label} partial ${row.index} starts behind the bar`);
+    for (const point of curve) {
+      assert.ok(Math.abs(point.x - top.x) < 1e-6, `${label} partial ${row.index} curve drifts off its bar`);
+    }
+    assert.ok(curve[curve.length - 1].y < curve[0].y * 0.2, `${label} partial ${row.index} does not fall`);
+    const zLen = curve[curve.length - 1].z - curve[0].z;
+    scales.push(zLen / row.slice.seconds);
+    starts.push(curve[0].x);
+  }
+  const distinct = new Set(starts.map((x) => x.toFixed(4)));
+  assert.equal(distinct.size, qualifying.length, `${label} curves share a bar`);
+  assert.ok(distinct.size > 1, `${label} curves are only drawn from the front bar`);
+  for (const scale of scales) {
+    const error = Math.abs(scale - scales[0]) / scales[0];
+    assert.ok(error <= 0.1, `${label} decay-axis scale ${scale} vs ${scales[0]}`);
+  }
+  for (const row of rows) {
+    const curve = row.tri.worldCurve;
+    assert.ok(curve && curve.length >= 2, `${label} partial ${row.index} has no curve`);
+    const zLen = curve[curve.length - 1].z - curve[0].z;
+    assert.ok(zLen + 1e-9 >= PLANE.decayReach * 0.1, `${label} partial ${row.index} is a dot`);
+    const screen = Math.hypot(row.tri.back.x - row.tri.curve[0].x, row.tri.back.y - row.tri.curve[0].y);
+    assert.ok(screen >= 8, `${label} partial ${row.index} screen length ${screen.toFixed(1)}`);
+  }
+}
+
+function pngChunk(type, data) {
+  const body = Buffer.concat([Buffer.from(type), data]);
+  let crc = ~0;
+  for (const byte of body) {
+    crc ^= byte;
+    for (let bit = 0; bit < 8; bit++) crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
+  }
+  const head = Buffer.alloc(4);
+  head.writeUInt32BE(data.length);
+  const tail = Buffer.alloc(4);
+  tail.writeUInt32BE(~crc >>> 0);
+  return Buffer.concat([head, body, tail]);
+}
+
+function encodePng(width, height, rgba) {
+  const raw = Buffer.alloc((width * 4 + 1) * height);
+  for (let y = 0; y < height; y++) {
+    rgba.copy(raw, y * (width * 4 + 1) + 1, y * width * 4, (y + 1) * width * 4);
+  }
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr[8] = 8;
+  ihdr[9] = 6;
+  return Buffer.concat([
+    Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+    pngChunk('IHDR', ihdr),
+    pngChunk('IDAT', deflateSync(raw)),
+    pngChunk('IEND', Buffer.alloc(0)),
+  ]);
+}
+
+function shotContext(width, height) {
+  const data = Buffer.alloc(width * height * 4);
+  const state = { strokeStyle: '#000000', fillStyle: '#000000', lineWidth: 1, globalAlpha: 1, filter: 'none', path: [] };
+  const stack = [];
+  const parse = (hex) => {
+    const match = /^#([0-9a-f]{6})$/i.exec(String(hex || ''));
+    if (!match) return [28, 28, 28];
+    const value = parseInt(match[1], 16);
+    return [(value >> 16) & 255, (value >> 8) & 255, value & 255];
+  };
+  const blend = (x, y, rgb, alpha) => {
+    const ix = Math.round(x);
+    const iy = Math.round(y);
+    if (ix < 0 || iy < 0 || ix >= width || iy >= height) return;
+    const offset = (iy * width + ix) * 4;
+    const a = Math.max(0, Math.min(1, alpha));
+    data[offset] = data[offset] * (1 - a) + rgb[0] * a;
+    data[offset + 1] = data[offset + 1] * (1 - a) + rgb[1] * a;
+    data[offset + 2] = data[offset + 2] * (1 - a) + rgb[2] * a;
+    data[offset + 3] = 255;
+  };
+  const strokeLine = (a, b) => {
+    if (state.filter && state.filter !== 'none') return;
+    const rgb = parse(state.strokeStyle);
+    const radius = Math.max(0.6, state.lineWidth / 2);
+    const steps = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y)));
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      const x = a.x + (b.x - a.x) * t;
+      const y = a.y + (b.y - a.y) * t;
+      const r2 = radius * radius;
+      for (let yy = Math.floor(y - radius); yy <= Math.ceil(y + radius); yy++) {
+        for (let xx = Math.floor(x - radius); xx <= Math.ceil(x + radius); xx++) {
+          if ((xx - x) ** 2 + (yy - y) ** 2 <= r2) blend(xx, yy, rgb, state.globalAlpha);
+        }
+      }
+    }
+  };
+  return {
+    data,
+    beginPath() { state.path = []; },
+    moveTo(x, y) { state.path.push({ x, y, move: true }); },
+    lineTo(x, y) { state.path.push({ x, y }); },
+    closePath() {},
+    stroke() {
+      let prev = null;
+      for (const point of state.path) {
+        if (point.move || !prev) prev = point;
+        else strokeLine(prev, point);
+        if (!point.move) prev = point;
+      }
+    },
+    fill() {},
+    fillRect(x, y, w, h) {
+      if (state.filter && state.filter !== 'none') return;
+      const rgb = parse(state.fillStyle);
+      const x0 = Math.max(0, Math.floor(x));
+      const y0 = Math.max(0, Math.floor(y));
+      const x1 = Math.min(width, Math.ceil(x + w));
+      const y1 = Math.min(height, Math.ceil(y + h));
+      for (let yy = y0; yy < y1; yy++) {
+        for (let xx = x0; xx < x1; xx++) blend(xx, yy, rgb, state.globalAlpha);
+      }
+    },
+    clearRect() {},
+    save() { stack.push({ ...state, path: state.path }); },
+    restore() { Object.assign(state, stack.pop() || {}); },
+    set strokeStyle(value) { state.strokeStyle = value; },
+    get strokeStyle() { return state.strokeStyle; },
+    set fillStyle(value) { state.fillStyle = value; },
+    get fillStyle() { return state.fillStyle; },
+    set lineWidth(value) { state.lineWidth = value; },
+    get lineWidth() { return state.lineWidth; },
+    set globalAlpha(value) { state.globalAlpha = value; },
+    get globalAlpha() { return state.globalAlpha; },
+    set filter(value) { state.filter = value; },
+    get filter() { return state.filter; },
+    set lineCap(value) {},
+    set lineJoin(value) {},
+    set globalCompositeOperation(value) {},
+  };
+}
+
+test('each long partial has its own decay curve', () => {
+  const rolls = [
+    ['bell', 2],
+    ['bell', 9],
+    ['glass', 5],
+    ['wood', 36],
+    ['metal', 5],
+    ['wild', 1],
+    ['wild', 7],
+  ];
+  const profiles = [['string', stringProfile()]];
+  for (const [material, seed] of rolls) {
+    const rolled = rollSound({ material, wildness: material === 'wild' ? 1 : 0.4, amount: 1, seed });
+    profiles.push([`${material}-s${seed}`, rolled.partials]);
+  }
+  const dir = process.env.MODAL_CURVE_SHOTS || '/tmp/modal-curve-shots';
+  mkdirSync(dir, { recursive: true });
+  const colors = { accent: '#d4421c', bg: '#f4efe6', fg: '#241f1a', muted: '#6d675f' };
+  for (const [label, partials] of profiles) {
+    assertOwnDecayCurves(partials, label);
+    const width = 800;
+    const height = 520;
+    const ctx = shotContext(width, height);
+    paintModalView(ctx, partials, { width, height, style: 'glow', colors, camera: defaultCamera() });
+    writeFileSync(`${dir}/${label}.png`, encodePng(width, height, ctx.data));
+  }
 });
