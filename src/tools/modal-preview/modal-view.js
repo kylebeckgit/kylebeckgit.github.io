@@ -4,17 +4,14 @@
 //   y  level, screen-vertical, on a compressed dB scale that keeps the first crests tall
 //   z  decay time, rising up-right. Long decays leave the comb.
 //
-// Each slice is three lines. A vertical front in the ink color. An accent
-// line beside that bar: the left-hand bars keep a bright accent in the mesh,
-// and the right-hand accent sits on its bar so the pair is one stroke. Only
-// the two longest decays leave the comb. The fundamental follows the traced
-// Zebra centerline: a shallow sag along the crests, then a long rise that
-// bows and ends just past the rail. The octave runs under it for about 40%
-// of that arc. On the floor, a front rail and a close back rail run the full
-// width. Under the first bars, short diagonals cross in both directions
-// and blur into a weave. The two tails are accent blended toward the page
-// cream, with a wide soft glow. Stroke width tracks the view. A blurred
-// pass sits under the sharp strokes.
+// Each slice is a vertical front in the ink color, plus its own decay curve.
+// The curve starts at the top of that bar and runs back on the decay axis.
+// Its length matches that row's decay. Its level falls exponentially, so
+// several long partials show several long curves that fan and overlap.
+// A short decay stays a short curve. On the floor, a front rail and a close
+// back rail run the full width, with crossing ties under the bars. Curves
+// are accent blended toward the page cream, with a wide soft glow. Stroke
+// width tracks the view. A blurred pass sits under the sharp strokes.
 // Yaw turns frequency and decay around the vertical, so the fronts stay
 // vertical. Pitch only changes how steeply decay rises.
 //
@@ -71,10 +68,12 @@ export const PLANE = {
   span: 8.4,
   height: 2.15,
   depth: 3.15,
-  // Below this fraction of the longest decay the accent stays a vertical
-  // line beside the bar. The two longest (string: fundamental and octave)
-  // are the only tails.
-  airRel: 0.46,
+  // World length of the decay axis for the longest partial. Every other
+  // curve is this times its decay / the longest decay.
+  decayReach: 9.2,
+  // Exponential drop across a curve, in nepers. The tip is about a tenth
+  // of the bar, so the fall reads and the line does not collapse to a dot.
+  decayFall: 2.4,
   // Accent sits just beside the ink bar. Close enough to glow into it,
   // far enough that the bar stays the ink colour.
   accentZ: 0.05,
@@ -255,24 +254,14 @@ export function measureFit(slices, camera, width, height, detune = 0) {
   let maxY = -Infinity;
   const list = slices?.length ? slices : [sliceFromPartial({ ratio: 1, gainDb: 0, decay: 1 })];
   const clock = longestSeconds(list);
-  const air = airFrame(list, clock, detune);
-  let bend = null;
   for (const slice of list) {
     if (!slice || (slice.alpha < 0.04 && slice.height < 0.02 && slice.depth < 0.02)) continue;
     const world = worldOf(slice, detune);
-    const shape = drawShape(Math.max(0.05, Number(slice.seconds) || 0.2), clock, slice, air);
-    const tail = tailWorld(slice, world, clock, air);
-    if (shape.air && air.rankOf(slice) === 0) {
-      for (const sample of tail) {
-        const point = screenOf(view, sample.x, sample.y, sample.z);
-        if (!bend || point.y > bend.y) bend = point;
-      }
-    }
+    const tail = decayCurveWorld(slice, detune, clock);
     const samples = [
       { x: world.x, y: 0, z: 0 },
       { x: world.x, y: world.y, z: 0 },
-      { x: world.x, y: world.y, z: strandDepthZ(shape.rel) },
-      floorBack(world, landingDepth(shape)),
+      floorBack(world, landingDepth()),
       ...tail,
     ];
     for (const sample of samples) {
@@ -374,8 +363,7 @@ export function paintModalView(ctx, partials, options = {}) {
   drawSlices(ctx, slices, detune, place, camera, look, palette, clock, style, selected, false, weight, 1, 1, 0.48, 0.55);
   ctx.globalAlpha = 1;
   ctx.globalCompositeOperation = 'source-over';
-  const air = airFrame(slices, clock, detune);
-  return slices.map((slice) => projectSlice(slice, detune, place, camera, clock, air).crest);
+  return slices.map((slice) => projectSlice(slice, detune, place, camera, clock).crest);
 }
 
 export function hitPartial(partials, camera, width, height, x, y, detune = 0, fit = null) {
@@ -386,19 +374,18 @@ export function hitPartial(partials, camera, width, height, x, y, detune = 0, fi
   const used = fit || measureFit(slices, view, width, height, detune);
   const place = placement(used, width, height);
   const clock = longestSeconds(slices);
-  const air = airFrame(slices, clock, detune);
   const placed = [];
   for (let i = 0; i < slices.length; i++) {
     if (!slices[i] || slices[i].alpha < 0.2 || slices[i].height < 0.02) continue;
     placed.push({
       index: i,
       slice: slices[i],
-      tri: projectSlice(slices[i], detune, place, view, clock, air),
-      shape: drawShape(Math.max(0.05, Number(slices[i].seconds) || 0.2), clock, slices[i], air),
+      tri: projectSlice(slices[i], detune, place, view, clock),
+      shape: drawShape(Math.max(0.05, Number(slices[i].seconds) || 0.2), clock),
     });
   }
   placed.sort((a, b) => worldOf(a.slice, detune).x - worldOf(b.slice, detune).x);
-  applyVisibleCrests(placed, air);
+  applyVisibleCrests(placed);
   let best = -1;
   let score = 14;
   for (const item of placed) {
@@ -483,51 +470,34 @@ function longestSeconds(slices) {
   return max;
 }
 
-// Only the two longest decays leave the comb. A relative cutoff let a flat
-// Decay KF turn the next several partials into a fan of fixed-angle strands.
-// longRung marks the left-hand floor rungs that cross the hatch.
-function drawShape(seconds, maxSeconds, slice, air) {
-  const rel = Math.max(0.02, Math.max(0.02, seconds) / Math.max(0.05, maxSeconds));
-  if (slice && air?.isAir?.(slice)) {
-    return { air: true, tight: false, longRung: true, rel };
-  }
-  return { air: false, tight: true, longRung: rel >= 0.14, rel };
+// One decay curve per partial. z is proportional to that row's decay.
+// Level falls exponentially in y, from the bar top toward the floor.
+// A stub floor keeps short decays visible. It sits under a quarter of the
+// longest decay, so curves at or above that quarter stay proportional.
+function drawShape(seconds, maxSeconds) {
+  const rel = Math.max(0.02, seconds) / Math.max(0.05, maxSeconds);
+  return { rel };
 }
 
-// The longest decay anchors the tail. The next longest is the octave, and
-// it shares that anchor so it cannot splay off its own bar.
-function airFrame(slices, clock, detune) {
-  const ranked = [];
-  for (const slice of slices || []) {
-    if (!slice || slice.alpha < 0.08) continue;
-    ranked.push(slice);
+export function decayCurveWorld(slice, detune = 0, maxSeconds = 0) {
+  const world = worldOf(slice, detune);
+  const seconds = Math.max(0.05, Number(slice?.seconds) || 0.2);
+  const longest = Math.max(seconds, Number(maxSeconds) || 0);
+  const rel = seconds / longest;
+  const reach = PLANE.decayReach;
+  const zLen = Math.max(reach * rel, reach * 0.1);
+  const fall = PLANE.decayFall;
+  const steps = Math.max(6, Math.round(6 + 16 * Math.min(1, rel)));
+  const points = [];
+  for (let i = 0; i <= steps; i++) {
+    const u = i / steps;
+    points.push({
+      x: world.x,
+      y: world.y * Math.exp(-fall * u),
+      z: zLen * u,
+    });
   }
-  ranked.sort((a, b) => (Number(b.seconds) || 0) - (Number(a.seconds) || 0));
-  const air = ranked.filter((slice) => {
-    const seconds = Math.max(0.05, Number(slice.seconds) || 0.2);
-    return seconds / Math.max(0.05, clock) >= 0.34;
-  }).slice(0, 2);
-  if (!air.length) return { anchorX: 0, anchorY: PLANE.height, rankOf: () => -1, isAir: () => false };
-  const rank = new Map(air.map((slice, index) => [slice, index]));
-  const ordered = (slices || [])
-    .filter((slice) => slice && slice.alpha >= 0.08 && slice.height >= 0.02)
-    .map((slice) => worldOf(slice, detune))
-    .sort((a, b) => a.x - b.x);
-  const span = ordered.length > 1 ? ordered[ordered.length - 1].x - ordered[0].x : PLANE.span;
-  // The curve always leaves the left end of the comb. Anchoring it on a
-  // long high partial squashes the arc into the bottom-right corner.
-  const left = ordered[0] || worldOf(air[0], detune);
-  const crest = ordered.slice(0, 5).reduce((best, point) => (point.y > best.y ? point : best), left);
-  return {
-    anchorX: left.x,
-    anchorY: crest.y,
-    rankOf: (slice) => rank.get(slice) ?? -1,
-    isAir: (slice) => rank.has(slice),
-    crests: ordered.slice(0, 5),
-    railRight: ordered.length ? ordered[ordered.length - 1].x : head.x + PLANE.span,
-    // Bars 1–6. Same cut the floor hatch uses.
-    hatchX: ordered.length ? ordered[0].x + 0.5 * span : head.x,
-  };
+  return points;
 }
 
 // On-screen floor angle at rest. The bright band, foot to foot, rises at
@@ -536,156 +506,14 @@ function airFrame(slices, clock, detune) {
 const FLOOR_SHEAR = Math.tan(37 * Math.PI / 180);
 const DEPTH_X = 0.78;
 
-function depthRise(pitch = PLANE.pitch) {
-  return 0.75 * (0.85 + (pitch - PLANE.pitch) * 1.15);
-}
-
-function fromRestScreen(x, sx, sy) {
-  const z = (sx - x) / DEPTH_X;
-  const y = (-sy) - (x * -FLOOR_SHEAR) - (z * depthRise());
-  return { x, y, z };
-}
-
-function restScreen(x, y, z) {
-  return {
-    sx: x + (z * DEPTH_X),
-    sy: -(y + (x * -FLOOR_SHEAR) + (z * depthRise())),
-  };
-}
-
-// Sag from bar 1 down to a low point near bar 5, then rise at the crop's angle.
-// A straight run along the crests read as a flat arc with the bend too far right.
-function tailSpline(x, y0, crests, railRight, steps) {
-  const guides = (crests && crests.length) ? crests : [{ x, y: y0 }];
-  const screens = guides.map((crest, index) => (
-    index === 0 ? restScreen(x, y0, 0) : restScreen(crest.x, crest.y, 0)
-  ));
-  const start = screens[0];
-  const barScreen = Math.max(0.2, (FLOOR_SHEAR * start.sx) - start.sy);
-  const drop = barScreen * 0.66;
-  // Keep the bend where bar 5 sat on an even floor, even if the left posts pack tighter.
-  const spanX = Math.max(0.4, railRight - start.sx);
-  let bendSx = start.sx + spanX * (4 / 15);
-  let bendSy = start.sy + drop;
-  const localFloor = FLOOR_SHEAR * bendSx;
-  bendSy = Math.min(bendSy, localFloor - barScreen * 0.16);
-  const points = [];
-  const sagN = Math.max(10, Math.round((steps || 24) * 0.45));
-  for (let i = 0; i <= sagN; i++) {
-    const t = i / sagN;
-    const sx = start.sx + (bendSx - start.sx) * t;
-    const sy = start.sy + (bendSy - start.sy) * Math.sin(t * Math.PI / 2);
-    points.push(fromRestScreen(x, sx, sy));
-  }
-  const riseRad = 34 * Math.PI / 180;
-  const floorSpan = Math.max(0.4, railRight - start.sx);
-  const step = floorSpan / 42;
-  let sx = bendSx;
-  let sy = bendSy;
-  const arcSteps = 10;
-  for (let i = 1; i <= arcSteps; i++) {
-    const theta = -riseRad * (i / arcSteps);
-    sx += Math.cos(theta) * step * 0.85;
-    sy += Math.sin(theta) * step * 0.85;
-    points.push(fromRestScreen(x, sx, sy));
-  }
-  const depart = { x: Math.cos(riseRad), y: -Math.sin(riseRad) };
-  const tipSx = railRight - floorSpan * 0.02;
-  let guard = 0;
-  while (sx < tipSx && guard < 48) {
-    sx += depart.x * step;
-    sy += depart.y * step;
-    points.push(fromRestScreen(x, sx, sy));
-    guard += 1;
-  }
-  return points;
-}
-
-function tailWorld(slice, world, maxSeconds, air) {
-  const seconds = Math.max(0.05, Number(slice?.seconds) || 0.2);
-  const shape = drawShape(seconds, maxSeconds || seconds, slice, air);
-  if (!shape.air) {
-    // Left accents stand just off the bar so the mesh reads accent-and-cream.
-    // Right accents share the bar's x, so no second edge appears.
-    const left = world.x <= (air?.hatchX ?? world.x);
-    const z = left ? tune().accentZLeft : tune().accentZ;
-    const top = world.y;
-    if (!left) {
-      return [
-        { x: world.x, y: top, z: 0 },
-        { x: world.x, y: top * 0.97, z },
-        { x: world.x, y: top * 0.02, z },
-      ];
-    }
-    // A shallow curve through the left block, not a second straight edge.
-    return [
-      { x: world.x, y: top, z: 0 },
-      { x: world.x, y: top * 0.68, z: z * 1.35 },
-      { x: world.x, y: top * 0.34, z: z * 0.7 },
-      { x: world.x, y: top * 0.02, z: z * 0.25 },
-    ];
-  }
-  const rank = air?.rankOf(slice) ?? 0;
-  const x = air?.anchorX ?? world.x;
-  const y0 = air?.anchorY ?? world.y;
-  const full = tailSpline(x, y0, air?.crests, air?.railRight ?? x + PLANE.span, 36);
-  if (rank === 0) return full;
-  // Leave the main trail at the bend, then run parallel to the rise, just
-  // under it. Starting a full bar below the bend buried the octave in the posts.
-  const seen = full.map((point) => restScreen(point.x, point.y, point.z));
-  let bottom = 0;
-  for (let i = 1; i < seen.length; i++) {
-    if (seen[i].sy > seen[bottom].sy) bottom = i;
-  }
-  const floorSpan = Math.max(0.4, (air?.railRight ?? x) - (air?.anchorX ?? x));
-  const stopX = seen[0].sx + floorSpan * 0.66;
-  let step = PLANE.span / 15;
-  if (air?.crests?.length > 1) step = Math.abs(air.crests[1].x - air.crests[0].x);
-  const riseRad = 34 * Math.PI / 180;
-  const bend = seen[bottom];
-  const run = Math.max(0.2, stopX - bend.sx);
-  const gap = step * Math.hypot(1, FLOOR_SHEAR) * 0.48 + (rank - 1) * step * 0.22;
-  const dirX = Math.cos(riseRad);
-  const dirY = -Math.sin(riseRad);
-  const px = Math.sin(riseRad);
-  const py = Math.cos(riseRad);
-  const samples = 16;
-  const straight = [];
-  for (let i = 0; i <= samples; i++) {
-    const t = i / samples;
-    const branch = Math.min(1, t / 0.16);
-    const along = run * t;
-    const sx = bend.sx + dirX * along + px * gap * branch;
-    const sy = bend.sy + dirY * along + py * gap * branch;
-    straight.push(fromRestScreen(x, sx, sy));
-  }
-  return straight;
-}
-
-// Decay length is depth along this post's own x, behind the front face.
-// It is not clipped to the next post in screen space. A long decay reaches
-// well past the floor band; a short one stays a stub.
-function strandDepthZ(rel) {
-  const t = clamp(Number(rel) || 0, 0, 1);
-  return PLANE.ribbonZ * (0.2 + 2.6 * t);
-}
-
-function laneStrands(placed, place, camera, detune) {
+function laneStrands(placed) {
   return placed.map((item) => {
-    const world = worldOf(item.slice, detune);
-    const depth = strandDepthZ(item.shape?.rel);
-    const origin = place(camera, world.x, world.y, 0);
-    const worldEnd = place(camera, world.x, world.y, depth);
-    const start = { x: item.tri.crest.x, y: item.tri.crest.y };
-    return {
-      start,
-      end: {
-        x: worldEnd.x + (start.x - origin.x),
-        y: worldEnd.y + (start.y - origin.y),
-      },
-      depth,
-      alpha: item.slice.alpha || 1,
-    };
+    const curve = item.tri.curve || [];
+    const world = item.tri.worldCurve || [];
+    const start = curve[0] || item.tri.crest;
+    const end = curve[curve.length - 1] || start;
+    const depth = world.length ? world[world.length - 1].z - world[0].z : 0;
+    return { start, end, depth, alpha: item.slice.alpha || 1 };
   });
 }
 
@@ -695,15 +523,14 @@ export function decayStrandSegments(slices, camera, width, height, detune = 0) {
   const fit = measureFit(spaced, view, width, height, detune);
   const place = placement(fit, width, height);
   const clock = longestSeconds(spaced);
-  const air = airFrame(spaced, clock, detune);
   const placed = spaced
     .filter((slice) => slice && slice.alpha >= 0.04 && slice.height >= 0.02)
     .map((slice) => ({
       slice,
-      tri: projectSlice(slice, detune, place, view, clock, air),
-      shape: drawShape(Math.max(0.05, Number(slice.seconds) || 0.2), clock, slice, air),
+      tri: projectSlice(slice, detune, place, view, clock),
+      shape: drawShape(Math.max(0.05, Number(slice.seconds) || 0.2), clock),
     }));
-  return laneStrands(placed, place, view, detune);
+  return laneStrands(placed);
 }
 
 function fadeLine(ctx, start, end, color, look, alpha) {
@@ -749,45 +576,21 @@ const POST_CROP = { 6: 0.97, 7: 1, 8: 0.98, 9: 0.97, 10: 0.96, 11: 0.96, 12: 0.9
 // The painted posts are taller than the raw partial heights. Hit testing and
 // the selection stroke have to use this same crest, or a click on the upper
 // post lands on the tail and the highlight stops short of the bar.
-function applyVisibleCrests(placed, air) {
-  const fund = placed.find((item) => item.shape.air && air.rankOf(item.slice) === 0);
-  if (!fund?.tri?.curve?.length) return placed;
-  const bend = fund.tri.curve.reduce((low, point) => (point.y > low.y ? point : low), fund.tri.curve[0]);
-  const tailAt = (x) => {
-    const curve = fund.tri.curve;
-    for (let i = 1; i < curve.length; i++) {
-      const a = curve[i - 1];
-      const b = curve[i];
-      const minX = Math.min(a.x, b.x);
-      const maxX = Math.max(a.x, b.x);
-      if (x < minX || x > maxX) continue;
-      const u = (x - a.x) / ((b.x - a.x) || 1);
-      return a.y + (b.y - a.y) * u;
-    }
-    return null;
-  };
-  for (const item of placed) {
-    if (item.shape.air || item.tri.crest.x > bend.x) continue;
-    const y = tailAt(item.tri.crest.x);
-    if (y != null) item.tri.crest = { x: item.tri.crest.x, y };
-  }
+function applyVisibleCrests(placed) {
+  if (!placed.length) return placed;
   const bar1H = Math.max(4, placed[0].tri.foot.y - placed[0].tri.crest.y);
   for (let i = 0; i < placed.length; i++) {
     const frac = POST_CROP[i + 1];
     if (frac == null) continue;
     const item = placed[i];
-    let crestY = item.tri.foot.y - bar1H * frac;
-    const tailY = tailAt(item.tri.crest.x);
-    if (tailY != null) crestY = Math.max(crestY, tailY + 4);
-    item.tri.crest = { x: item.tri.crest.x, y: Math.min(crestY, item.tri.foot.y - 4) };
+    const crestY = Math.min(item.tri.foot.y - bar1H * frac, item.tri.foot.y - 4);
+    const dy = crestY - item.tri.crest.y;
+    item.tri.crest = { x: item.tri.crest.x, y: crestY };
+    if (!item.tri.curve?.length || Math.abs(dy) < 0.01) continue;
+    for (const point of item.tri.curve) point.y += dy;
+    item.tri.back = item.tri.curve[item.tri.curve.length - 1];
   }
   return placed;
-}
-
-function hatchLimit(placed, detune) {
-  const xs = placed.map((item) => worldOf(item.slice, detune).x).sort((a, b) => a - b);
-  if (xs.length < 2) return Infinity;
-  return xs[0] + 0.5 * (xs[xs.length - 1] - xs[0]);
 }
 
 function drawSlices(ctx, slices, detune, place, camera, look, palette, clock, style, selected, bloom, weight, bulk = 1, alpha = 1, accentAlpha = alpha, hatchAlpha = alpha) {
@@ -796,14 +599,8 @@ function drawSlices(ctx, slices, detune, place, camera, look, palette, clock, st
   // Wide under the blur, a lighter core on the sharp pass. The pair stays soft.
   const tailW = weight * (bloom ? 1.15 : 1);
   const tail = { width: tailW, alpha: 1, halo: 0, haloAlpha: 0 };
-  const octave = { width: tailW * 0.52, alpha: 1, halo: 0, haloAlpha: 0 };
   const rail = { width: weight * bulk, alpha, halo: 0, haloAlpha: 0 };
-  // Decay strands are the same width as a bar. The bloom passes supply the faint glow.
-  const strand = { width: weight, alpha: 1, halo: 0, haloAlpha: 0 };
-  const meshTint = mixHex(palette.wire, palette.paper, 0.62);
   const tailColor = mixHex(palette.wire, palette.paper, tune().tailCream);
-  const octaveColor = mixHex(palette.wire, palette.paper, tune().octaveCream);
-  const air = airFrame(slices, clock, detune);
   const placed = [];
   for (let index = 0; index < slices.length; index++) {
     const slice = slices[index];
@@ -811,13 +608,12 @@ function drawSlices(ctx, slices, detune, place, camera, look, palette, clock, st
     placed.push({
       index,
       slice,
-      tri: projectSlice(slice, detune, place, camera, clock, air),
-      shape: drawShape(Math.max(0.05, Number(slice.seconds) || 0.2), clock, slice, air),
+      tri: projectSlice(slice, detune, place, camera, clock),
+      shape: drawShape(Math.max(0.05, Number(slice.seconds) || 0.2), clock),
     });
   }
   placed.sort((a, b) => worldOf(a.slice, detune).x - worldOf(b.slice, detune).x);
-  applyVisibleCrests(placed, air);
-  const limit = hatchLimit(placed, detune);
+  applyVisibleCrests(placed);
   if (style !== 'eco') {
     const atDepth = (group, z) => group.map((item) => {
       const world = worldOf(item.slice, detune);
@@ -840,50 +636,25 @@ function drawSlices(ctx, slices, detune, place, camera, look, palette, clock, st
         }
       }
     }
-    // Each decay line runs back from its own crest along that bar's depth,
-    // and stops before the next post. The two longest use the same lane.
-    if (!bloom || bulk > 1.12) {
-      const lanes = laneStrands(placed, place, camera, detune);
-      const laneLook = { ...strand, width: weight * 0.62 };
-      for (const lane of lanes) {
-        glow(ctx, [lane.start, lane.end], meshTint, laneLook, (bloom ? 0.08 : 0.82) * lane.alpha);
-      }
-    }
     for (const item of placed) {
       glow(ctx, [item.tri.foot, item.tri.crest], palette.ink, ink, item.slice.alpha);
     }
   }
   for (const item of placed) {
-    const world = worldOf(item.slice, detune);
-    if (item.shape.air) {
-      const rank = air.rankOf(item.slice);
-      const look = rank === 0 ? tail : octave;
-      const strength = bloom
-        ? (rank === 0 ? tune().tailGlow : tune().octaveGlow)
-        : (rank === 0 ? tune().tailSharp : tune().octaveSharp);
-      const color = rank === 0 ? tailColor : octaveColor;
-      glow(ctx, item.tri.curve, color, look, strength);
-      if (rank === 0) {
-        // The head of the fundamental matches the bar. The octave stays its own line.
-        const headCount = Math.max(3, Math.round(item.tri.curve.length * 0.18));
-        const head = item.tri.curve.slice(0, headCount);
-        const join = mixHex(color, palette.ink, 0.8);
-        glow(ctx, head, join, { ...look, width: look.width * (bloom ? 1.05 : 1.15) }, bloom ? strength * 0.35 : 1);
-      }
-      continue;
-    }
-    const left = world.x <= limit;
-    // The left block is the separate strands drawn above. A second curve here
-    // stacked into the peach sheet.
-    if (left) continue;
-    const width = weight * 0.5 * bulk;
-    const strength = bloom ? accentAlpha * 1.8 : tune().rightSharp;
-    glow(ctx, item.tri.curve, palette.wire, { ...accent, width }, Math.min(1, strength));
+    const rel = Math.min(1, item.shape.rel || 0);
+    const look = { ...tail, width: tailW * (0.58 + 0.42 * rel) };
+    const strength = (bloom ? tune().tailGlow : tune().tailSharp) * (0.62 + 0.38 * rel);
+    glow(ctx, item.tri.curve, tailColor, look, strength);
+    if (rel < 0.85) continue;
+    const headCount = Math.max(3, Math.round((item.tri.curve?.length || 0) * 0.18));
+    const head = item.tri.curve.slice(0, headCount);
+    const join = mixHex(tailColor, palette.ink, 0.8);
+    glow(ctx, head, join, { ...look, width: look.width * (bloom ? 1.05 : 1.15) }, bloom ? strength * 0.35 : 1);
   }
   if (bloom || selected < 0 || !slices[selected]) return;
   const slice = slices[selected];
   const tri = placed.find((item) => item.index === selected)?.tri
-    || projectSlice(slice, detune, place, camera, clock, air);
+    || projectSlice(slice, detune, place, camera, clock);
   if (style !== 'eco') {
     glow(ctx, [tri.foot, tri.crest], palette.ink, { ...ink, width: ink.width + weight * 0.35 }, 1);
     glow(ctx, [tri.foot, tri.floor], palette.ink, ink, 1);
@@ -897,22 +668,21 @@ export function layoutTriangles(slices, camera, width, height, detune = 0) {
   const fit = measureFit(spaced, view, width, height, detune);
   const place = placement(fit, width, height);
   const clock = longestSeconds(spaced);
-  const air = airFrame(spaced, clock, detune);
-  return spaced.map((slice) => projectSlice(slice, detune, place, view, clock, air));
+  return spaced.map((slice) => projectSlice(slice, detune, place, view, clock));
 }
 
-function projectSlice(slice, detune, place, camera, maxSeconds, air) {
+function projectSlice(slice, detune, place, camera, maxSeconds) {
   const world = worldOf(slice, detune);
-  const seconds = Math.max(0.05, Number(slice?.seconds) || 0.2);
-  const shape = drawShape(seconds, maxSeconds || seconds, slice, air);
-  const rear = floorBack(world, landingDepth(shape));
-  const curve = tailWorld(slice, world, maxSeconds, air).map((point) => place(camera, point.x, point.y, point.z));
+  const worldCurve = decayCurveWorld(slice, detune, maxSeconds);
+  const curve = worldCurve.map((point) => place(camera, point.x, point.y, point.z));
+  const rear = floorBack(world, landingDepth());
   return {
     foot: place(camera, world.x, 0, 0),
     crest: place(camera, world.x, world.y, 0),
     back: curve[curve.length - 1],
     floor: place(camera, rear.x, rear.y, rear.z),
     curve,
+    worldCurve,
   };
 }
 
