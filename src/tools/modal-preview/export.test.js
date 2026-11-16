@@ -7,6 +7,7 @@ import {
   ZEBRA_DECAY_MAX,
   ZEBRA_PARTIAL_LIMIT_HZ,
   audiblePartials,
+  zebraHighRowBias,
   exportFileName,
   fromCsv,
   zebraDecayKnob,
@@ -37,7 +38,7 @@ function assertRoundTrip(partials, description) {
   const step = 2 ** (0.5 / 10) - 1;
   rows.forEach((row, index) => {
     const rendered = zebraDecaySeconds(row.decay, exported.knob);
-    const target = preview[index].decay;
+    const target = preview[index].decay / zebraHighRowBias(preview[index].ratio * A4_HZ).t60;
     const error = Math.abs(rendered - target) / target;
     assert.ok(error <= step + 1e-9, `${description} ${error} knob ${exported.knob}`);
   });
@@ -86,7 +87,8 @@ test('an exported file imports back to the preview decays', () => {
   assert.equal(restored.length, preview.length);
   const step = 2 ** (0.5 / 10) - 1;
   restored.forEach((partial, index) => {
-    const error = Math.abs(partial.decay - preview[index].decay) / preview[index].decay;
+    const target = preview[index].decay / zebraHighRowBias(preview[index].ratio * A4_HZ).t60;
+    const error = Math.abs(partial.decay - target) / target;
     assert.ok(error <= step + 1e-9, `${partial.decay} vs ${preview[index].decay}`);
     assert.equal(partial.ratio, Number(preview[index].ratio.toFixed(4)));
   });
@@ -197,6 +199,39 @@ test('a mixed preview stays within 2 dB of GainDB on every row', () => {
       assert.ok(error <= 2, `${material} row ${index + 1} t60 ${partial.decay.toFixed(3)} err ${error.toFixed(2)} dB`);
     });
   }
+});
+
+test('high rows are pre-compensated only in the export', () => {
+  assert.deepEqual(zebraHighRowBias(1000), { db: 0, t60: 1 });
+  assert.deepEqual(zebraHighRowBias(3000), { db: 0, t60: 1 });
+  const top = zebraHighRowBias(5800);
+  assert.ok(Math.abs(top.db - 2.8) < 1e-9);
+  assert.ok(Math.abs(top.t60 - 1.1) < 1e-9);
+  assert.deepEqual(zebraHighRowBias(6000), top);
+  let previous = zebraHighRowBias(3000);
+  for (let hz = 3050; hz <= 6000; hz += 25) {
+    const next = zebraHighRowBias(hz);
+    assert.ok(next.db + 1e-9 >= previous.db, `${hz} dB ${next.db}`);
+    assert.ok(next.t60 + 1e-9 >= previous.t60, `${hz} t60 ${next.t60}`);
+    previous = next;
+  }
+  const low = zebraExport([
+    { ratio: 1, gainDb: -2, decay: 1.5 },
+    { ratio: 2, gainDb: -8, decay: 0.8 },
+  ]);
+  const lowRows = rowsOf(low.csv);
+  assert.ok(Math.abs(lowRows[0].gainDb - (-2)) < 0.011);
+  assert.ok(Math.abs(lowRows[1].gainDb - (-8)) < 0.011);
+  assert.ok(Math.abs(lowRows[1].decay / lowRows[0].decay - 0.8 / 1.5) < 1e-4);
+  const high = zebraExport([
+    { ratio: 1000 / 440, gainDb: -4, decay: 2 },
+    { ratio: 5800 / 440, gainDb: -4, decay: 2 },
+  ]);
+  const highRows = rowsOf(high.csv);
+  assert.ok(Math.abs(highRows[0].gainDb - (-4)) < 0.011);
+  assert.ok(Math.abs(highRows[1].gainDb - (-4 - 2.8)) < 0.011);
+  assert.ok(Math.abs(highRows[1].decay / highRows[0].decay - 1 / 1.1) < 1e-4);
+  assert.ok(highRows[1].decay <= 1 && highRows[0].decay <= 1);
 });
 
 test('rows above 6 kHz at A4 and above Nyquist stay out of the file', () => {
