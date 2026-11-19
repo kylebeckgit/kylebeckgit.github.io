@@ -113,20 +113,44 @@ function applyEntry(recipe, entry, promptText) {
   recipe.recognized = true;
 }
 
-function overlayMaterial(recipe, material) {
-  if (!material || material.material === recipe.material) return;
-  recipe.material = material.material;
+function overlayMaterial(recipe, material, statedWord = '') {
+  if (!material) return;
+  const word = statedWord || material.material;
+  const same = material.material === recipe.material || word === recipe.material;
+  if (same) {
+    if (statedWord) recipe.material = word;
+    return;
+  }
+  recipe.material = word;
   recipe.controls.brightness = clamp(recipe.controls.brightness + (material.brightness ?? 0) * 0.45, -1, 1);
   recipe.controls.damping = clamp(recipe.controls.damping + Math.max(-0.2, Math.min(0.2, (material.damping ?? 0.4) - 0.4)), 0, 1);
   if (recipe.controls.voice === 'glass' || recipe.controls.voice === 'crystal') recipe.controls.voice = '';
-  recipe.traits = [...(recipe.traits || []), material.material];
+  if (!statedWord) recipe.traits = [...(recipe.traits || []), material.material];
+}
+
+function applyPlace(recipe, place) {
+  if (place.size === 'huge') recipe.size = 'huge';
+  else if (place.size === 'large' && (recipe.size === 'medium' || recipe.size === 'small')) recipe.size = 'large';
+  recipe.controls.brightness = clamp(recipe.controls.brightness - 0.35, -1, 1);
+  recipe.controls.damping = clamp(recipe.controls.damping - 0.12, 0, 1);
+  recipe.controls.decayScale = Math.min(4, (recipe.controls.decayScale || 1) * 1.35);
+  recipe.traits = (recipe.traits || []).filter((trait) => trait !== 'bright');
+  recipe.traits.push('dark');
+}
+
+function statedMaterial(text) {
+  const match = text.match(/\bmade of ([a-z]+)\b/);
+  if (!match) return null;
+  const hit = matchReading(match[1]);
+  const entry = hit.material || (hit.object?.role === 'material' ? hit.object : null);
+  return entry ? { entry, word: match[1] } : null;
 }
 
 function applyAdjectives(recipe, text) {
   for (const adjective of ADJECTIVES) {
     if (!adjective.test.test(text)) continue;
     if (adjective.size) recipe.size = adjective.size;
-    if (adjective.material) recipe.material = adjective.material;
+    if (adjective.material && !recipe.explicitMaterial) recipe.material = adjective.material;
     if (adjective.damping) recipe.controls.damping = clamp(recipe.controls.damping + adjective.damping, 0, 1);
     if (adjective.brightness) recipe.controls.brightness = clamp(recipe.controls.brightness + adjective.brightness, -1, 1);
     if (adjective.stiffness) recipe.controls.stiffness = clamp(recipe.controls.stiffness + adjective.stiffness, 0, 1);
@@ -156,12 +180,50 @@ function applyImagery(recipe, text) {
   }
 }
 
+const TRAIT_CONFLICTS = [
+  ['frozen', 'melting'],
+  ['frozen', 'burning'],
+  ['burning', 'underwater'],
+  ['icy', 'melting'],
+  ['icy', 'burning'],
+];
+
+function settleTraits(traits, text) {
+  let next = [...new Set(traits || [])].filter(Boolean);
+  const lower = String(text || '').toLowerCase();
+  for (const [left, right] of TRAIT_CONFLICTS) {
+    const hasLeft = next.some((trait) => trait.includes(left));
+    const hasRight = next.some((trait) => trait.includes(right));
+    if (!hasLeft || !hasRight) continue;
+    const drop = lower.lastIndexOf(left) <= lower.lastIndexOf(right) ? left : right;
+    next = next.filter((trait) => !trait.includes(drop));
+  }
+  return next;
+}
+
 function composeReading(recipe, text) {
-  const body = `a ${recipe.size || 'medium'} ${recipe.material || 'unknown'} ${recipe.shape || 'body'}`;
-  const traits = [...new Set(recipe.traits || [])].filter(Boolean);
+  const name = recipe.objectName || 'Profile';
+  const used = new Set();
+  const parts = (value) => String(value || '').toLowerCase().split(/[^a-z0-9]+/).filter((word) => word && word !== 'a' && word !== 'of' && word !== 'the');
+  for (const word of parts(name)) used.add(word);
+  const take = (value) => {
+    const words = parts(value);
+    if (!words.length || words.some((word) => used.has(word))) return '';
+    words.forEach((word) => used.add(word));
+    return value;
+  };
+  const size = take(recipe.size || 'medium');
+  const material = take(recipe.material || 'unknown');
+  const shape = take(recipe.shape || 'body');
+  const body = ['a', size, material, shape].filter(Boolean).join(' ');
+  const traits = [];
+  for (const trait of settleTraits(recipe.traits, text)) {
+    const shown = take(trait);
+    if (shown) traits.push(shown);
+  }
   const tail = traits.length ? `, ${traits.join(', ')}` : '';
   if (recipe.fallback) return `No listed object. Heard “${text}” as ${body}${tail}.`;
-  return `${recipe.objectName}: ${body}${tail}.`;
+  return `${name}: ${body}${tail}.`;
 }
 
 function applyWords(recipe, text, refine) {
@@ -266,11 +328,15 @@ export function readRecipe(prompt, current = null) {
     if (entry) applyEntry(recipe, entry, text);
     else if (!current && text.trim()) applyEntry(recipe, hashFallback(text, hashString(text)), text);
   }
-  if (reading.object && reading.material && reading.material.material !== recipe.material) {
+  const stated = statedMaterial(text);
+  if (stated) recipe.explicitMaterial = true;
+  else if (reading.object && reading.material && reading.material.material !== recipe.material) {
     overlayMaterial(recipe, reading.material);
   }
   applyAdjectives(recipe, text);
   applyImagery(recipe, text);
+  if (reading.place) applyPlace(recipe, reading.place);
+  if (stated) overlayMaterial(recipe, stated.entry, stated.word);
   applyWords(recipe, text, Boolean(current));
   recipe.reading = composeReading(recipe, text);
   recipe.controls = sanitizeControls(recipe.controls);
