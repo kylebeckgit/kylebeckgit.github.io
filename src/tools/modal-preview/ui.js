@@ -4,6 +4,7 @@ import { renderPreview, scaleToPeak, strikeWeight } from './resonator.js';
 import { aimSlices, createFitMotion, createSliceMotion, defaultCamera, hitPartial, MORPH_MS, paintModalView, sampleSlices, slicesMoving } from './modal-view.js';
 import { densityForProfile, shapePartials } from './shape.js';
 import { createRollHistory, defaultLocks, pushRoll, redoRoll, rollSound, undoRoll } from './randomize.js';
+import { decodeProfile, encodeProfile } from './studio.js';
 
 export function mount(root) {
   const describeUrl = (root.dataset.describeUrl || '').trim();
@@ -967,16 +968,17 @@ export function mount(root) {
     state.hardness = payload.hardness ?? state.hardness;
     state.velocity = payload.velocity ?? state.velocity;
     ensureDensityCount(payload.partials.length);
+    readPlayControls();
     state.hearFundamental = playedFundamental(controls.pitchScale, noteFrequency(state.note));
     const copy = payload.partials.map((partial) => ({
       ratio: partial.ratio,
       gainDb: partial.gainDb,
       decay: partial.decay,
     }));
+    pushHistory();
     state.profilePartials = copy;
     state.partials = copy;
     state.custom = true;
-    pushHistory();
     publishShape(0);
     render();
     pushModes();
@@ -993,6 +995,38 @@ export function mount(root) {
   const onScheme = () => draw(canvas, state.partials, state);
   if (typeof scheme.addEventListener === 'function') scheme.addEventListener('change', onScheme);
   else scheme.addListener(onScheme);
+
+  function setShareStatus(text) {
+    const el = root.querySelector('[data-share-status]');
+    if (el) el.textContent = text || '';
+  }
+
+  root.querySelector('[data-share]')?.addEventListener('click', async () => {
+    const profile = profileFromState();
+    const encoded = encodeProfile(profile);
+    const url = `${location.origin}${location.pathname}${location.search}#p=${encoded}`;
+    history.replaceState(null, '', `#p=${encoded}`);
+    if (url.length > 12000) {
+      setShareStatus('This profile is too long for a link. Export the CSV instead.');
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      setShareStatus('Link copied. It stores the recipe, and any partial edits.');
+    } catch {
+      setShareStatus('The link is in the address bar.');
+    }
+  });
+
+  const shared = decodeProfile(location.hash);
+  if (shared?.partials?.length) {
+    receiveHandoff(shared);
+    setShareStatus('Opened a shared profile.');
+  } else if (shared?.controls) {
+    applyRecipe(shared, { hear: false, history: false });
+    setShareStatus('Opened a shared profile.');
+  }
+
   return { receiveHandoff };
 }
 

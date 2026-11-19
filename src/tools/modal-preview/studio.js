@@ -203,13 +203,6 @@ export function mountStudio(root, api) {
     }
   });
 
-  const shared = decodeProfile(location.hash);
-  if (shared) {
-    api.applyRecipe(shared, { hear: false, partials: shared.partials || null, history: false });
-    if (nameInput && shared.name) nameInput.value = shared.name;
-    setStatus('Opened a shared profile.');
-  }
-
   showAllowance();
   const controller = {
     showFresh(prompt, hear = true) {
