@@ -1,4 +1,4 @@
-import { A4_HZ, PRESETS, NOTE_BUTTONS, ZEBRA_PARTIAL_LIMIT_HZ, buildPartials, previewPartials, zebraExport, audiblePartials, fromCsv, noteFrequency, defaultControls, sanitizeControls, alignReference } from './engine.js';
+import { A4_HZ, PRESETS, NOTE_BUTTONS, ZEBRA_PARTIAL_LIMIT_HZ, buildPartials, previewPartials, zebraExport, audiblePartials, fromCsv, noteFrequency, playedFundamental, defaultControls, sanitizeControls, alignReference, carryControls, controlsFromKnobs } from './engine.js';
 import { analyzeSamples, decodeRecording, resampleMono, parseRoot, frequencyToNote } from './analyze.js';
 import { renderPreview, scaleToPeak, strikeWeight } from './resonator.js';
 import { aimSlices, createFitMotion, createSliceMotion, defaultCamera, hitPartial, MORPH_MS, paintModalView, sampleSlices, slicesMoving } from './modal-view.js';
@@ -84,17 +84,15 @@ export function mount(root) {
     const carried = state.carried;
     const preset = fields.preset.value;
     const keep = carried && carried.preset === preset;
-    state.controls = sanitizeControls({
+    state.controls = controlsFromKnobs({
       preset,
       stiffness: fields.stiffness.value,
       brightness: fields.brightness.value,
       damping: fields.damping.value,
       oddEven: fields.oddEven.value,
       seed: fields.seed.value,
-      voice: keep ? carried.voice : '',
-      count: keep ? carried.count : 64,
-    });
-    state.carried = keep ? { preset, voice: state.controls.voice, count: state.controls.count } : null;
+    }, keep ? carried : null);
+    state.carried = keep ? carryControls(state.controls) : null;
     readouts.stiffness.textContent = state.controls.stiffness.toFixed(2);
     readouts.brightness.textContent = state.controls.brightness.toFixed(2);
     readouts.damping.textContent = state.controls.damping.toFixed(2);
@@ -189,9 +187,12 @@ export function mount(root) {
   }
 
   function adopt(partials, custom) {
+    // Start from the selected note times the size pitch every time. Feeding
+    // the last aligned frequency back in would walk the note on each knob move.
+    const fundamental = playedFundamental(state.controls?.pitchScale, noteFrequency(state.note));
     const aligned = root.querySelector('[data-absorb]')
-      ? alignReference(partials, noteFrequency(state.note))
-      : { partials, fundamental: noteFrequency(state.note) };
+      ? alignReference(partials, fundamental)
+      : { partials, fundamental };
     state.hearFundamental = aligned.fundamental;
     const copy = aligned.partials.map((partial) => ({ ratio: partial.ratio, gainDb: partial.gainDb, decay: partial.decay }));
     if (root.querySelector('[data-absorb]')) {
@@ -335,6 +336,7 @@ export function mount(root) {
     event.preventDefault();
     try { keys.setPointerCapture?.(event.pointerId); } catch { /* no active pointer */ }
     state.note = button.dataset.note;
+    state.hearFundamental = playedFundamental(state.controls?.pitchScale, noteFrequency(state.note));
     for (const key of root.querySelectorAll('[data-note]')) key.setAttribute('aria-pressed', String(key === button));
     state.userHolding = true;
     cancelAutoHear();
@@ -819,7 +821,9 @@ export function mount(root) {
 
   function applyRecipe(recipe, { hear = false, partials = null, history = true } = {}) {
     const controls = sanitizeControls(recipe.controls || recipe);
-    state.carried = { preset: controls.preset, voice: controls.voice, count: controls.count };
+    state.carried = carryControls(controls);
+    state.hearFundamental = playedFundamental(controls.pitchScale, noteFrequency(state.note));
+    markPlayedNote(root, state.hearFundamental);
     fields.preset.value = controls.preset;
     fields.stiffness.value = String(controls.stiffness);
     fields.brightness.value = String(controls.brightness);
@@ -896,6 +900,21 @@ export function mount(root) {
   const onScheme = () => draw(canvas, state.partials, state);
   if (typeof scheme.addEventListener === 'function') scheme.addEventListener('change', onScheme);
   else scheme.addListener(onScheme);
+}
+
+function markPlayedNote(root, hz) {
+  let best = null;
+  let bestCents = 50;
+  for (const name of NOTE_BUTTONS) {
+    const cents = Math.abs(1200 * Math.log2(noteFrequency(name) / hz));
+    if (cents < bestCents) {
+      bestCents = cents;
+      best = name;
+    }
+  }
+  for (const key of root.querySelectorAll('[data-note]')) {
+    key.setAttribute('aria-pressed', String(Boolean(best) && key.dataset.note === best));
+  }
 }
 
 function canvasPoint(canvas, event) {
@@ -1144,7 +1163,7 @@ function playMessage(state, type) {
   return {
     type,
     partials: state.partials.map((partial) => ({ ratio: partial.ratio, gainDb: partial.gainDb, decay: partial.decay })),
-    fundamental: noteFrequency(state.note),
+    fundamental: state.hearFundamental || noteFrequency(state.note),
     velocity: state.velocity,
     position: state.position,
     exciter: state.exciter,
@@ -1261,7 +1280,7 @@ function playFallback(state) {
   silenceFallback(state);
   const audio = state.audio;
   const now = audio.currentTime;
-  const fundamental = noteFrequency(state.note);
+  const fundamental = state.hearFundamental || noteFrequency(state.note);
   const shape = audio.createWaveShaper();
   shape.curve = limiterCurve();
   shape.connect(audio.destination);

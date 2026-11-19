@@ -121,6 +121,34 @@ function marimbaRatios() {
   return tuned;
 }
 
+function crystalRatios() {
+  // A bowl series with a close pair on each mode, so a chandelier shimmers
+  // instead of sitting on seven still partials. The gaps are wide enough
+  // that a 55-cent twin filter would keep them.
+  const out = [];
+  for (const ratio of BOWL_RATIOS) out.push(ratio * 0.962, ratio, ratio * 1.041);
+  return out;
+}
+
+function abyssRatios() {
+  // A dense pile around the body, each center split by about 12 cents so
+  // the mass beats slowly. The lowness is the played note, not a ratio
+  // below 1, so the voice curves still see the body at ratio 1.
+  const ratios = [];
+  for (let i = 0; i < 18; i++) {
+    const center = 1 + i * 0.055;
+    ratios.push(center * 0.9965, center * 1.007);
+  }
+  return ratios;
+}
+
+function rumbleRatios() {
+  // Spaced low room modes. Not the black hole's slow-beating pile.
+  const ratios = [];
+  for (let i = 0; i < 16; i++) ratios.push(1 + i * 0.31 + (i % 3) * 0.07);
+  return ratios;
+}
+
 function gongRatios() {
   // Rossing, Percussive Notes (Fall 1982): axisymmetric modes of a Japanese
   // tamtam at 39, 162, 195, 318, 854, 879 and 1000 Hz, plus the radial family
@@ -175,6 +203,9 @@ function shellRatios() {
 
 function baseRatios(preset, voice) {
   if (voice === 'glass') return BOWL_RATIOS.slice();
+  if (voice === 'crystal') return crystalRatios();
+  if (voice === 'abyss') return abyssRatios();
+  if (voice === 'rumble') return rumbleRatios();
   if (voice === 'gong') return gongRatios();
   if (voice === 'bonsho') return BONSHO_RATIOS.slice();
   if (voice === 'marimba') return marimbaRatios();
@@ -253,7 +284,7 @@ export function sanitizeControls(input) {
   };
   const seedNum = Number(input?.seed);
   const countNum = Number(input?.count);
-  const voices = new Set(['glass', 'gong', 'bonsho', 'marimba', 'cup', 'shell', 'neutral']);
+  const voices = new Set(['glass', 'gong', 'bonsho', 'marimba', 'cup', 'shell', 'neutral', 'block', 'crystal', 'abyss', 'rumble']);
   const voice = voices.has(input?.voice) ? input.voice : '';
   return {
     preset,
@@ -262,9 +293,35 @@ export function sanitizeControls(input) {
     damping: num(input?.damping, 0, 1, base.damping),
     oddEven: num(input?.oddEven, -1, 1, base.oddEven),
     seed: Number.isFinite(seedNum) ? Math.trunc(clamp(seedNum, 0, 1_000_000_000)) : 0,
+    decayScale: num(input?.decayScale, 0.2, 4, 1),
+    pitchScale: num(input?.pitchScale, 0.25, 4, 1),
     voice,
     count: Number.isFinite(countNum) && countNum > 0 ? Math.round(clamp(countNum, 1, PARTIALS)) : PARTIALS,
   };
+}
+
+// The preset menu has no decay-scale knob. These fields ride along with the
+// voice so a tiny or huge reading survives the rebuild from the knobs.
+export function carryControls(controls) {
+  const clean = sanitizeControls(controls);
+  return {
+    preset: clean.preset,
+    voice: clean.voice,
+    count: clean.count,
+    decayScale: clean.decayScale,
+    pitchScale: clean.pitchScale,
+  };
+}
+
+export function controlsFromKnobs(knobs, carried) {
+  const keep = carried && carried.preset === knobs?.preset;
+  return sanitizeControls({
+    ...knobs,
+    voice: keep ? carried.voice : '',
+    count: keep ? carried.count : 64,
+    decayScale: keep ? carried.decayScale : 1,
+    pitchScale: keep ? carried.pitchScale : 1,
+  });
 }
 
 export function buildPartials(rawControls) {
@@ -302,10 +359,13 @@ export function buildPartials(rawControls) {
     });
   }
   if (controls.voice === 'gong') {
-    // The delayed shimmer sits on the high cluster, not the fundamental.
+    // The body is the loud part. The high wash is a quieter bloom, so a
+    // gong stays dark instead of turning into a cymbal.
     for (const partial of partials) {
-      const dist = Math.abs(Math.log2(partial.ratio / 22.5));
-      partial.gainDb = partial.ratio > 12 ? -4.5 * dist : -11 - 2.5 * Math.abs(Math.log2(partial.ratio));
+      const octaves = Math.log2(Math.max(partial.ratio, 1e-6));
+      const body = -6.5 * Math.max(0, octaves);
+      const bloom = octaves > 2.2 ? -20 - 3 * (octaves - 2.2) : -40;
+      partial.gainDb = Math.max(body, bloom) + controls.brightness * 7;
     }
   }
   if (controls.voice === 'bonsho' || controls.voice === 'glass' || controls.voice === 'gong' || controls.voice === 'marimba' || controls.voice === 'cup' || controls.voice === 'shell' || controls.voice === 'neutral') {
@@ -325,6 +385,42 @@ export function buildPartials(rawControls) {
       partial.decay = clamp((fund * scale) / (1 + slope * rise), 0.08, 30);
     }
   }
+  if (controls.voice === 'block') {
+    // A hollow wood block is a short click. The body is under a third of a
+    // second, and the upper partials fall even faster.
+    const fund = clamp(0.26 * (1.2 - controls.damping), 0.05, 0.3);
+    const slope = 1.4 + controls.damping * 2.8;
+    for (const partial of partials) {
+      const rise = Math.max(partial.ratio - 1, 0) ** 0.9;
+      partial.decay = clamp(fund / (1 + slope * rise), 0.05, 0.3);
+    }
+  }
+  if (controls.voice === 'crystal') {
+    const fund = 10 * (1.15 - 0.55 * controls.damping);
+    for (const partial of partials) {
+      const rise = Math.max(partial.ratio - 1, 0) ** 0.8;
+      partial.decay = clamp(fund / (1 + 0.28 * rise), 0.4, 30);
+    }
+  }
+  if (controls.voice === 'rumble') {
+    // Vast imagery stays long even after a "distant" damping nudge.
+    const fund = 16 * (1.15 - 0.2 * controls.damping);
+    for (const partial of partials) {
+      const rise = Math.max(partial.ratio - 1, 0) ** 0.8;
+      const octaves = Math.log2(Math.max(partial.ratio, 1e-6));
+      partial.decay = clamp(fund / (1 + 0.4 * rise), 2, 30);
+      partial.gainDb -= octaves * 5;
+    }
+  }
+  if (controls.voice === 'abyss') {
+    const fund = 16 * (1.15 - 0.35 * controls.damping);
+    for (const partial of partials) {
+      const rise = Math.max(partial.ratio - 1, 0) ** 0.75;
+      const octaves = Math.log2(Math.max(partial.ratio, 1e-6));
+      partial.decay = clamp(fund / (1 + 0.12 * rise), 1.5, 30);
+      partial.gainDb -= octaves * 6;
+    }
+  }
   if (controls.preset === 'open-pipe') {
     const fund = partials[0].ratio || 1;
     for (const partial of partials) {
@@ -341,7 +437,10 @@ export function buildPartials(rawControls) {
     for (const partial of partials) partial.gainDb += (rand() - 0.5) * 4;
   }
   const peak = Math.max(...partials.map((partial) => partial.gainDb));
-  for (const partial of partials) partial.gainDb = clamp(partial.gainDb - peak, -96, 0);
+  for (const partial of partials) {
+    partial.gainDb = clamp(partial.gainDb - peak, -96, 0);
+    partial.decay = clamp(partial.decay * (controls.decayScale || 1), 0.05, 30);
+  }
   return partials;
 }
 
@@ -376,7 +475,7 @@ export function previewPartials(rawControls) {
       return {
         ...partial,
         gainDb: clamp(-20 * Math.log10(harm), -96, 0),
-        decay: clamp(fundSeconds / harm, 0.05, 30),
+        decay: clamp((fundSeconds / harm) * (controls.decayScale || 1), 0.05, 30),
       };
     });
   }
@@ -507,8 +606,10 @@ function compensateForZebra(partial) {
   };
 }
 
-export function zebraHint(knob) {
-  return `In Zebra, set Decay to ${knob}, Position 0, other modal knobs at 0. Rows stop at 6 kHz when the fundamental is A4.`;
+export function zebraHint(knob, fundamental = A4_HZ) {
+  const base = `In Zebra, set Decay to ${knob}, Position 0, other modal knobs at 0. Rows stop at 6 kHz when the fundamental is A4.`;
+  if (!(fundamental > 0) || Math.abs(Math.log2(fundamental / A4_HZ)) < 0.04) return base;
+  return `${base} Play the note near ${Math.round(fundamental)} Hz.`;
 }
 
 function decayCell(unit, longest) {
@@ -535,7 +636,7 @@ export function zebraExport(partials, options = {}) {
   return {
     csv: lines.join('\n') + '\n',
     knob,
-    hint: zebraHint(knob),
+    hint: zebraHint(knob, options.fundamental),
     filename: exportFileName(options.description, knob),
     partials: audible,
     tmax,
@@ -578,6 +679,12 @@ export function fromCsv(text, options = {}) {
 }
 
 export const NOTE_BUTTONS = ['C4', 'C#4', 'D4', 'D#4', 'E4', 'F4', 'F#4', 'G4', 'G#4', 'A4', 'A#4', 'B4', 'C5'];
+
+export function playedFundamental(pitchScale, baseHz = A4_HZ) {
+  const scale = Number(pitchScale);
+  const base = Number(baseHz);
+  return (base > 0 ? base : A4_HZ) * (scale > 0 ? scale : 1);
+}
 
 export function noteFrequency(name) {
   const match = /^([A-G])(#)?(-?\d)$/.exec(name);
