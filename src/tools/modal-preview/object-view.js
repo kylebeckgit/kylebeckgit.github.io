@@ -4,22 +4,23 @@
 // --accent in src/styles/global.css.
 export const ACCENT = '#d4421c';
 
-const SIZE = { tiny: 0.46, small: 0.6, medium: 0.74, large: 0.88, huge: 0.98 };
+const SIZE = { tiny: 0.52, small: 0.66, medium: 0.8, large: 0.9, huge: 0.98 };
 const CARD = '#fbf8f2';
-const MODE_LIMIT = 4;
+const MODE_LIMIT = 3;
+const BAND = 0.038;
 
 const TONE = {
-  wood: { lit: '#e7c4a4', mid: '#8d5a34', shade: '#5c3a22', rim: '#f3ddc8', kind: 'grain' },
-  metal: { lit: '#f7f4ee', mid: '#a7aaa4', shade: '#3c403c', rim: '#ffffff', kind: 'sheen' },
-  glass: { lit: '#f7fbff', mid: '#c5d8e2', shade: '#6d8b96', rim: '#ffffff', kind: 'glass' },
+  wood: { lit: '#e8c39a', mid: '#8d5a34', shade: '#4a2e18', rim: '#f4e0c8', kind: 'grain' },
+  metal: { lit: '#f4f1ea', mid: '#9aa09a', shade: '#2c302c', rim: '#ffffff', kind: 'sheen' },
+  glass: { lit: '#f7fbff', mid: '#d7e7ee', shade: '#6d8b96', rim: '#ffffff', kind: 'glass' },
   skin: { lit: '#efe0c4', mid: '#c4a574', shade: '#7a5a32', rim: '#f6ead4', kind: 'matte' },
-  stone: { lit: '#d4cdc2', mid: '#9a948a', shade: '#4e4a44', rim: '#e4ddd2', kind: 'matte' },
+  stone: { lit: '#b7b1a6', mid: '#7a746c', shade: '#3a3632', rim: '#d4cec4', kind: 'matte' },
   ceramic: { lit: '#f0c2a8', mid: '#c46a45', shade: '#6e3424', rim: '#f8dccb', kind: 'gloss' },
   ice: { lit: '#ffffff', mid: '#d5e7ef', shade: '#7aa0b0', rim: '#ffffff', kind: 'glass' },
   water: { lit: '#d5e8f2', mid: '#6f93a8', shade: '#2c4a5c', rim: '#f4fbff', kind: 'glass' },
   void: { lit: '#3a332c', mid: '#1c1916', shade: '#0e0d0b', rim: ACCENT, kind: 'void' },
   cardboard: { lit: '#ead7b4', mid: '#c4a06a', shade: '#7a5a32', rim: '#f3e6cc', kind: 'matte' },
-  plastic: { lit: '#ffffff', mid: '#d7d2c8', shade: '#6a655c', rim: '#ffffff', kind: 'gloss' },
+  plastic: { lit: '#f7f4ef', mid: '#d5cfc4', shade: '#6e685f', rim: '#ffffff', kind: 'gloss' },
   air: { lit: '#f4f7f8', mid: '#c5d0d6', shade: '#6a7c86', rim: '#ffffff', kind: 'glass' },
   string: { lit: '#f0e2c4', mid: '#c2a36a', shade: '#5c4324', rim: '#f7edd8', kind: 'grain' },
   rubber: { lit: '#b5b0a8', mid: '#6e6a64', shade: '#2e2c29', rim: '#d4d0c8', kind: 'matte' },
@@ -190,11 +191,12 @@ function faceGradient(ctx, x0, y0, x1, y1, tone, hotTint) {
   return g;
 }
 
-function paintFinish(ctx, tone, unit, across) {
+function paintSurface(ctx, tone, unit, across, sheen) {
+  ctx.save();
+  ctx.clip();
   if (tone.kind === 'grain') {
     ctx.save();
-    ctx.clip();
-    ctx.globalAlpha = 0.16;
+    ctx.globalAlpha = 0.18;
     ctx.strokeStyle = tone.shade;
     ctx.lineWidth = Math.max(1, unit * 0.012);
     const lines = across ? 5 : 4;
@@ -202,8 +204,8 @@ function paintFinish(ctx, tone, unit, across) {
       const t = (i + 1) / (lines + 1);
       ctx.beginPath();
       if (across) {
-        ctx.moveTo(-unit, -unit * 0.5 + t * unit);
-        ctx.lineTo(unit, -unit * 0.5 + t * unit);
+        ctx.moveTo(-unit, -unit * 0.55 + t * unit * 1.1);
+        ctx.lineTo(unit, -unit * 0.55 + t * unit * 1.1);
       } else {
         ctx.moveTo(-unit * 0.85 + t * unit * 1.7, -unit);
         ctx.lineTo(-unit * 0.85 + t * unit * 1.7, unit);
@@ -211,16 +213,18 @@ function paintFinish(ctx, tone, unit, across) {
       ctx.stroke();
     }
     ctx.restore();
-  } else if (tone.kind === 'sheen' || tone.kind === 'gloss') {
+  }
+  if (sheen && tone.kind !== 'matte' && tone.kind !== 'grain' && tone.kind !== 'void') {
+    const alpha = tone.kind === 'sheen' ? 0.55 : tone.kind === 'glass' ? 0.5 : 0.32;
     ctx.save();
-    ctx.clip();
-    ctx.globalAlpha = tone.kind === 'sheen' ? 0.55 : 0.35;
+    ctx.globalAlpha *= alpha;
     ctx.fillStyle = tone.rim;
     ctx.beginPath();
-    ctx.ellipse(-unit * 0.15, -unit * 0.08, unit * 0.38, unit * 0.05, -0.4, 0, Math.PI * 2);
+    ctx.ellipse(sheen.cx, sheen.cy, Math.max(2, sheen.rx), Math.max(2, sheen.ry), -0.4, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
   }
+  ctx.restore();
 }
 
 export function paintObject(ctx, options) {
@@ -245,7 +249,7 @@ export function paintObject(ctx, options) {
   ctx.fillRect(0, 0, width, height);
   ctx.save();
   ctx.translate(width / 2, height / 2);
-  const unit = Math.min(width, height) * 0.42 * scale;
+  const unit = Math.min(width, height) * 0.56 * scale;
   const flare = modes.reduce((sum, mode) => {
     const motion = playing ? Math.sin(phaseOf(mode.index, age)) * mode.env : 1;
     return sum + Math.min(0.08, Math.abs(motion) * mode.amp * 0.05);
@@ -257,7 +261,7 @@ export function paintObject(ctx, options) {
     for (const mode of modes) {
       const motion = motionOf(mode);
       if (playing && Math.abs(motion) < 0.04) continue;
-      const gain = mode.hot ? 1 : 0.55 * mode.amp;
+      const gain = mode.hot ? 0.72 : 0.32 * mode.amp;
       y += modeDisplacement(familyName, mode.index, t) * motion * gain;
     }
     return y;
@@ -266,18 +270,21 @@ export function paintObject(ctx, options) {
   contactShadow(ctx, family, unit, tone.shade);
   drawBody(ctx, family, unit, tone, flare, shift);
 
+  ctx.save();
+  clipBody(ctx, family, unit, flare, shift);
   const ordered = [...modes].sort((a, b) => a.amp - b.amp);
   for (const mode of ordered) {
     const motion = motionOf(mode);
     if (playing && Math.abs(motion) < 0.04) continue;
-    const bend = motion * (solo ? 1 : 0.45 + mode.amp * 0.4);
-    const fade = Math.max(0.08, Math.min(1, Math.abs(motion))) * (mode.hot ? 0.92 : 0.34 + mode.amp * 0.36);
+    const bend = motion * (solo ? 0.85 : 0.4 + mode.amp * 0.35);
+    const fade = Math.max(0.08, Math.min(1, Math.abs(motion))) * (mode.hot ? 0.9 : 0.22 + mode.amp * 0.28);
     const tint = accentTint(accent, mode.hot, card);
     ctx.save();
     ctx.globalAlpha = fade;
-    drawBend(ctx, family, mode.index, unit, bend, tint, tone, mode.hot);
+    drawBend(ctx, family, mode.index, unit, bend, tint, mode.hot);
     ctx.restore();
   }
+  ctx.restore();
   ctx.restore();
 }
 
@@ -291,7 +298,7 @@ function contactShadow(ctx, family, unit, shade) {
   ctx.globalAlpha = 0.14;
   if (family === 'bar' || family === 'string') {
     ctx.beginPath();
-    ctx.ellipse(unit * 0.04, unit * 0.34, unit * 0.86, unit * 0.07, 0, 0, Math.PI * 2);
+    ctx.ellipse(unit * 0.05, unit * 0.42, unit * 0.9, unit * 0.07, 0, 0, Math.PI * 2);
   } else if (family === 'tube') {
     ctx.beginPath();
     ctx.ellipse(unit * 0.04, unit * 1.08, unit * 0.28, unit * 0.07, 0, 0, Math.PI * 2);
@@ -307,6 +314,32 @@ function contactShadow(ctx, family, unit, shade) {
   }
   ctx.fill();
   ctx.restore();
+}
+
+function clipBody(ctx, family, unit, flare, shift) {
+  if (family === 'bar') {
+    const pts = barPoints(unit, (t) => -shift('bar', t) * unit * 0.16);
+    ribbon(ctx, pts, unit * 0.24, 0, 0);
+  } else if (family === 'string') {
+    ctx.beginPath();
+    ctx.rect(-unit * 1.2, -unit * 0.05, unit * 2.4, unit * 0.55);
+  } else if (family === 'membrane' || family === 'plate') {
+    const [rx, ry] = diskRadii(unit, family);
+    ctx.beginPath();
+    ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
+  } else if (family === 'shell') {
+    traceShell(ctx, unit, flare);
+  } else if (family === 'tube') {
+    traceTube(ctx, unit, (t) => tubeBulge(unit, shift, t), 0);
+  } else {
+    ctx.beginPath();
+    ctx.moveTo(-unit * 0.72, -unit * 0.16);
+    ctx.lineTo(unit * 0.92, -unit * 0.16);
+    ctx.lineTo(unit * 0.92, unit * 0.72);
+    ctx.lineTo(-unit * 0.72, unit * 0.72);
+    ctx.closePath();
+  }
+  ctx.clip();
 }
 
 function drawBody(ctx, family, unit, tone, flare, shift) {
@@ -325,30 +358,35 @@ function drawBody(ctx, family, unit, tone, flare, shift) {
   } else if (family === 'shell') {
     drawShell(ctx, unit, flare, tone, null, glass);
   } else if (family === 'tube') {
-    drawTube(ctx, unit, (t) => Math.abs(shift('tube', t)) * unit * 0.08, tone, null, glass);
+    drawTube(ctx, unit, (t) => tubeBulge(unit, shift, t), tone, null, glass);
   } else {
     drawBox(ctx, unit, (t) => shift('box', t) * unit * 0.06, tone, null);
   }
 }
 
-function drawBend(ctx, family, index, unit, bend, tint, tone, hot) {
+function drawBend(ctx, family, index, unit, bend, tint, hot) {
+  const width = Math.max(1.5, unit * (hot ? BAND * 1.35 : BAND));
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = width;
+  ctx.strokeStyle = tint;
   if (family === 'bar') {
-    drawCrest(ctx, unit, (t) => -modeDisplacement('bar', index, t) * unit * 0.26 * bend, tint, hot);
+    drawCrest(ctx, unit, (t) => -modeDisplacement('bar', index, t) * unit * 0.1 * bend);
   } else if (family === 'string') {
-    drawStringCord(ctx, unit, (t) => -modeDisplacement('string', index, t) * unit * 0.3 * bend, tone, tint);
+    drawCrest(ctx, unit, (t) => unit * 0.22 - modeDisplacement('string', index, t) * unit * 0.16 * bend);
   } else if (family === 'membrane' || family === 'plate') {
-    drawDiskRidges(ctx, unit, family, index, bend, tint);
+    drawDiskRidges(ctx, unit, family, index, width);
   } else if (family === 'shell') {
-    drawShellRibs(ctx, unit, index, bend, tint);
+    drawShellRibs(ctx, unit, index, width);
   } else if (family === 'tube') {
-    drawTubeCrest(ctx, unit, index, bend, tint);
+    drawTubeBand(ctx, unit, index, bend);
   } else {
-    drawBoxBend(ctx, unit, (t) => modeDisplacement('box', index, t) * unit * 0.08 * bend, tint);
+    drawBoxBend(ctx, unit, (t) => modeDisplacement('box', index, t) * unit * 0.05 * bend, tint);
   }
 }
 
-function drawCrest(ctx, unit, yAt, tint, hot) {
-  const samples = 32;
+function drawCrest(ctx, unit, yAt) {
+  const samples = 36;
   ctx.beginPath();
   for (let i = 0; i < samples; i++) {
     const t = i / (samples - 1);
@@ -357,34 +395,30 @@ function drawCrest(ctx, unit, yAt, tint, hot) {
     if (i === 0) ctx.moveTo(x, y);
     else ctx.lineTo(x, y);
   }
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
-  ctx.lineWidth = Math.max(hot ? 4 : 3, unit * (hot ? 0.11 : 0.075));
-  ctx.strokeStyle = mixHex(tint, '#3c403c', 0.42);
-  ctx.stroke();
-  ctx.lineWidth = Math.max(hot ? 2.4 : 1.6, unit * (hot ? 0.07 : 0.042));
-  ctx.strokeStyle = tint;
   ctx.stroke();
 }
 
-function drawTubeCrest(ctx, unit, index, bend, tint) {
+function drawTubeBand(ctx, unit, index, bend) {
   const samples = 28;
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
-  ctx.lineWidth = Math.max(2.4, unit * 0.05);
-  ctx.strokeStyle = tint;
-  for (const sign of [1, -1]) {
-    ctx.beginPath();
-    for (let i = 0; i < samples; i++) {
-      const t = i / (samples - 1);
-      const y = -unit + t * unit * 2;
-      const bulge = Math.abs(modeDisplacement('tube', index, t) * bend) * unit * 0.2;
-      const x = sign * (unit * 0.26 + bulge);
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    }
-    ctx.stroke();
+  ctx.beginPath();
+  for (let i = 0; i < samples; i++) {
+    const t = i / (samples - 1);
+    const y = -unit * 0.86 + t * unit * 1.72;
+    const x = modeDisplacement('tube', index, t) * bend * unit * 0.07;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
   }
+  ctx.stroke();
+}
+
+function barPoints(unit, yAt) {
+  const samples = 40;
+  const pts = [];
+  for (let i = 0; i < samples; i++) {
+    const t = i / (samples - 1);
+    pts.push([-unit + t * unit * 2, yAt(t)]);
+  }
+  return pts;
 }
 
 function ribbon(ctx, pts, half, ox, oy) {
@@ -395,34 +429,24 @@ function ribbon(ctx, pts, half, ox, oy) {
 }
 
 function drawBarSlab(ctx, unit, yAt, tone, tint, glass) {
-  const samples = 28;
-  const half = unit * 0.16;
-  const depth = unit * 0.055;
-  const pts = [];
-  for (let i = 0; i < samples; i++) {
-    const t = i / (samples - 1);
-    pts.push([-unit + t * unit * 2, yAt(t)]);
-  }
-  ribbon(ctx, pts, half, depth, depth);
+  const half = unit * 0.24;
+  const pts = barPoints(unit, yAt);
+  ctx.save();
+  ctx.translate(unit * 0.04, unit * 0.045);
+  ribbon(ctx, pts, half, 0, 0);
   ctx.fillStyle = tint ? mixHex(tint, tone.shade, 0.45) : tone.shade;
   ctx.fill();
+  ctx.restore();
 
   ribbon(ctx, pts, half, 0, 0);
-  ctx.fillStyle = faceGradient(ctx, 0, -half, 0, half, tone, tint);
+  ctx.fillStyle = faceGradient(ctx, -unit, -half, unit * 0.2, half, tone, tint);
   ctx.save();
   if (glass) ctx.globalAlpha *= 0.72;
   ctx.fill();
-  ctx.strokeStyle = tint ? mixHex(tint, tone.shade, 0.4) : tone.shade;
+  ctx.lineWidth = Math.max(1.15, unit * 0.012);
+  ctx.strokeStyle = tint ? mixHex(tint, tone.shade, 0.35) : tone.shade;
   ctx.stroke();
-  if (!tint) paintFinish(ctx, tone, unit, false);
-  ctx.restore();
-  ctx.beginPath();
-  pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y - half + unit * 0.028) : ctx.moveTo(x, y - half + unit * 0.028)));
-  ctx.save();
-  ctx.strokeStyle = tint ? mixHex(tint, '#ffffff', 0.35) : tone.rim;
-  ctx.globalAlpha *= 0.9;
-  ctx.lineWidth = Math.max(1, unit * 0.018);
-  ctx.stroke();
+  if (!tint) paintSurface(ctx, tone, unit, false, { cx: -unit * 0.28, cy: -half * 0.35, rx: unit * 0.42, ry: half * 0.28 });
   ctx.restore();
 }
 
@@ -449,11 +473,8 @@ function drawStringCord(ctx, unit, yAt, tone, tint) {
   }
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
-  ctx.lineWidth = Math.max(2.5, unit * (tint ? 0.055 : 0.04));
-  ctx.strokeStyle = tint || tone.shade;
-  ctx.stroke();
-  ctx.lineWidth = Math.max(1.25, unit * 0.018);
-  ctx.strokeStyle = tint ? mixHex(tint, '#ffffff', 0.4) : tone.rim;
+  ctx.lineWidth = Math.max(2.5, unit * (tint ? 0.05 : 0.055));
+  ctx.strokeStyle = tint || tone.mid;
   ctx.stroke();
 }
 
@@ -487,28 +508,17 @@ function drawDisk(ctx, unit, family, grow, tone, tint, glass) {
   ctx.save();
   if (glass) ctx.globalAlpha *= 0.7;
   ctx.fill();
+  ctx.lineWidth = Math.max(1.15, unit * 0.012);
   ctx.strokeStyle = tint ? mixHex(tint, tone.shade, 0.4) : tone.shade;
   ctx.stroke();
-  if (!tint) paintFinish(ctx, tone, unit, true);
+  if (!tint) paintSurface(ctx, tone, unit, true, { cx: -rx * 0.22, cy: -ry * 0.24, rx: rx * 0.42, ry: ry * 0.26 });
   ctx.restore();
-  if (!tint && tone.kind !== 'matte') {
-    ctx.save();
-    ctx.beginPath();
-    ctx.ellipse(-rx * 0.18, -ry * 0.22, rx * 0.42, ry * 0.16, -0.6, Math.PI * 0.15, Math.PI * 1.15);
-    ctx.strokeStyle = tone.rim;
-    ctx.globalAlpha *= 0.7;
-    ctx.lineWidth = Math.max(1.25, unit * 0.025);
-    ctx.stroke();
-    ctx.restore();
-  }
 }
 
-function drawDiskRidges(ctx, unit, family, index, bend, tint) {
+function drawDiskRidges(ctx, unit, family, index, width) {
   const shape = modeShape(family, index);
   const [rx, ry] = diskRadii(unit, family);
-  ctx.strokeStyle = tint;
-  ctx.lineWidth = Math.max(1.5, unit * 0.035 * (0.45 + Math.min(1, Math.abs(bend))));
-  ctx.lineCap = 'round';
+  ctx.lineWidth = width;
   for (let ring = 1; ring <= shape.rings; ring++) {
     const f = ring / (shape.rings + 0.65);
     ctx.beginPath();
@@ -516,7 +526,7 @@ function drawDiskRidges(ctx, unit, family, index, bend, tint) {
     ctx.stroke();
   }
   for (let spoke = 0; spoke < shape.spokes; spoke++) {
-    const angle = (Math.PI * spoke) / shape.spokes + bend * 0.04;
+    const angle = (Math.PI * spoke) / shape.spokes;
     ctx.beginPath();
     ctx.moveTo(Math.cos(angle) * rx * 0.92, Math.sin(angle) * ry * 0.92);
     ctx.lineTo(-Math.cos(angle) * rx * 0.92, -Math.sin(angle) * ry * 0.92);
@@ -546,9 +556,10 @@ function drawShell(ctx, unit, flare, tone, tint, glass) {
   ctx.save();
   if (glass) ctx.globalAlpha *= 0.74;
   ctx.fill();
+  ctx.lineWidth = Math.max(1.15, unit * 0.012);
   ctx.strokeStyle = tone.shade;
   ctx.stroke();
-  if (!tint) paintFinish(ctx, tone, unit, true);
+  if (!tint) paintSurface(ctx, tone, unit, true, { cx: -unit * 0.22, cy: -unit * 0.05, rx: unit * 0.28, ry: unit * 0.16 });
   ctx.restore();
   const lip = unit * (0.72 + flare * 0.4);
   ctx.beginPath();
@@ -566,80 +577,72 @@ function drawShell(ctx, unit, flare, tone, tint, glass) {
   ctx.stroke();
 }
 
-function drawShellRibs(ctx, unit, index, bend, tint) {
-  const meridians = modeShape('shell', index).meridians;
-  const push = unit * 0.05 * bend;
-  ctx.save();
-  traceShell(ctx, unit, 0);
-  ctx.clip();
-  ctx.lineCap = 'round';
+function drawShellRibs(ctx, unit, index, width) {
+  const meridians = Math.min(4, modeShape('shell', index).meridians);
+  ctx.lineWidth = width;
   for (let i = 0; i < meridians; i++) {
     const side = (i / (meridians - 1 || 1) - 0.5) * 2;
-    const x = side * unit * 0.5 + push * (0.35 + Math.abs(side));
+    const x = side * unit * 0.46;
     ctx.beginPath();
-    ctx.moveTo(x * 0.42, -unit * 0.12);
-    ctx.quadraticCurveTo(x * 1.15, unit * 0.28, x * 0.22, unit * 0.78);
-    ctx.lineWidth = Math.max(2, unit * 0.055);
-    ctx.strokeStyle = tint;
-    ctx.stroke();
-    ctx.lineWidth = Math.max(1, unit * 0.016);
-    ctx.strokeStyle = mixHex(tint, '#ffffff', 0.45);
+    ctx.moveTo(x * 0.42, -unit * 0.08);
+    ctx.quadraticCurveTo(x, unit * 0.28, x * 0.18, unit * 0.78);
     ctx.stroke();
   }
-  ctx.restore();
+}
+
+function tubeBulge(unit, shift, t) {
+  return Math.min(unit * 0.06, Math.abs(shift('tube', t)) * unit * 0.035);
+}
+
+function traceTube(ctx, unit, extra, shift) {
+  const samples = 32;
+  const half = unit * 0.34;
+  ctx.beginPath();
+  for (let i = 0; i < samples; i++) {
+    const t = i / (samples - 1);
+    const y = -unit + t * unit * 2;
+    const x = half + extra(t);
+    if (i === 0) ctx.moveTo(x + shift, y + shift);
+    else ctx.lineTo(x + shift, y + shift);
+  }
+  for (let i = samples - 1; i >= 0; i--) {
+    const t = i / (samples - 1);
+    const y = -unit + t * unit * 2;
+    ctx.lineTo(-(half + extra(t)) + shift, y + shift);
+  }
+  ctx.closePath();
 }
 
 function drawTube(ctx, unit, extra, tone, tint, glass) {
-  const samples = 26;
-  const trace = (shift) => {
-    ctx.beginPath();
-    for (let i = 0; i < samples; i++) {
-      const t = i / (samples - 1);
-      const y = -unit + t * unit * 2;
-      const x = unit * 0.26 + extra(t);
-      if (i === 0) ctx.moveTo(x + shift, y + shift);
-      else ctx.lineTo(x + shift, y + shift);
-    }
-    for (let i = samples - 1; i >= 0; i--) {
-      const t = i / (samples - 1);
-      const y = -unit + t * unit * 2;
-      ctx.lineTo(-(unit * 0.26 + extra(t)) + shift, y + shift);
-    }
-    ctx.closePath();
-  };
-  const depth = unit * 0.05;
-  trace(depth);
+  ctx.save();
+  ctx.translate(unit * 0.035, unit * 0.04);
+  traceTube(ctx, unit, extra, 0);
   ctx.fillStyle = tint ? mixHex(tint, tone.shade, 0.5) : tone.shade;
   ctx.fill();
-  trace(0);
+  ctx.restore();
+  traceTube(ctx, unit, extra, 0);
   ctx.fillStyle = faceGradient(ctx, -unit * 0.3, 0, unit * 0.3, 0, tone, tint);
   ctx.save();
   if (glass) ctx.globalAlpha *= 0.72;
   ctx.fill();
+  ctx.lineWidth = Math.max(1.15, unit * 0.012);
   ctx.strokeStyle = tint ? mixHex(tint, tone.shade, 0.35) : tone.shade;
   ctx.stroke();
-  if (!tint && tone.kind === 'sheen') {
-    ctx.beginPath();
-    ctx.moveTo(-unit * 0.1, -unit * 0.82);
-    ctx.lineTo(-unit * 0.1, unit * 0.82);
-    ctx.strokeStyle = tone.rim;
-    ctx.globalAlpha *= 0.65;
-    ctx.lineWidth = Math.max(1.5, unit * 0.03);
-    ctx.stroke();
-  }
+  if (!tint) paintSurface(ctx, tone, unit, true, { cx: -unit * 0.1, cy: -unit * 0.2, rx: unit * 0.12, ry: unit * 0.36 });
   ctx.restore();
+  const mouth = unit * 0.34 + extra(0);
   ctx.beginPath();
-  ctx.ellipse(0, -unit, unit * 0.26, unit * 0.09, 0, 0, Math.PI * 2);
+  ctx.ellipse(0, -unit, mouth, unit * 0.1, 0, 0, Math.PI * 2);
   ctx.fillStyle = tint ? mixHex(tint, tone.lit, 0.4) : tone.lit;
   ctx.fill();
   ctx.beginPath();
-  ctx.ellipse(0, -unit, unit * 0.16, unit * 0.05, 0, 0, Math.PI * 2);
+  ctx.ellipse(0, -unit, mouth * 0.62, unit * 0.055, 0, 0, Math.PI * 2);
   ctx.fillStyle = tone.shade;
   ctx.fill();
   ctx.strokeStyle = tint ? mixHex(tint, '#ffffff', 0.3) : tone.rim;
-  ctx.lineWidth = Math.max(1, unit * 0.015);
+  ctx.lineWidth = Math.max(1, unit * 0.012);
   ctx.beginPath();
-  ctx.ellipse(0, -unit * 1.01, unit * 0.22, unit * 0.045, 0, Math.PI, Math.PI * 2);
+  ctx.ellipse(0, -unit * 1.02, mouth * 0.86, unit * 0.045, 0, Math.PI, Math.PI * 2);
   ctx.stroke();
 }
 
@@ -699,10 +702,5 @@ function drawBox(ctx, unit, bow, tone, tint) {
   ctx.fillStyle = faceGradient(ctx, -unit * 0.7, -unit * 0.15, unit * 0.9, unit * 0.7, tone, tint);
   ctx.fill();
   ctx.stroke();
-  if (!tint) {
-    ctx.save();
-    ctx.clip();
-    paintFinish(ctx, tone, unit, true);
-    ctx.restore();
-  }
+  if (!tint) paintSurface(ctx, tone, unit, true, { cx: -unit * 0.2, cy: unit * 0.05, rx: unit * 0.28, ry: unit * 0.16 });
 }

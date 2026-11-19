@@ -83,7 +83,7 @@ test('several partials show at once, and a solo keeps only that one', () => {
     { gainDb: -28, decay: 0.08 },
   ];
   const layered = shownModes(partials);
-  assert.deepEqual(layered.map((mode) => mode.index), [0, 1, 2, 3]);
+  assert.deepEqual(layered.map((mode) => mode.index), [0, 1, 2]);
   assert.equal(layered.every((mode) => mode.hot === false), true);
   const solo = shownModes(partials, { selected: 3 });
   assert.deepEqual(solo.map((mode) => mode.index), [3]);
