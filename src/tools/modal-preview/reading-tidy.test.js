@@ -64,6 +64,15 @@ test('explicit materials, scenes, and singing bowls keep a clean reading', () =>
   assert.match(bowl.reading, /Singing bowl:/);
   assert.match(bowl.reading, /\bmetal\b/);
   assert.doesNotMatch(bowl.reading, /glass bowl/i);
+  const plainBowl = readRecipe('glass bowl');
+  const sameBowl = readRecipe('glass bowl made of glass');
+  assert.equal(sameBowl.controls.voice, plainBowl.controls.voice);
+  assert.equal(sameBowl.controls.brightness, plainBowl.controls.brightness);
+  assert.equal(sameBowl.controls.damping, plainBowl.controls.damping);
+  const woodBowl = readRecipe('glass bowl made of wood');
+  assert.equal(woodBowl.material, 'wood');
+  assert.equal(woodBowl.controls.voice, '');
+
   const clay = readRecipe('singing bowl made of clay');
   assert.equal(clay.objectName, 'Singing bowl');
   assert.equal(clay.material, 'clay');

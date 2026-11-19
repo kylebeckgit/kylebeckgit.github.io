@@ -116,7 +116,11 @@ function applyEntry(recipe, entry, promptText) {
 function overlayMaterial(recipe, material, statedWord = '') {
   if (!material) return;
   const word = statedWord || material.material;
-  if (!statedWord && material.material === recipe.material) return;
+  const same = material.material === recipe.material || word === recipe.material;
+  if (same) {
+    if (statedWord) recipe.material = word;
+    return;
+  }
   recipe.material = word;
   recipe.controls.brightness = clamp(recipe.controls.brightness + (material.brightness ?? 0) * 0.45, -1, 1);
   recipe.controls.damping = clamp(recipe.controls.damping + Math.max(-0.2, Math.min(0.2, (material.damping ?? 0.4) - 0.4)), 0, 1);
