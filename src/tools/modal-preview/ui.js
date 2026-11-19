@@ -363,8 +363,10 @@ export function mount(root) {
     strike(state, false);
   };
   keys.addEventListener('pointerup', release);
-  keys.addEventListener('touchend', release);
   keys.addEventListener('pointercancel', release);
+  // iOS fires touchend as well as pointerup for one lift. A second release
+  // can cut off the next note, so touchend is only for browsers without pointer events.
+  if (typeof PointerEvent !== 'function') keys.addEventListener('touchend', release);
   root.querySelector('[data-stop]').addEventListener('click', () => silence(state));
 
   drawButton.addEventListener('click', () => {
