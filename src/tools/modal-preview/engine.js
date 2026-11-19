@@ -286,6 +286,7 @@ export function sanitizeControls(input) {
   const countNum = Number(input?.count);
   const voices = new Set(['glass', 'gong', 'bonsho', 'marimba', 'cup', 'shell', 'neutral', 'block', 'crystal', 'abyss', 'rumble']);
   const voice = voices.has(input?.voice) ? input.voice : '';
+  const variations = new Set(['bright', 'dark', 'long', 'dry', 'detune']);
   return {
     preset,
     stiffness: num(input?.stiffness, 0, 1, base.stiffness),
@@ -297,6 +298,13 @@ export function sanitizeControls(input) {
     pitchScale: num(input?.pitchScale, 0.25, 4, 1),
     voice,
     count: Number.isFinite(countNum) && countNum > 0 ? Math.round(clamp(countNum, 1, PARTIALS)) : PARTIALS,
+    // Card treatments. Knob ranges cannot express them once a voice is
+    // already at a brightness or decay extreme, so they ride along and are
+    // applied after the voice formulas.
+    variation: variations.has(input?.variation) ? input.variation : '',
+    variationTilt: num(input?.variationTilt, -80, 80, 0),
+    variationDecay: num(input?.variationDecay, 0.2, 4, 1),
+    variationLift: num(input?.variationLift, 0, 1, 0),
   };
 }
 
@@ -310,6 +318,10 @@ export function carryControls(controls) {
     count: clean.count,
     decayScale: clean.decayScale,
     pitchScale: clean.pitchScale,
+    variation: clean.variation,
+    variationTilt: clean.variationTilt,
+    variationDecay: clean.variationDecay,
+    variationLift: clean.variationLift,
   };
 }
 
@@ -321,10 +333,14 @@ export function controlsFromKnobs(knobs, carried) {
     count: keep ? carried.count : 64,
     decayScale: keep ? carried.decayScale : 1,
     pitchScale: keep ? carried.pitchScale : 1,
+    variation: keep ? carried.variation : '',
+    variationTilt: keep ? carried.variationTilt : 0,
+    variationDecay: keep ? carried.variationDecay : 1,
+    variationLift: keep ? carried.variationLift : 0,
   });
 }
 
-export function buildPartials(rawControls) {
+export function buildPartials(rawControls, options = {}) {
   const controls = sanitizeControls(rawControls);
   let ratios = baseRatios(controls.preset, controls.voice).slice(0, controls.count).map((ratio, index) => {
     const n = index + 1;
@@ -441,7 +457,8 @@ export function buildPartials(rawControls) {
     partial.gainDb = clamp(partial.gainDb - peak, -96, 0);
     partial.decay = clamp(partial.decay * (controls.decayScale || 1), 0.05, 30);
   }
-  return partials;
+  if (options.variation === false) return partials;
+  return applyVariation(partials, controls);
 }
 
 function dropCloseTwins(partials, minCents = 55) {
@@ -459,7 +476,7 @@ function dropCloseTwins(partials, minCents = 55) {
 
 export function previewPartials(rawControls) {
   const controls = sanitizeControls(rawControls);
-  const partials = buildPartials(controls);
+  const partials = buildPartials(controls, { variation: false });
   // A plucked string rings for seconds. Fletcher & Rossing, The Physics of
   // Musical Instruments: partials stay harmonic, and internal friction plus
   // air damping take the upper ones first. Rubber is left on the short curve.
@@ -484,12 +501,173 @@ export function previewPartials(rawControls) {
     // wide locks onto the neighbor, about −90 to −100 cents, even though the
     // resonator is playing the listed frequency. Keep only modes a 20 ms fit
     // can assign, still on the shell formula.
-    return dropCloseTwins(tuned, 110);
+    tuned = dropCloseTwins(tuned, 110);
+  } else if (controls.preset === 'membrane' || controls.voice === 'bonsho' || controls.voice === 'glass' || controls.voice === 'gong') {
+    tuned = dropCloseTwins(tuned);
   }
-  if (controls.preset === 'membrane' || controls.voice === 'bonsho' || controls.voice === 'glass' || controls.voice === 'gong') {
-    return dropCloseTwins(tuned);
+  return applyVariation(tuned, controls);
+}
+
+function centroidRatio(partials) {
+  let weight = 0;
+  let centroid = 0;
+  for (const partial of partials) {
+    const power = 10 ** (partial.gainDb / 10);
+    weight += power;
+    centroid += power * partial.ratio;
   }
-  return tuned;
+  return weight > 0 ? centroid / weight : 0;
+}
+
+function tiltGains(partials, dbPerOctave) {
+  if (!dbPerOctave) return partials;
+  let min = Infinity;
+  for (const partial of partials) min = Math.min(min, partial.ratio);
+  if (!(min > 0)) return partials;
+  return partials.map((partial) => {
+    const octaves = Math.log2(Math.max(partial.ratio, 1e-9) / min);
+    return { ...partial, gainDb: partial.gainDb + dbPerOctave * octaves };
+  });
+}
+
+function peakNormalize(partials) {
+  const peak = Math.max(...partials.map((partial) => partial.gainDb));
+  return partials.map((partial) => ({ ...partial, gainDb: clamp(partial.gainDb - peak, -96, 0) }));
+}
+
+function seekTilt(partials, target, direction) {
+  const current = centroidRatio(partials);
+  if (!(current > 0) || !(target > 0)) return 0;
+  if (direction > 0 && current >= target) return 0;
+  if (direction < 0 && current <= target) return 0;
+  let lo = 0;
+  let hi = 80;
+  let best = 80;
+  for (let i = 0; i < 16; i++) {
+    const mid = (lo + hi) / 2;
+    const centroid = centroidRatio(tiltGains(partials, direction * mid));
+    const reached = direction > 0 ? centroid >= target : centroid <= target;
+    if (reached) {
+      best = mid;
+      hi = mid;
+    } else lo = mid;
+  }
+  return direction * best;
+}
+
+function plainPartials(controls) {
+  const clean = sanitizeControls({
+    ...controls,
+    variation: '',
+    variationTilt: 0,
+    variationDecay: 1,
+    variationLift: 0,
+  });
+  // Brightness above the export cap never reaches Hear. Plan against the
+  // partials the page actually plays.
+  const fundamental = playedFundamental(clean.pitchScale);
+  return audiblePartials(previewPartials(clean), { fundamental, sampleRate: 48000 });
+}
+
+// How far a card has to push after the voice formulas. Bright and dark are
+// measured against the unvaried body, because a gong ignores the brightness
+// knob and a black hole is already sitting on the clamp.
+export function planVariation(baseControls, nudgedControls, key) {
+  const empty = { variation: '', variationTilt: 0, variationDecay: 1, variationLift: 0 };
+  if (key === 'detune') return { ...empty, variation: 'detune' };
+  if (key === 'dry') return { ...empty, variation: 'dry', variationDecay: 0.5 };
+  if (key !== 'bright' && key !== 'dark' && key !== 'long') return empty;
+  const base = plainPartials(baseControls);
+  const nudged = plainPartials(nudgedControls);
+  if (!base.length || !nudged.length) return { ...empty, variation: key };
+  const baseCentroid = centroidRatio(base);
+  const baseLong = Math.max(...base.map((partial) => partial.decay));
+  const nudgedLong = Math.max(...nudged.map((partial) => partial.decay));
+  if (key === 'bright') {
+    return { ...empty, variation: 'bright', variationTilt: seekTilt(nudged, baseCentroid * 1.55, 1) };
+  }
+  if (key === 'dark') {
+    const needed = baseLong > 0 ? (baseLong * 0.58) / Math.max(nudgedLong, 0.05) : 0.58;
+    return {
+      ...empty,
+      variation: 'dark',
+      variationTilt: seekTilt(nudged, baseCentroid * 0.88, -1),
+      variationDecay: clamp(needed, 0.2, 1),
+    };
+  }
+  const cap = 30;
+  if (nudgedLong * 1.6 <= cap) {
+    return { ...empty, variation: 'long', variationDecay: 1.6 };
+  }
+  // The longest partial is already on the decay cap. Stretch it as far as
+  // the cap allows, and pull the shorter partials up with it so the tail
+  // keeps its upper modes instead of collapsing to one tone.
+  return {
+    ...empty,
+    variation: 'long',
+    variationDecay: clamp(cap / Math.max(nudgedLong, 0.05), 1, 1.6),
+    variationLift: 0.84,
+  };
+}
+
+function spreadRatios(partials) {
+  let body = partials[0];
+  for (const partial of partials) {
+    if (Math.abs(Math.log(partial.ratio)) < Math.abs(Math.log(body.ratio))) body = partial;
+  }
+  return partials.map((partial) => {
+    if (partial === body || !(body.ratio > 0)) return partial;
+    const octaves = Math.log2(partial.ratio / body.ratio);
+    const cents = 36 * Math.sign(octaves || 1) * Math.min(3, Math.abs(octaves));
+    return { ...partial, ratio: partial.ratio * 2 ** (cents / 1200) };
+  });
+}
+
+function inHearBand(partial, fundamental) {
+  if (!(partial.ratio > 0) || !(partial.decay > 0)) return false;
+  const note = fundamental > 0 ? fundamental : A4_HZ;
+  if (partial.ratio * A4_HZ > ZEBRA_PARTIAL_LIMIT_HZ) return false;
+  if (partial.ratio * note > 24000) return false;
+  return partial.decay >= 0.005;
+}
+
+function thickenTail(partials) {
+  // A fundamental already at the decay cap hides the other partials in the
+  // tail. Open them a little so the longer upper modes are part of the note,
+  // without turning the card into the bright variation.
+  return partials.map((partial) => {
+    const opened = partial.gainDb + (-10 - partial.gainDb) * 0.38;
+    return { ...partial, gainDb: Math.max(partial.gainDb, opened) };
+  });
+}
+
+function applyVariation(partials, controls) {
+  if (!partials.length) return partials;
+  const tilt = controls.variationTilt || 0;
+  const decay = controls.variationDecay > 0 ? controls.variationDecay : 1;
+  const lift = controls.variationLift || 0;
+  const detune = controls.variation === 'detune';
+  if (!detune && !tilt && decay === 1 && !lift) return partials;
+  const fundamental = playedFundamental(controls.pitchScale);
+  let source = detune ? spreadRatios(partials) : partials;
+  const band = [];
+  const rest = [];
+  for (const partial of source) (inHearBand(partial, fundamental) ? band : rest).push(partial);
+  let next = band;
+  if (tilt) next = tiltGains(next, tilt);
+  if (decay !== 1 || lift > 0) {
+    const cap = 30;
+    const stretch = (partial) => {
+      let seconds = partial.decay * decay;
+      if (lift > 0) seconds += (cap - seconds) * lift;
+      return { ...partial, decay: clamp(seconds, 0.05, cap) };
+    };
+    next = next.map(stretch);
+    for (let i = 0; i < rest.length; i++) rest[i] = stretch(rest[i]);
+  }
+  if (lift > 0) next = thickenTail(next);
+  if (tilt || lift > 0) next = peakNormalize(next);
+  return next.length ? [...next, ...rest].sort((a, b) => a.ratio - b.ratio) : partials;
 }
 
 // If stiffness moved the partial nearest ratio 1, move the note with it.
@@ -684,6 +862,15 @@ export function playedFundamental(pitchScale, baseHz = A4_HZ) {
   const scale = Number(pitchScale);
   const base = Number(baseHz);
   return (base > 0 ? base : A4_HZ) * (scale > 0 ? scale : 1);
+}
+
+// Hear holds the note long enough to reach the tail. A fixed 1.6 s clip of
+// an 18 s body and a 29 s body is the same attack.
+export function heardSeconds(partials, { exciter = 'mallet', zebra = false } = {}) {
+  let longest = 0;
+  for (const partial of partials || []) longest = Math.max(longest, partial.decay || 0);
+  const body = exciter === 'bow' ? 1.1 : Math.min(7.5, Math.max(1.6, longest * 0.42));
+  return zebra ? Math.max(4, body) : body;
 }
 
 export function noteFrequency(name) {

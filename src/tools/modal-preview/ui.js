@@ -1,4 +1,4 @@
-import { A4_HZ, PRESETS, NOTE_BUTTONS, ZEBRA_PARTIAL_LIMIT_HZ, buildPartials, previewPartials, zebraExport, audiblePartials, fromCsv, noteFrequency, playedFundamental, defaultControls, sanitizeControls, alignReference, carryControls, controlsFromKnobs } from './engine.js';
+import { A4_HZ, PRESETS, NOTE_BUTTONS, ZEBRA_PARTIAL_LIMIT_HZ, buildPartials, previewPartials, zebraExport, audiblePartials, fromCsv, noteFrequency, playedFundamental, heardSeconds, defaultControls, sanitizeControls, alignReference, carryControls, controlsFromKnobs } from './engine.js';
 import { analyzeSamples, decodeRecording, resampleMono, parseRoot, frequencyToNote } from './analyze.js';
 import { renderPreview, scaleToPeak, strikeWeight } from './resonator.js';
 import { aimSlices, createFitMotion, createSliceMotion, defaultCamera, hitPartial, MORPH_MS, paintModalView, sampleSlices, slicesMoving } from './modal-view.js';
@@ -115,6 +115,20 @@ export function mount(root) {
   function snapshot() {
     const list = state.profilePartials || state.partials;
     return list.map((partial) => ({ ratio: partial.ratio, gainDb: partial.gainDb, decay: partial.decay }));
+  }
+
+  function coverProfile() {
+    const select = root.querySelector('[data-density]');
+    const count = state.profilePartials?.length || 0;
+    if (!select || select.tagName !== 'SELECT' || !(count > 0)) return false;
+    const options = [...select.options].map((option) => Number(option.value)).filter((value) => value > 0);
+    options.sort((a, b) => a - b);
+    const current = Number(select.value);
+    if (current >= count) return false;
+    const next = options.find((value) => value >= count) ?? options[options.length - 1];
+    if (!(next > current)) return false;
+    select.value = String(next);
+    return true;
   }
 
   function readShape() {
@@ -841,6 +855,14 @@ export function mount(root) {
     if (recipe.name) state.profileName = recipe.name;
     if (history) pushHistory();
     rebuild();
+    // Density 16 keeps only the lowest partials. A bright black hole puts its
+    // new energy above that cut, so the grid has to cover the whole profile
+    // or Hear and the 3D view stay on the dark body.
+    if (coverProfile()) {
+      publishShape(0);
+      render();
+      pushModes();
+    }
     readPlayControls();
     if (partials?.length) {
       adopt(partials, true);
@@ -1068,9 +1090,9 @@ function playHeard(state, recipe) {
   const resumed = ctx.resume();
   const exciter = recipe.exciter || state.exciter;
   const zebra = state.canvas?.dataset.view === 'zebra';
-  const seconds = zebra ? 4 : (exciter === 'bow' ? 1.1 : 1.6);
   const fundamental = state.hearFundamental || noteFrequency(state.note);
   const partials = audiblePartials(state.partials, { fundamental, sampleRate: ctx.sampleRate });
+  const seconds = heardSeconds(partials, { exciter, zebra });
   const samples = renderPreview(partials, {
     fundamental,
     velocity: state.velocity,
@@ -1081,7 +1103,10 @@ function playHeard(state, recipe) {
     sampleRate: ctx.sampleRate,
     seconds,
     impulse: false,
-    matchGains: zebra,
+    // The exciter model collapses a gong or a chandelier to a click, so the
+    // Bright / Dark / Long partials never reach the speaker. Hear plays the
+    // partial list itself.
+    matchGains: true,
     glide: zebra && state.controls?.voice === 'gong' ? { cents: 35, seconds: 0.45, maxRatio: 6 } : undefined,
     releaseAt: exciter === 'bow' ? Math.floor(ctx.sampleRate * 0.85) : undefined,
   });

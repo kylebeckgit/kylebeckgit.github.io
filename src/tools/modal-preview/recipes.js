@@ -2,7 +2,7 @@
 // (what it is, how it is played, how it dies) and the editor's existing
 // series turns that into partials. It does not invent 64 numbers.
 
-import { sanitizeControls } from './engine.js';
+import { planVariation, sanitizeControls } from './engine.js';
 import { ADJECTIVES, hashFallback, matchReading, sceneId } from './vocabulary.js';
 
 export const STARTERS = [
@@ -236,7 +236,13 @@ export function readRecipe(prompt, current = null) {
     size: current.size,
     traits: [...(current.traits || [])],
     fallback: false,
-    controls: { ...current.controls },
+    controls: {
+      ...current.controls,
+      variation: '',
+      variationTilt: 0,
+      variationDecay: 1,
+      variationLift: 0,
+    },
     exciter: current.exciter,
     hardness: current.hardness,
     position: current.position,
@@ -290,7 +296,10 @@ function shift(recipe, axis) {
   if (axis.brightness) controls.brightness = clamp(controls.brightness + axis.brightness, -1, 1);
   if (axis.damping) controls.damping = clamp(controls.damping + axis.damping, 0, 1);
   if (axis.stiffness) controls.stiffness = clamp(controls.stiffness + axis.stiffness, 0, 1);
-  return sanitizeControls(controls);
+  // The knob step still moves the panel. The plan is what the voice formulas
+  // cannot do: a gong drops brightness, and a black hole is already at both clamps.
+  const plan = planVariation(recipe.controls, controls, axis.key);
+  return sanitizeControls({ ...controls, ...plan });
 }
 
 function withPlay(core, controls, name, line) {
