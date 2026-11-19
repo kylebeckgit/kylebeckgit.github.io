@@ -3,48 +3,7 @@
 // series turns that into partials. It does not invent 64 numbers.
 
 import { sanitizeControls } from './engine.js';
-
-const FAMILIES = [
-  { test: /rubber/, preset: 'string', stiffness: 0.01, brightness: -0.4, damping: 0.82, oddEven: 0, exciter: 'click', hardness: 0.3 },
-  { test: /mug|ceramic|porcelain|\bcup\b/, preset: 'bell', voice: 'cup', count: 6, stiffness: 0, brightness: -0.08, damping: 0.48, oddEven: 0, exciter: 'mallet', hardness: 0.45 },
-  { test: /\bcan\b|\btin\b/, preset: 'plate', voice: 'shell', count: 20, stiffness: 0.02, brightness: 0.12, damping: 0.42, oddEven: 0, exciter: 'mallet', hardness: 0.7 },
-  { test: /tube|aluminium|aluminum|röhre|\brohr\b|tuyau|\btubo\b/, preset: 'open-pipe', stiffness: 0.04, brightness: 0.18, damping: 0.22, oddEven: 0, exciter: 'mallet', hardness: 0.55 },
-  { test: /gamelan|bonang|gender|gangsa/, preset: 'bell', stiffness: 0.62, brightness: 0.12, damping: 0.3, oddEven: 0.05, exciter: 'mallet', hardness: 0.45 },
-  { test: /clarinett?|closed pipe/, preset: 'closed-pipe', stiffness: 0.02, brightness: -0.05, damping: 0.42, oddEven: 0.85, exciter: 'burst', hardness: 0.4 },
-  { test: /flute|shakuhachi|panpipe|open pipe/, preset: 'open-pipe', stiffness: 0.02, brightness: 0.1, damping: 0.48, oddEven: 0.1, exciter: 'burst', hardness: 0.35 },
-  { test: /drum|membrane|skin|djembe|log|trommel|tambou?r|tamburo/, preset: 'membrane', stiffness: 0.08, brightness: -0.25, damping: 0.72, oddEven: 0, exciter: 'mallet', hardness: 0.6 },
-  { test: /bonsho|梵鐘|鐘/, preset: 'bell', voice: 'bonsho', count: 12, stiffness: 0, brightness: 0, damping: 0.12, oddEven: 0, exciter: 'mallet', hardness: 0.4 },
-  { test: /gong|cymbal|tam-?tam/, preset: 'plate', voice: 'gong', count: 40, stiffness: 0, brightness: 0.02, damping: 0.12, oddEven: 0, exciter: 'mallet', hardness: 0.7 },
-  { test: /singing bowl|glass bowl|crystal bowl|crystal|verre|vidrio|\bglas\b|\bglass\b/, preset: 'plate', voice: 'glass', count: 7, stiffness: 0.02, brightness: -0.08, damping: 0.08, oddEven: 0, exciter: 'mallet', hardness: 0.25 },
-  { test: /bell|chime|glocke|cloche|campana/, preset: 'bell', stiffness: 0.04, brightness: 0, damping: 0.2, oddEven: 0, exciter: 'mallet', hardness: 0.42 },
-  { test: /stahlplatte|\bplatte\b|blech|\bplate\b|\bsteel\b/, preset: 'plate', voice: '', count: 64, stiffness: 0.05, brightness: 0.48, damping: 0.3, oddEven: 0, exciter: 'mallet', hardness: 0.72 },
-  { test: /marimba|xylophone|vibraphone|rosewood|wood bar|\bbar\b/, preset: 'bar', voice: 'marimba', count: 12, stiffness: 0.04, brightness: -0.12, damping: 0.42, oddEven: 0, exciter: 'mallet', hardness: 0.55 },
-  { test: /piano|guitar|harp|string|pluck|saite|cuerda|\bcorde\b/, preset: 'string', stiffness: 0.04, brightness: 0.05, damping: 0.4, oddEven: 0, exciter: 'click', hardness: 0.5 },
-];
-
-const OBJECT_NAMES = [
-  [/glass bowl|crystal bowl/, 'Glass bowl'],
-  [/singing bowl/, 'Singing bowl'],
-  [/gamelan/, 'Gamelan'],
-  [/marimba/, 'Marimba'],
-  [/xylophone/, 'Xylophone'],
-  [/rosewood/, 'Rosewood bar'],
-  [/prayer bell|temple bell/, 'Prayer bell'],
-  [/鐘|bonsho|梵鐘/, 'Bonsho'],
-  [/glocke|cloche|campana/, 'Bell'],
-  [/bell/, 'Bell'],
-  [/gong/, 'Gong'],
-  [/stahlplatte|\bplatte\b/, 'Plate'],
-  [/cymbal/, 'Cymbal'],
-  [/drum/, 'Drum'],
-  [/flute/, 'Flute'],
-  [/clarinet/, 'Clarinet'],
-  [/guitar/, 'Guitar'],
-  [/piano/, 'Piano'],
-  [/metal plate|\bplate\b/, 'Metal plate'],
-  [/bowl/, 'Bowl'],
-  [/string/, 'String'],
-];
+import { ADJECTIVES, hashFallback, matchReading, sceneId } from './vocabulary.js';
 
 export const STARTERS = [
   starter('Soft glass bowl', 'A glass bowl struck softly, with a long shimmer.', 'plate', { stiffness: 0.18, brightness: 0.28, damping: 0.16, oddEven: 0, seed: 0 }, { exciter: 'mallet', hardness: 0.22, position: 0.16 }),
@@ -83,27 +42,13 @@ function hashString(text) {
 
 export function objectName(text) {
   const source = String(text || '').toLowerCase();
-  for (const [test, name] of OBJECT_NAMES) {
-    if (test.test(source)) return name;
-  }
-  return '';
-}
-
-function mentions(text, test) {
-  const re = new RegExp(test.source, test.flags.includes('g') ? test.flags : `${test.flags}g`);
-  let match;
-  while ((match = re.exec(text))) {
-    const before = text.slice(Math.max(0, match.index - 64), match.index);
-    if (/\bnot\b|\bno\b|n't\b/.test(before)) continue;
-    return true;
-  }
-  return false;
+  return matchReading(source).object?.name || matchReading(source).material?.name || '';
 }
 
 function familyOf(text) {
-  for (const family of FAMILIES) {
-    if (mentions(text, family.test)) return family;
-  }
+  const reading = matchReading(text);
+  if (reading.object || reading.material) return reading;
+  if (sceneId(text)) return { scene: sceneId(text) };
   return null;
 }
 
@@ -132,17 +77,70 @@ function blankRecipe() {
   };
 }
 
-function applyFamily(recipe, family) {
-  recipe.controls.preset = family.preset;
-  recipe.controls.stiffness = family.stiffness;
-  recipe.controls.brightness = family.brightness;
-  recipe.controls.damping = family.damping;
-  recipe.controls.oddEven = family.oddEven;
-  recipe.controls.voice = family.voice || '';
-  recipe.controls.count = family.count || 64;
-  recipe.exciter = family.exciter;
-  recipe.hardness = family.hardness;
+function applyEntry(recipe, entry, promptText) {
+  recipe.objectName = entry.name;
+  recipe.material = entry.material;
+  recipe.shape = entry.shape;
+  recipe.size = entry.size || 'medium';
+  recipe.traits = [...(entry.traits || [])];
+  recipe.fallback = Boolean(entry.fallback);
+  recipe.controls.preset = entry.preset;
+  recipe.controls.stiffness = entry.stiffness ?? 0;
+  recipe.controls.brightness = entry.brightness ?? 0;
+  recipe.controls.damping = entry.damping ?? 0.35;
+  recipe.controls.oddEven = entry.oddEven ?? 0;
+  recipe.controls.voice = entry.voice || '';
+  recipe.controls.count = entry.count || 64;
+  const spread = hashString(entry.name);
+  if (entry.fallback) recipe.controls.seed = entry.seed || 1;
+  else if (entry.seed) recipe.controls.seed = hashString(promptText || entry.name);
+  else recipe.controls.seed = spread % 800000;
+  if (entry.role === 'material') {
+    recipe.controls.count = clamp((recipe.controls.count || 16) + (spread % 7) - 3, 3, 64);
+    recipe.controls.brightness = clamp(recipe.controls.brightness + (((spread >> 4) % 9) - 4) * 0.06, -1, 1);
+    recipe.controls.damping = clamp(recipe.controls.damping + (((spread >> 8) % 7) - 3) * 0.05, 0, 1);
+    recipe.controls.stiffness = clamp((recipe.controls.stiffness || 0) + (((spread >> 12) % 7) - 3) * 0.04, 0, 1);
+  }
+  recipe.exciter = entry.exciter || 'mallet';
+  recipe.hardness = entry.hardness ?? 0.5;
+  recipe.position = entry.position ?? recipe.position ?? 0.18;
+  recipe.velocity = entry.velocity ?? recipe.velocity ?? 0.8;
   recipe.recognized = true;
+}
+
+function overlayMaterial(recipe, material) {
+  if (!material || material.material === recipe.material) return;
+  recipe.material = material.material;
+  recipe.controls.brightness = clamp(recipe.controls.brightness + (material.brightness ?? 0) * 0.45, -1, 1);
+  recipe.controls.damping = clamp(recipe.controls.damping + Math.max(-0.2, Math.min(0.2, (material.damping ?? 0.4) - 0.4)), 0, 1);
+  if (recipe.controls.voice === 'glass' || recipe.controls.voice === 'crystal') recipe.controls.voice = '';
+  recipe.traits = [...(recipe.traits || []), material.material];
+}
+
+function applyAdjectives(recipe, text) {
+  for (const adjective of ADJECTIVES) {
+    if (!adjective.test.test(text)) continue;
+    if (adjective.size) recipe.size = adjective.size;
+    if (adjective.material) recipe.material = adjective.material;
+    if (adjective.damping) recipe.controls.damping = clamp(recipe.controls.damping + adjective.damping, 0, 1);
+    if (adjective.brightness) recipe.controls.brightness = clamp(recipe.controls.brightness + adjective.brightness, -1, 1);
+    if (adjective.stiffness) recipe.controls.stiffness = clamp(recipe.controls.stiffness + adjective.stiffness, 0, 1);
+    if (adjective.oddEven) recipe.controls.oddEven = clamp((recipe.controls.oddEven || 0) + adjective.oddEven, -1, 1);
+    if (adjective.countScale) recipe.controls.count = clamp(Math.round((recipe.controls.count || 16) * adjective.countScale), 3, 64);
+    if (adjective.hardness != null) recipe.hardness = adjective.hardness;
+    if (adjective.velocity != null) recipe.velocity = adjective.velocity;
+    if (adjective.decayScale) recipe.controls.decayScale = (recipe.controls.decayScale || 1) * adjective.decayScale;
+    if (adjective.seed) recipe.controls.seed = hashString(text);
+    recipe.traits = [...(recipe.traits || []), adjective.label];
+  }
+}
+
+function composeReading(recipe, text) {
+  const body = `a ${recipe.size || 'medium'} ${recipe.material || 'unknown'} ${recipe.shape || 'body'}`;
+  const traits = [...new Set(recipe.traits || [])].filter(Boolean);
+  const tail = traits.length ? `, ${traits.join(', ')}` : '';
+  if (recipe.fallback) return `No listed object. Heard “${text}” as ${body}${tail}.`;
+  return `${recipe.objectName}: ${body}${tail}.`;
 }
 
 function applyWords(recipe, text, refine) {
@@ -216,6 +214,11 @@ export function readRecipe(prompt, current = null) {
   const text = String(prompt || '').toLowerCase();
   const recipe = current ? {
     objectName: current.objectName || 'Profile',
+    material: current.material,
+    shape: current.shape,
+    size: current.size,
+    traits: [...(current.traits || [])],
+    fallback: false,
     controls: { ...current.controls },
     exciter: current.exciter,
     hardness: current.hardness,
@@ -223,11 +226,20 @@ export function readRecipe(prompt, current = null) {
     velocity: current.velocity ?? 0.8,
     recognized: true,
   } : blankRecipe();
-  const family = familyOf(text);
-  if (family && (!current || family.test.test(text))) applyFamily(recipe, family);
-  const named = objectName(text);
-  if (named) recipe.objectName = named;
+  const reading = matchReading(text);
+  const scene = sceneId(text);
+  const named = reading.object || (scene ? matchReading(scene).object : null);
+  if (!current || named) {
+    const entry = named || (!current ? reading.material : null);
+    if (entry) applyEntry(recipe, entry, text);
+    else if (!current && text.trim()) applyEntry(recipe, hashFallback(text, hashString(text)), text);
+  }
+  if (reading.object && reading.material && reading.material.material !== recipe.material) {
+    overlayMaterial(recipe, reading.material);
+  }
+  applyAdjectives(recipe, text);
   applyWords(recipe, text, Boolean(current));
+  recipe.reading = composeReading(recipe, text);
   recipe.controls = sanitizeControls(recipe.controls);
   return recipe;
 }
@@ -274,6 +286,12 @@ function withPlay(core, controls, name, line) {
     position: core.position,
     velocity: core.velocity,
     recognized: core.recognized,
+    material: core.material,
+    shape: core.shape,
+    size: core.size,
+    traits: core.traits,
+    reading: core.reading,
+    fallback: core.fallback,
   };
 }
 

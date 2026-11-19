@@ -72,11 +72,9 @@ export function mountStudio(root, api) {
       return false;
     }
     const variations = describePrompt(prompt, current);
-    if (!variations[0].recognized && !current) {
-      setStatus('No material was named, so this was read as a metal plate.');
-    } else {
-      setStatus('');
-    }
+    if (variations[0].reading) setStatus(variations[0].reading);
+    else if (!variations[0].recognized && !current) setStatus('No material was named, so this was read as a metal plate.');
+    else setStatus('');
     const previous = turns[turns.length - 1];
     if (previous) previous.selected = selected;
     turns.push({

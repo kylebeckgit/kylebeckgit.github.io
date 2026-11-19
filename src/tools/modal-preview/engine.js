@@ -121,6 +121,23 @@ function marimbaRatios() {
   return tuned;
 }
 
+function crystalRatios() {
+  // A bowl series with a close pair on each mode, so a chandelier shimmers
+  // instead of sitting on seven still partials. The gaps are wide enough
+  // that a 55-cent twin filter would keep them.
+  const out = [];
+  for (const ratio of BOWL_RATIOS) out.push(ratio * 0.962, ratio, ratio * 1.041);
+  return out;
+}
+
+function abyssRatios() {
+  // A dense inharmonic pile that stays low, then stretches upward. The
+  // levels, not the ratios, swallow the high partials.
+  const ratios = [];
+  for (let i = 0; i < 40; i++) ratios.push(1 + (i ** 1.42) * 0.22);
+  return ratios;
+}
+
 function gongRatios() {
   // Rossing, Percussive Notes (Fall 1982): axisymmetric modes of a Japanese
   // tamtam at 39, 162, 195, 318, 854, 879 and 1000 Hz, plus the radial family
@@ -175,6 +192,8 @@ function shellRatios() {
 
 function baseRatios(preset, voice) {
   if (voice === 'glass') return BOWL_RATIOS.slice();
+  if (voice === 'crystal') return crystalRatios();
+  if (voice === 'abyss') return abyssRatios();
   if (voice === 'gong') return gongRatios();
   if (voice === 'bonsho') return BONSHO_RATIOS.slice();
   if (voice === 'marimba') return marimbaRatios();
@@ -253,7 +272,7 @@ export function sanitizeControls(input) {
   };
   const seedNum = Number(input?.seed);
   const countNum = Number(input?.count);
-  const voices = new Set(['glass', 'gong', 'bonsho', 'marimba', 'cup', 'shell', 'neutral']);
+  const voices = new Set(['glass', 'gong', 'bonsho', 'marimba', 'cup', 'shell', 'neutral', 'block', 'crystal', 'abyss']);
   const voice = voices.has(input?.voice) ? input.voice : '';
   return {
     preset,
@@ -262,6 +281,7 @@ export function sanitizeControls(input) {
     damping: num(input?.damping, 0, 1, base.damping),
     oddEven: num(input?.oddEven, -1, 1, base.oddEven),
     seed: Number.isFinite(seedNum) ? Math.trunc(clamp(seedNum, 0, 1_000_000_000)) : 0,
+    decayScale: num(input?.decayScale, 0.2, 4, 1),
     voice,
     count: Number.isFinite(countNum) && countNum > 0 ? Math.round(clamp(countNum, 1, PARTIALS)) : PARTIALS,
   };
@@ -305,7 +325,7 @@ export function buildPartials(rawControls) {
     // The delayed shimmer sits on the high cluster, not the fundamental.
     for (const partial of partials) {
       const dist = Math.abs(Math.log2(partial.ratio / 22.5));
-      partial.gainDb = partial.ratio > 12 ? -4.5 * dist : -11 - 2.5 * Math.abs(Math.log2(partial.ratio));
+      partial.gainDb = (partial.ratio > 12 ? -4.5 * dist : -11 - 2.5 * Math.abs(Math.log2(partial.ratio))) + controls.brightness * 10;
     }
   }
   if (controls.voice === 'bonsho' || controls.voice === 'glass' || controls.voice === 'gong' || controls.voice === 'marimba' || controls.voice === 'cup' || controls.voice === 'shell' || controls.voice === 'neutral') {
@@ -325,6 +345,32 @@ export function buildPartials(rawControls) {
       partial.decay = clamp((fund * scale) / (1 + slope * rise), 0.08, 30);
     }
   }
+  if (controls.voice === 'block') {
+    // A hollow wood block is a short click. The body is under a third of a
+    // second, and the upper partials fall even faster.
+    const fund = clamp(0.26 * (1.2 - controls.damping), 0.05, 0.3);
+    const slope = 1.4 + controls.damping * 2.8;
+    for (const partial of partials) {
+      const rise = Math.max(partial.ratio - 1, 0) ** 0.9;
+      partial.decay = clamp(fund / (1 + slope * rise), 0.05, 0.3);
+    }
+  }
+  if (controls.voice === 'crystal') {
+    const fund = 10 * (1.15 - 0.55 * controls.damping);
+    for (const partial of partials) {
+      const rise = Math.max(partial.ratio - 1, 0) ** 0.8;
+      partial.decay = clamp(fund / (1 + 0.28 * rise), 0.4, 30);
+    }
+  }
+  if (controls.voice === 'abyss') {
+    const fund = 16 * (1.15 - 0.35 * controls.damping);
+    for (const partial of partials) {
+      const rise = Math.max(partial.ratio - 1, 0) ** 0.75;
+      const octaves = Math.log2(Math.max(partial.ratio, 1e-6));
+      partial.decay = clamp(fund / (1 + 0.12 * rise), 1.5, 30);
+      partial.gainDb -= octaves * 6;
+    }
+  }
   if (controls.preset === 'open-pipe') {
     const fund = partials[0].ratio || 1;
     for (const partial of partials) {
@@ -341,7 +387,10 @@ export function buildPartials(rawControls) {
     for (const partial of partials) partial.gainDb += (rand() - 0.5) * 4;
   }
   const peak = Math.max(...partials.map((partial) => partial.gainDb));
-  for (const partial of partials) partial.gainDb = clamp(partial.gainDb - peak, -96, 0);
+  for (const partial of partials) {
+    partial.gainDb = clamp(partial.gainDb - peak, -96, 0);
+    partial.decay = clamp(partial.decay * (controls.decayScale || 1), 0.05, 30);
+  }
   return partials;
 }
 
