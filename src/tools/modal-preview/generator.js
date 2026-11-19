@@ -3,7 +3,7 @@
 
 import { SILENT_MODE_HINT, beginAudio, installGestureUnlock, playSilentUnlock, prepareAudioSession, resumeInGesture, audioContextClass } from './audio-session.js';
 import { audiblePartials, defaultControls, heardSeconds, playedFundamental, previewPartials, sanitizeControls } from './engine.js';
-import { defaultCamera, hitPartial, paintModalView, sliceFromPartial } from './modal-view.js';
+import { combHeights, defaultCamera, hitPartial, paintModalView, sliceFromPartial, spaceByLog } from './modal-view.js';
 import { paintObject } from './object-view.js';
 import { describePrompt } from './recipes.js';
 import { renderPreview, scaleToPeak } from './resonator.js';
@@ -528,6 +528,14 @@ function paintObjectCanvas(canvas, snap, { selected = -1, age = null } = {}) {
   });
 }
 
+// The 3D preview spaces partials in equal steps. A click has to use that
+// same spacing, not the log of the ratio.
+export function previewHitSlices(partials, position = 0.18) {
+  const slices = (partials || []).map((partial) => sliceFromPartial(partial, 1));
+  spaceByLog(slices);
+  return combHeights(slices, position);
+}
+
 function paintPreview(canvas, partials, { detune = 0, position = 0.18 } = {}) {
   if (!canvas) return;
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -619,7 +627,13 @@ export function mountGenerator(root, { openInDesigner } = {}) {
       paintCurrent(audioState.strike ? age : null);
       const alive = audioState.strike && (audioState.snap?.partials || []).some((partial) => age < Math.max(0.4, partial.decay || 0.2) * 1.2);
       if (alive) audioState.frame = requestAnimationFrame(frame);
-      else audioState.frame = 0;
+      else {
+        audioState.frame = 0;
+        if (audioState.strike) {
+          audioState.strike = 0;
+          paintCurrent(null);
+        }
+      }
     };
     audioState.frame = requestAnimationFrame(frame);
   }
@@ -627,6 +641,9 @@ export function mountGenerator(root, { openInDesigner } = {}) {
   function showSnap(variation, { hear = false } = {}) {
     const snap = snapshotVariation(variation);
     audioState.snap = snap;
+    if (audioState.frame) cancelAnimationFrame(audioState.frame);
+    audioState.frame = 0;
+    if (!hear) audioState.strike = 0;
     paintCurrent(null);
     if (hear) {
       audioState.strike = performance.now();
@@ -668,7 +685,8 @@ export function mountGenerator(root, { openInDesigner } = {}) {
       for (const peer of root.querySelectorAll('.gen-preview [data-view-mode]')) {
         peer.setAttribute('aria-pressed', String(peer === button));
       }
-      paintCurrent(null);
+      const age = audioState.strike ? (performance.now() - audioState.strike) / 1000 : null;
+      paintCurrent(audioState.strike ? age : null);
       if (object && audioState.strike) kickGenObject();
     });
   }
@@ -676,9 +694,10 @@ export function mountGenerator(root, { openInDesigner } = {}) {
     const snap = audioState.snap;
     if (!snap?.partials?.length || canvas.hidden) return;
     const rect = canvas.getBoundingClientRect();
-    const slices = snap.partials.map((partial) => sliceFromPartial(partial, 1));
+    const slices = previewHitSlices(snap.partials, snap.position);
     audioState.selected = hitPartial(slices, defaultCamera(), canvas.clientWidth, canvas.clientHeight, event.clientX - rect.left, event.clientY - rect.top, snap.detune || 0);
-    paintCurrent(null);
+    const age = audioState.strike ? (performance.now() - audioState.strike) / 1000 : null;
+    paintCurrent(audioState.strike ? age : null);
   });
   const session = createGeneratorSession();
   root.querySelector('[data-gen-roll]')?.addEventListener('click', () => {
@@ -693,8 +712,9 @@ export function mountGenerator(root, { openInDesigner } = {}) {
     return audioState.ctx;
   });
   window.addEventListener('resize', () => {
-    const variation = controller?.current();
-    if (variation) showSnap(variation);
+    if (!audioState.snap) return;
+    const age = audioState.strike ? (performance.now() - audioState.strike) / 1000 : null;
+    paintCurrent(audioState.strike ? age : null);
   });
   return controller;
 }

@@ -333,7 +333,13 @@ export function mount(root) {
       const age = state.objectStrike ? (performance.now() - state.objectStrike) / 1000 : 99;
       const alive = state.objectStrike && state.partials.some((partial) => age < Math.max(0.4, partial.decay || 0.2) * 1.2);
       if (alive) state.objectFrame = requestAnimationFrame(frame);
-      else state.objectFrame = 0;
+      else {
+        state.objectFrame = 0;
+        if (state.objectStrike) {
+          state.objectStrike = 0;
+          paintDesignerObject();
+        }
+      }
     };
     state.objectFrame = requestAnimationFrame(frame);
   }
@@ -1090,9 +1096,15 @@ export function mount(root) {
     return state.audio;
   });
   root.querySelector('[data-note="A4"]')?.setAttribute('aria-pressed', 'true');
-  window.addEventListener('resize', () => draw(canvas, state.partials, state));
+  window.addEventListener('resize', () => {
+    draw(canvas, state.partials, state);
+    paintDesignerObject();
+  });
   const scheme = window.matchMedia('(prefers-color-scheme: dark)');
-  const onScheme = () => draw(canvas, state.partials, state);
+  const onScheme = () => {
+    draw(canvas, state.partials, state);
+    paintDesignerObject();
+  };
   if (typeof scheme.addEventListener === 'function') scheme.addEventListener('change', onScheme);
   else scheme.addListener(onScheme);
 

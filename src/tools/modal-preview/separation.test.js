@@ -12,10 +12,12 @@ import {
   redoDesigner,
   redoGenerator,
   rollGenerator,
+  previewHitSlices,
   snapshotVariation,
   undoDesigner,
   undoGenerator,
 } from './generator.js';
+import { defaultCamera, hitPartial, layoutTriangles, sliceFromPartial } from './modal-view.js';
 import { describePrompt } from './recipes.js';
 
 function signature(partials) {
@@ -92,4 +94,21 @@ test('each tool randomizes into a different body and can undo', () => {
   redoGenerator(generator);
   assert.equal(signature(currentSnapshot(generator).partials), wildSig);
   assert.notEqual(promptForRoll(2, 0.2), promptForRoll(5, 1));
+});
+
+test('a generator click uses the even spacing the preview paints', () => {
+  const partials = [
+    { ratio: 1, gainDb: 0, decay: 2 },
+    { ratio: 1.15, gainDb: -8, decay: 0.5 },
+    { ratio: 40, gainDb: -14, decay: 0.12 },
+  ];
+  const painted = previewHitSlices(partials, 0.18);
+  const raw = partials.map((partial) => sliceFromPartial(partial, 1));
+  assert.equal(painted[1].t, 0.5);
+  assert.ok(Math.abs(raw[1].t - painted[1].t) > 0.05);
+  const camera = defaultCamera();
+  const tris = layoutTriangles(painted, camera, 640, 420, 0);
+  const mid = tris[1].curve[Math.floor(tris[1].curve.length / 2)];
+  assert.equal(hitPartial(painted, camera, 640, 420, mid.x, mid.y, 0), 1);
+  assert.notEqual(hitPartial(raw, camera, 640, 420, mid.x, mid.y, 0), 1);
 });
