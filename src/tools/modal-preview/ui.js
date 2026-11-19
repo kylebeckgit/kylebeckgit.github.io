@@ -2,6 +2,7 @@ import { A4_HZ, PRESETS, NOTE_BUTTONS, ZEBRA_PARTIAL_LIMIT_HZ, buildPartials, pr
 import { analyzeSamples, decodeRecording, resampleMono, parseRoot, frequencyToNote } from './analyze.js';
 import { renderPreview, scaleToPeak, strikeWeight } from './resonator.js';
 import { aimSlices, createFitMotion, createSliceMotion, defaultCamera, hitPartial, MORPH_MS, paintModalView, sampleSlices, slicesMoving } from './modal-view.js';
+import { paintObject } from './object-view.js';
 import { densityForProfile, shapePartials } from './shape.js';
 import { createRollHistory, defaultLocks, pushRoll, redoRoll, rollSound, undoRoll } from './randomize.js';
 import { decodeProfile, encodeProfile } from './studio.js';
@@ -36,6 +37,9 @@ export function mount(root) {
     autoHearTimer: 0,
     drawStyle: 'fast',
     selectedPartial: -1,
+    hoverPartial: -1,
+    objectStrike: 0,
+    bodyMeta: null,
     profilePartials: null,
     camera: defaultCamera(),
     detune: 0,
@@ -63,7 +67,8 @@ export function mount(root) {
     damping: root.querySelector('[data-damping-out]'),
     oddEven: root.querySelector('[data-odd-even-out]'),
   };
-  const canvas = root.querySelector('canvas');
+  const canvas = root.querySelector('[data-view="zebra"]');
+  const objectCanvas = root.querySelector('[data-object]');
   const tableBody = root.querySelector('[data-partials]');
   const describe = root.querySelector('[data-describe]');
   const describeButton = root.querySelector('[data-describe-btn]');
@@ -272,6 +277,7 @@ export function mount(root) {
     const hint = root.querySelector('[data-export-hint]');
     if (hint) hint.textContent = zebraExport(state.partials, heardOptions()).hint;
     draw(canvas, state.partials, state);
+    paintDesignerObject();
     tableBody.innerHTML = state.partials.map((partial, index) => `
       <tr class="${index === state.selectedPartial ? 'is-selected' : ''}">
         <th scope="row"><button type="button" class="partial-index" data-make-root="${index}" aria-label="Make partial ${index + 1} the root">${index + 1}</button></th>
@@ -288,7 +294,83 @@ export function mount(root) {
     input.value = field === 'ratio' ? value.toFixed(4) : field === 'decay' ? value.toFixed(3) : value.toFixed(2);
   }
 
-  fields.preset.addEventListener('change', () => { pushHistory(); rebuild(); });
+  function objectBody() {
+    return {
+      preset: state.controls?.preset || fields.preset.value,
+      voice: state.controls?.voice || '',
+      material: state.bodyMeta?.material || '',
+      shape: state.bodyMeta?.shape || '',
+      size: state.bodyMeta?.size || 'medium',
+    };
+  }
+
+  function paintDesignerObject() {
+    if (!objectCanvas || objectCanvas.hidden) return;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const width = objectCanvas.clientWidth || canvas?.clientWidth || 640;
+    const height = objectCanvas.clientHeight || canvas?.clientHeight || 360;
+    objectCanvas.width = Math.round(width * dpr);
+    objectCanvas.height = Math.round(height * dpr);
+    const ctx = objectCanvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const age = state.objectStrike ? (performance.now() - state.objectStrike) / 1000 : null;
+    const selected = state.hoverPartial >= 0 ? state.hoverPartial : state.selectedPartial;
+    paintObject(ctx, {
+      width,
+      height,
+      body: objectBody(),
+      partials: state.partials,
+      selected,
+      age: state.objectStrike ? age : null,
+      colors: canvasColors(),
+    });
+  }
+
+  function kickObject() {
+    if (!objectCanvas || objectCanvas.hidden || state.objectFrame) return;
+    const frame = () => {
+      paintDesignerObject();
+      const age = state.objectStrike ? (performance.now() - state.objectStrike) / 1000 : 99;
+      const alive = state.objectStrike && state.partials.some((partial) => age < Math.max(0.4, partial.decay || 0.2) * 1.2);
+      if (alive) state.objectFrame = requestAnimationFrame(frame);
+      else state.objectFrame = 0;
+    };
+    state.objectFrame = requestAnimationFrame(frame);
+  }
+  state.kickObject = kickObject;
+
+  function showDesignerView(mode) {
+    const object = mode === 'object';
+    if (objectCanvas) objectCanvas.hidden = !object;
+    if (canvas) canvas.hidden = object;
+    for (const button of root.querySelectorAll('[data-view-mode]')) {
+      if (!button.closest('[data-tool="designer"]') && !button.closest('.stage-view')) continue;
+      if (button.closest('#tool-generator')) continue;
+      button.setAttribute('aria-pressed', String(button.dataset.viewMode === mode));
+    }
+    if (object) {
+      paintDesignerObject();
+      if (state.objectStrike) kickObject();
+    } else {
+      draw(canvas, state.partials, state);
+    }
+  }
+  for (const button of root.querySelectorAll('.stage .view-switch [data-view-mode]')) {
+    button.addEventListener('click', () => showDesignerView(button.dataset.viewMode));
+  }
+  tableBody?.addEventListener('pointerover', (event) => {
+    const row = event.target.closest('tr');
+    const input = row?.querySelector('[data-index]');
+    if (!input) return;
+    state.hoverPartial = Number(input.dataset.index);
+    paintDesignerObject();
+  });
+  tableBody?.addEventListener('pointerleave', () => {
+    state.hoverPartial = -1;
+    paintDesignerObject();
+  });
+
+  fields.preset.addEventListener('change', () => { state.bodyMeta = null; pushHistory(); rebuild(); });
   for (const name of ['stiffness', 'brightness', 'damping', 'oddEven']) {
     fields[name].addEventListener('pointerdown', () => pushHistory());
     fields[name].addEventListener('input', rebuild);
@@ -555,6 +637,7 @@ export function mount(root) {
     }
     state.detune = knobs.detune;
     state.position = knobs.position;
+    state.bodyMeta = null;
     const ask = root.querySelector('[data-ask]');
     const readout = root.querySelector('[data-roll-read]');
     if (ask && text != null) ask.value = text;
@@ -606,6 +689,7 @@ export function mount(root) {
     if (!input) return;
     state.selectedPartial = Number(input.dataset.index);
     draw(canvas, state.partials, state);
+    paintDesignerObject();
     for (const row of tableBody.querySelectorAll('tr')) row.classList.remove('is-selected');
     input.closest('tr')?.classList.add('is-selected');
   });
@@ -941,6 +1025,11 @@ export function mount(root) {
     const controls = sanitizeControls(payload.controls || {});
     state.carried = carryControls(controls);
     state.controls = controls;
+    state.bodyMeta = {
+      material: payload.material || '',
+      shape: payload.shape || '',
+      size: payload.size || 'medium',
+    };
     state.profileName = payload.name || 'From generator';
     fields.preset.value = controls.preset;
     fields.stiffness.value = String(controls.stiffness);
@@ -1234,6 +1323,8 @@ function playHeard(state, recipe) {
   source.connect(ctx.destination);
   source.start();
   state.hearSource = source;
+  state.objectStrike = performance.now();
+  state.kickObject?.();
   const root = state.canvas?.closest('#modal-app');
   Promise.resolve(resumed).then(() => {
     if (ctx.state === 'suspended' || ctx.state === 'interrupted') setPlayError(root, SILENT_MODE_HINT);
@@ -1241,6 +1332,7 @@ function playHeard(state, recipe) {
 }
 
 function drawZebra(canvas, partials, state) {
+  if (!canvas || canvas.hidden) return;
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   const width = canvas.clientWidth || 640;
   const height = canvas.clientHeight || 220;
@@ -1374,7 +1466,11 @@ async function ensureAudio(state, resume = true) {
 async function strike(state, down, source = 'user') {
   if (!down && source === 'auto' && state.userHolding) return;
   state.holdingNote = down;
-  if (down) primeAudio(state);
+  if (down) {
+    state.objectStrike = performance.now();
+    state.kickObject?.();
+    primeAudio(state);
+  }
   try {
     await ensureAudio(state);
   } catch {
@@ -1401,6 +1497,8 @@ async function strike(state, down, source = 'user') {
 }
 
 function silence(state) {
+  state.objectStrike = 0;
+  state.kickObject?.();
   state.node?.port.postMessage({ type: 'stop' });
   try { state.hearSource?.stop(); } catch { /* already stopped */ }
   state.hearSource = null;

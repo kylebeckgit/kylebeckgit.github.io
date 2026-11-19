@@ -3,7 +3,8 @@
 
 import { SILENT_MODE_HINT, beginAudio, installGestureUnlock, playSilentUnlock, prepareAudioSession, resumeInGesture, audioContextClass } from './audio-session.js';
 import { audiblePartials, defaultControls, heardSeconds, playedFundamental, previewPartials, sanitizeControls } from './engine.js';
-import { defaultCamera, paintModalView } from './modal-view.js';
+import { defaultCamera, hitPartial, paintModalView, sliceFromPartial } from './modal-view.js';
+import { paintObject } from './object-view.js';
 import { describePrompt } from './recipes.js';
 import { renderPreview, scaleToPeak } from './resonator.js';
 import { mountStudio } from './studio.js';
@@ -374,6 +375,11 @@ export function snapshotVariation(variation) {
     position: variation?.position ?? 0.18,
     detune: variation?.detune || 0,
     velocity: variation?.velocity ?? 0.8,
+    material: variation?.material || '',
+    shape: variation?.shape || '',
+    size: variation?.size || '',
+    voice: controls.voice || '',
+    preset: controls.preset,
   };
 }
 
@@ -496,6 +502,32 @@ export function handoffPayload(session) {
   };
 }
 
+function paintObjectCanvas(canvas, snap, { selected = -1, age = null } = {}) {
+  if (!canvas || canvas.hidden) return;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const width = canvas.clientWidth || 420;
+  const height = canvas.clientHeight || 280;
+  canvas.width = Math.round(width * dpr);
+  canvas.height = Math.round(height * dpr);
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const style = getComputedStyle(document.documentElement);
+  const read = (name, fallback) => style.getPropertyValue(name).trim() || fallback;
+  paintObject(ctx, {
+    width,
+    height,
+    body: snap || {},
+    partials: snap?.partials || [],
+    selected,
+    age,
+    colors: {
+      card: read('--card', '#fbf8f2'),
+      accent: read('--accent', '#d4421c'),
+      ink: read('--fg', '#1f1d1a'),
+    },
+  });
+}
+
 function paintPreview(canvas, partials, { detune = 0, position = 0.18 } = {}) {
   if (!canvas) return;
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -569,13 +601,43 @@ function playSnapshot(audioState, snap) {
 export function mountGenerator(root, { openInDesigner } = {}) {
   if (!root || typeof document === 'undefined') return null;
   const canvas = root.querySelector('[data-gen-view]');
-  const audioState = { ctx: null, source: null, hint: root.querySelector('[data-gen-audio]') };
+  const objectCanvas = root.querySelector('[data-gen-object]');
+  const audioState = { ctx: null, source: null, hint: root.querySelector('[data-gen-audio]'), snap: null, selected: -1, strike: 0, frame: 0 };
   let seed = 1;
+
+  function paintCurrent(age = null) {
+    const snap = audioState.snap;
+    if (!snap) return;
+    if (!canvas?.hidden) paintPreview(canvas, snap.partials, snap);
+    paintObjectCanvas(objectCanvas, snap, { selected: audioState.selected, age });
+  }
+
+  function kickGenObject() {
+    if (!objectCanvas || objectCanvas.hidden || audioState.frame) return;
+    const frame = () => {
+      const age = audioState.strike ? (performance.now() - audioState.strike) / 1000 : null;
+      paintCurrent(audioState.strike ? age : null);
+      const alive = audioState.strike && (audioState.snap?.partials || []).some((partial) => age < Math.max(0.4, partial.decay || 0.2) * 1.2);
+      if (alive) audioState.frame = requestAnimationFrame(frame);
+      else audioState.frame = 0;
+    };
+    audioState.frame = requestAnimationFrame(frame);
+  }
+
+  function showSnap(variation, { hear = false } = {}) {
+    const snap = snapshotVariation(variation);
+    audioState.snap = snap;
+    paintCurrent(null);
+    if (hear) {
+      audioState.strike = performance.now();
+      playSnapshot(audioState, snap);
+      kickGenObject();
+    }
+  }
+
   const controller = mountStudio(root, {
     applyRecipe(variation, { hear = false } = {}) {
-      const snap = snapshotVariation(variation);
-      paintPreview(canvas, snap.partials, snap);
-      if (hear) playSnapshot(audioState, snap);
+      showSnap(variation, { hear });
     },
     setName() {},
     profileFromState() { return null; },
@@ -596,9 +658,27 @@ export function mountGenerator(root, { openInDesigner } = {}) {
   root.querySelector('[data-gen-hear]')?.addEventListener('click', () => {
     const variation = controller?.current();
     if (!variation) return;
-    const snap = snapshotVariation(variation);
-    paintPreview(canvas, snap.partials, snap);
-    playSnapshot(audioState, snap);
+    showSnap(variation, { hear: true });
+  });
+  for (const button of root.querySelectorAll('.gen-preview [data-view-mode]')) {
+    button.addEventListener('click', () => {
+      const object = button.dataset.viewMode === 'object';
+      if (canvas) canvas.hidden = object;
+      if (objectCanvas) objectCanvas.hidden = !object;
+      for (const peer of root.querySelectorAll('.gen-preview [data-view-mode]')) {
+        peer.setAttribute('aria-pressed', String(peer === button));
+      }
+      paintCurrent(null);
+      if (object && audioState.strike) kickGenObject();
+    });
+  }
+  canvas?.addEventListener('pointerup', (event) => {
+    const snap = audioState.snap;
+    if (!snap?.partials?.length || canvas.hidden) return;
+    const rect = canvas.getBoundingClientRect();
+    const slices = snap.partials.map((partial) => sliceFromPartial(partial, 1));
+    audioState.selected = hitPartial(slices, defaultCamera(), canvas.clientWidth, canvas.clientHeight, event.clientX - rect.left, event.clientY - rect.top, snap.detune || 0);
+    paintCurrent(null);
   });
   const session = createGeneratorSession();
   root.querySelector('[data-gen-roll]')?.addEventListener('click', () => {
@@ -614,10 +694,7 @@ export function mountGenerator(root, { openInDesigner } = {}) {
   });
   window.addEventListener('resize', () => {
     const variation = controller?.current();
-    if (variation) {
-      const snap = snapshotVariation(variation);
-      paintPreview(canvas, snap.partials, snap);
-    }
+    if (variation) showSnap(variation);
   });
   return controller;
 }
