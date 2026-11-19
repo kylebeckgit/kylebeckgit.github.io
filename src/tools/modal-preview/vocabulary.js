@@ -233,15 +233,23 @@ const SPECIFIC = [
     count: 16, stiffness: 0.05, brightness: -0.55, damping: 0.78, oddEven: 0,
     exciter: 'mallet', hardness: 0.3, traits: ['dark', 'muffled'],
   }),
-  entry(['thunder', 'distant thunder'], {
-    name: 'Thunder', material: 'air', shape: 'cavity', size: 'huge', preset: 'membrane', voice: '',
-    count: 16, stiffness: 0.2, brightness: -0.7, damping: 0.42, oddEven: 0.1,
-    exciter: 'mallet', hardness: 0.85, traits: ['huge', 'dark'],
+  entry(['thunder', 'distant thunder', 'thunderclap'], {
+    name: 'Thunder', material: 'air', shape: 'cavity', size: 'huge', preset: 'membrane', voice: 'rumble',
+    count: 16, stiffness: 0.18, brightness: -0.75, damping: 0.16, oddEven: 0.08,
+    exciter: 'mallet', hardness: 0.7, pitchScale: 0.5,
+    traits: ['huge', 'dark', 'long'],
   }),
-  entry(['cave', 'cavern', 'canyon', 'cathedral', 'well', 'tunnel'], {
-    name: 'Cavern', material: 'stone', shape: 'cavity', size: 'huge', preset: 'plate', voice: '',
-    count: 18, stiffness: 0.3, brightness: -0.55, damping: 0.22, oddEven: 0.1,
-    exciter: 'mallet', hardness: 0.4, traits: ['huge', 'dark', 'long'],
+  entry(['cave', 'cavern', 'canyon', 'cathedral', 'well', 'tunnel', 'chasm'], {
+    name: 'Cavern', material: 'stone', shape: 'cavity', size: 'huge', preset: 'plate', voice: 'rumble',
+    count: 18, stiffness: 0.22, brightness: -0.65, damping: 0.12, oddEven: 0.08,
+    exciter: 'mallet', hardness: 0.4, pitchScale: 0.48,
+    traits: ['huge', 'dark', 'long'],
+  }),
+  entry(['earthquake', 'avalanche', 'landslide', 'rumble', 'volcano'], {
+    name: 'Rumble', material: 'stone', shape: 'cavity', size: 'huge', preset: 'plate', voice: 'rumble',
+    count: 16, stiffness: 0.28, brightness: -0.8, damping: 0.14, oddEven: 0.12,
+    exciter: 'mallet', hardness: 0.8, pitchScale: 0.42,
+    traits: ['huge', 'dark', 'long'],
   }),
   entry(['music box'], {
     name: 'Music box', material: 'metal', shape: 'bar', size: 'tiny', preset: 'bell', voice: '',

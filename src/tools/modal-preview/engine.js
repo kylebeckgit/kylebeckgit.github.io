@@ -142,6 +142,13 @@ function abyssRatios() {
   return ratios;
 }
 
+function rumbleRatios() {
+  // Spaced low room modes. Not the black hole's slow-beating pile.
+  const ratios = [];
+  for (let i = 0; i < 16; i++) ratios.push(1 + i * 0.31 + (i % 3) * 0.07);
+  return ratios;
+}
+
 function gongRatios() {
   // Rossing, Percussive Notes (Fall 1982): axisymmetric modes of a Japanese
   // tamtam at 39, 162, 195, 318, 854, 879 and 1000 Hz, plus the radial family
@@ -198,6 +205,7 @@ function baseRatios(preset, voice) {
   if (voice === 'glass') return BOWL_RATIOS.slice();
   if (voice === 'crystal') return crystalRatios();
   if (voice === 'abyss') return abyssRatios();
+  if (voice === 'rumble') return rumbleRatios();
   if (voice === 'gong') return gongRatios();
   if (voice === 'bonsho') return BONSHO_RATIOS.slice();
   if (voice === 'marimba') return marimbaRatios();
@@ -276,7 +284,7 @@ export function sanitizeControls(input) {
   };
   const seedNum = Number(input?.seed);
   const countNum = Number(input?.count);
-  const voices = new Set(['glass', 'gong', 'bonsho', 'marimba', 'cup', 'shell', 'neutral', 'block', 'crystal', 'abyss']);
+  const voices = new Set(['glass', 'gong', 'bonsho', 'marimba', 'cup', 'shell', 'neutral', 'block', 'crystal', 'abyss', 'rumble']);
   const voice = voices.has(input?.voice) ? input.voice : '';
   return {
     preset,
@@ -392,6 +400,16 @@ export function buildPartials(rawControls) {
     for (const partial of partials) {
       const rise = Math.max(partial.ratio - 1, 0) ** 0.8;
       partial.decay = clamp(fund / (1 + 0.28 * rise), 0.4, 30);
+    }
+  }
+  if (controls.voice === 'rumble') {
+    // Vast imagery stays long even after a "distant" damping nudge.
+    const fund = 16 * (1.15 - 0.2 * controls.damping);
+    for (const partial of partials) {
+      const rise = Math.max(partial.ratio - 1, 0) ** 0.8;
+      const octaves = Math.log2(Math.max(partial.ratio, 1e-6));
+      partial.decay = clamp(fund / (1 + 0.4 * rise), 2, 30);
+      partial.gainDb -= octaves * 5;
     }
   }
   if (controls.voice === 'abyss') {

@@ -194,6 +194,16 @@ test('different prompts do not collapse to one plate', () => {
   assert.ok(chandelier.features.centroid > wood.features.centroid * 1.4);
   assert.ok(chandelier.partials.length >= 12);
 
+  const thunder = rows.find((row) => row.prompt === 'distant thunder');
+  const cavern = profileOf('cavern');
+  assert.equal(thunder.recipe.controls.voice, 'rumble');
+  assert.ok(thunder.features.longest > 10, `distant thunder decay ${thunder.features.longest}`);
+  assert.ok(thunder.features.centroid < 600, `distant thunder centroid ${thunder.features.centroid}`);
+  assert.ok(thunder.recipe.controls.brightness < -0.4);
+  assert.ok(thunder.features.centroid > hole.features.centroid);
+  assert.equal(cavern.recipe.controls.voice, 'rumble');
+  assert.ok(cavern.features.longest > 10, `cavern decay ${cavern.features.longest}`);
+  assert.ok(cavern.features.centroid < 700, `cavern centroid ${cavern.features.centroid}`);
   assert.equal(hole.recipe.controls.voice, 'abyss');
   assert.ok(hole.features.longest > 12, `black hole decay ${hole.features.longest}`);
   assert.ok(hole.features.centroid < 320, `black hole centroid ${hole.features.centroid}`);
