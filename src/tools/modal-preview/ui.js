@@ -187,7 +187,9 @@ export function mount(root) {
   }
 
   function adopt(partials, custom) {
-    const fundamental = state.hearFundamental || noteFrequency(state.note);
+    // Start from the selected note times the size pitch every time. Feeding
+    // the last aligned frequency back in would walk the note on each knob move.
+    const fundamental = playedFundamental(state.controls?.pitchScale, noteFrequency(state.note));
     const aligned = root.querySelector('[data-absorb]')
       ? alignReference(partials, fundamental)
       : { partials, fundamental };
@@ -334,7 +336,7 @@ export function mount(root) {
     event.preventDefault();
     try { keys.setPointerCapture?.(event.pointerId); } catch { /* no active pointer */ }
     state.note = button.dataset.note;
-    state.hearFundamental = noteFrequency(state.note);
+    state.hearFundamental = playedFundamental(state.controls?.pitchScale, noteFrequency(state.note));
     for (const key of root.querySelectorAll('[data-note]')) key.setAttribute('aria-pressed', String(key === button));
     state.userHolding = true;
     cancelAutoHear();
@@ -820,7 +822,7 @@ export function mount(root) {
   function applyRecipe(recipe, { hear = false, partials = null, history = true } = {}) {
     const controls = sanitizeControls(recipe.controls || recipe);
     state.carried = carryControls(controls);
-    state.hearFundamental = playedFundamental(controls.pitchScale, A4_HZ);
+    state.hearFundamental = playedFundamental(controls.pitchScale, noteFrequency(state.note));
     markPlayedNote(root, state.hearFundamental);
     fields.preset.value = controls.preset;
     fields.stiffness.value = String(controls.stiffness);

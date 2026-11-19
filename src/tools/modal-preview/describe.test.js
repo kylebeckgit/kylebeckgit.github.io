@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { audiblePartials, carryControls, controlsFromKnobs, playedFundamental, previewPartials, zebraDecaySeconds, zebraExport } from './engine.js';
+import { alignReference, audiblePartials, carryControls, controlsFromKnobs, playedFundamental, previewPartials, zebraDecaySeconds, zebraExport } from './engine.js';
 import { renderPreview } from './resonator.js';
 import { describePrompt, readRecipe } from './recipes.js';
 import { phraseCount } from './vocabulary.js';
@@ -273,6 +273,27 @@ test('tiny, gong, and huge gong differ in the rendered audio and the export', ()
   const halfway = describePrompt('huge', describePrompt('gong')[0])[2];
   assert.ok(halfway.controls.decayScale > 1.4 && halfway.controls.decayScale < 1.8);
   assert.ok(halfway.controls.pitchScale > 0.6 && halfway.controls.pitchScale < 0.9);
+});
+
+test('rebuilding from fresh ratios does not walk the pitch', () => {
+  const controls = controlsFromKnobs({
+    preset: 'bell',
+    stiffness: 0.4,
+    brightness: 0.2,
+    damping: 0.3,
+    oddEven: 0,
+    seed: 17,
+  }, carryControls({ ...readRecipe('tiny bell').controls, stiffness: 0.4, seed: 17 }));
+  const base = playedFundamental(controls.pitchScale, 261.63);
+  const once = alignReference(previewPartials(controls), base);
+  const twice = alignReference(previewPartials(controls), base);
+  assert.ok(Math.abs(once.fundamental - twice.fundamental) < 1e-6);
+  assert.ok(once.fundamental > base * 0.97 && once.fundamental < base * 1.04);
+  const body = once.partials.reduce((best, partial) => (
+    Math.abs(Math.log(partial.ratio)) < Math.abs(Math.log(best.ratio)) ? partial : best
+  ));
+  assert.ok(Math.abs(body.ratio - 1) < 1e-6);
+  assert.ok(Math.abs(playedFundamental(controls.pitchScale, 261.63) / 261.63 - 1.9) < 1e-9);
 });
 
 test('a follow-up still understands the first object', () => {
