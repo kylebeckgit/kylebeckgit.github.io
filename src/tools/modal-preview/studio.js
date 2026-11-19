@@ -20,7 +20,9 @@ export function mountStudio(root, api) {
   if (!askText || !cards) return;
 
   const turns = [];
+  const future = [];
   let selected = 0;
+  const openButton = root.querySelector('[data-open-designer]');
 
   const used = () => {
     try { return Number(sessionStorage.getItem(STORAGE_KEY) || '0') || 0; } catch { return 0; }
@@ -51,7 +53,12 @@ export function mountStudio(root, api) {
         <p>${escapeHtml(variation.line)}</p>
         <button type="button" class="btn" data-hear="${index}">Hear</button>
       </article>`).join('');
-    backButton.disabled = turns.length < 2;
+    if (backButton) backButton.disabled = turns.length < 2;
+    const forwardButton = root.querySelector('[data-gen-forward]');
+    if (forwardButton) forwardButton.disabled = future.length === 0;
+    const backRoll = root.querySelector('[data-gen-back]');
+    if (backRoll) backRoll.disabled = turns.length < 2;
+    if (openButton) openButton.disabled = !turn.variations[selected];
     if (nameInput) nameInput.value = turn.variations[selected]?.name || nameInput.value;
   }
 
@@ -77,6 +84,7 @@ export function mountStudio(root, api) {
     else setStatus('');
     const previous = turns[turns.length - 1];
     if (previous) previous.selected = selected;
+    future.length = 0;
     turns.push({
       thread: previous ? [...previous.thread, prompt] : [prompt],
       variations,
@@ -126,11 +134,30 @@ export function mountStudio(root, api) {
     if (pushTurn(prompt, turn.variations[selected])) refineText.value = '';
   });
 
-  backButton?.addEventListener('click', () => {
-    if (turns.length < 2) return;
-    turns.pop();
+  function stepBack() {
+    if (turns.length < 2) return false;
+    future.push(turns.pop());
     setStatus('');
     choose(rememberedIndex(turns[turns.length - 1]), false);
+    return true;
+  }
+
+  function stepForward() {
+    const next = future.pop();
+    if (!next) return false;
+    turns.push(next);
+    setStatus('');
+    choose(rememberedIndex(next), false);
+    return true;
+  }
+
+  backButton?.addEventListener('click', () => { stepBack(); });
+  root.querySelector('[data-gen-back]')?.addEventListener('click', () => { stepBack(); });
+  root.querySelector('[data-gen-forward]')?.addEventListener('click', () => { stepForward(); });
+  openButton?.addEventListener('click', () => {
+    const variation = turns[turns.length - 1]?.variations[selected];
+    if (!variation || !api.openInDesigner) return;
+    api.openInDesigner(variation);
   });
 
   cards.addEventListener('click', (event) => {
@@ -145,10 +172,13 @@ export function mountStudio(root, api) {
     const recipe = STARTERS[Number(button.dataset.starter)];
     if (!recipe) return;
     turns.length = 0;
+    future.length = 0;
     selected = 0;
+    turns.push({ thread: [recipe.name], variations: [recipe], selected: 0 });
     results.hidden = true;
     api.applyRecipe(recipe, { hear: true });
     if (nameInput) nameInput.value = recipe.name;
+    if (openButton) openButton.disabled = false;
     setStatus(recipe.line);
   });
 
@@ -181,11 +211,28 @@ export function mountStudio(root, api) {
   }
 
   showAllowance();
+  const controller = {
+    showFresh(prompt, hear = true) {
+      const variations = describePrompt(prompt);
+      const previous = turns[turns.length - 1];
+      if (previous) previous.selected = selected;
+      future.length = 0;
+      turns.push({ thread: [prompt], variations, selected: 0 });
+      selected = 0;
+      if (variations[0].reading) setStatus(variations[0].reading);
+      choose(0, hear);
+      return variations;
+    },
+    current() {
+      return turns[turns.length - 1]?.variations[selected] || null;
+    },
+  };
   const starterRoot = root.querySelector('[data-starters]');
   if (starterRoot) {
     starterRoot.innerHTML = STARTERS.map((recipe, index) =>
       `<button type="button" class="btn" data-starter="${index}">${escapeHtml(recipe.name)}</button>`).join('');
   }
+  return controller;
 }
 
 export function rememberedIndex(turn) {

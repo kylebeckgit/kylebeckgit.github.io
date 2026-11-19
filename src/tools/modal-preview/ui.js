@@ -4,7 +4,6 @@ import { renderPreview, scaleToPeak, strikeWeight } from './resonator.js';
 import { aimSlices, createFitMotion, createSliceMotion, defaultCamera, hitPartial, MORPH_MS, paintModalView, sampleSlices, slicesMoving } from './modal-view.js';
 import { densityForProfile, shapePartials } from './shape.js';
 import { createRollHistory, defaultLocks, pushRoll, redoRoll, rollSound, undoRoll } from './randomize.js';
-import { mountStudio } from './studio.js';
 
 export function mount(root) {
   const describeUrl = (root.dataset.describeUrl || '').trim();
@@ -910,15 +909,83 @@ export function mount(root) {
     return profile;
   }
 
+  function setShapeNumber(selector, readout, value, digits) {
+    const input = root.querySelector(selector);
+    const out = readout ? root.querySelector(readout) : null;
+    if (input) input.value = String(value);
+    if (out) out.textContent = digits == null ? String(value) : Number(value).toFixed(digits);
+  }
+
+  function ensureDensityCount(count) {
+    const select = root.querySelector('[data-density]');
+    if (!select || !(count > 0)) return;
+    const has = [...select.options].some((option) => Number(option.value) === count);
+    if (!has) {
+      const option = document.createElement('option');
+      option.value = String(count);
+      option.textContent = String(count);
+      select.append(option);
+    }
+    select.value = String(count);
+    densityChoice = count;
+  }
+
+  function receiveHandoff(payload) {
+    if (!payload?.partials?.length) return;
+    const controls = sanitizeControls(payload.controls || {});
+    state.carried = carryControls(controls);
+    state.controls = controls;
+    state.profileName = payload.name || 'From generator';
+    fields.preset.value = controls.preset;
+    fields.stiffness.value = String(controls.stiffness);
+    fields.brightness.value = String(controls.brightness);
+    fields.damping.value = String(controls.damping);
+    fields.oddEven.value = String(controls.oddEven);
+    fields.seed.value = String(controls.seed);
+    readouts.stiffness.textContent = controls.stiffness.toFixed(2);
+    readouts.brightness.textContent = controls.brightness.toFixed(2);
+    readouts.damping.textContent = controls.damping.toFixed(2);
+    readouts.oddEven.textContent = controls.oddEven.toFixed(2);
+    const nameInput = root.querySelector('[data-name]');
+    if (nameInput) nameInput.value = state.profileName;
+    const exciter = root.querySelector('[data-exciter]');
+    if (payload.exciter && exciter) exciter.value = payload.exciter;
+    if (payload.hardness != null) setShapeNumber('[data-hardness]', '[data-hardness-out]', payload.hardness, 2);
+    if (payload.velocity != null) setShapeNumber('[data-velocity]', '[data-velocity-out]', payload.velocity, 2);
+    setShapeNumber('[data-tune]', '[data-tune-out]', 0, 0);
+    setShapeNumber('[data-detune]', '[data-detune-out]', 0, 0);
+    setShapeNumber('[data-modal-decay]', '[data-modal-decay-out]', 0, 0);
+    setShapeNumber('[data-decay-kf]', '[data-decay-kf-out]', 0, 0);
+    setShapeNumber('[data-absorb]', '[data-absorb-out]', 0, 0);
+    setShapeNumber('[data-disperse]', '[data-disperse-out]', 0, 0);
+    setShapeNumber('[data-normalize]', '[data-normalize-out]', 0, 0);
+    const position = payload.position ?? 0.18;
+    setShapeNumber('[data-position]', '[data-position-out]', position, 2);
+    state.detune = 0;
+    state.position = position;
+    state.exciter = payload.exciter || state.exciter;
+    state.hardness = payload.hardness ?? state.hardness;
+    state.velocity = payload.velocity ?? state.velocity;
+    ensureDensityCount(payload.partials.length);
+    state.hearFundamental = playedFundamental(controls.pitchScale, noteFrequency(state.note));
+    const copy = payload.partials.map((partial) => ({
+      ratio: partial.ratio,
+      gainDb: partial.gainDb,
+      decay: partial.decay,
+    }));
+    state.profilePartials = copy;
+    state.partials = copy;
+    state.custom = true;
+    pushHistory();
+    publishShape(0);
+    render();
+    pushModes();
+  }
+
   readPlayControls();
   rebuild();
   updateHistoryButtons();
   showRoot();
-  mountStudio(root, {
-    applyRecipe,
-    setName(name) { state.profileName = name.trim() || 'Modal profile'; },
-    profileFromState,
-  });
   root.addEventListener('pointerdown', () => primeAudio(state), true);
   root.querySelector('[data-note="A4"]')?.setAttribute('aria-pressed', 'true');
   window.addEventListener('resize', () => draw(canvas, state.partials, state));
@@ -926,6 +993,7 @@ export function mount(root) {
   const onScheme = () => draw(canvas, state.partials, state);
   if (typeof scheme.addEventListener === 'function') scheme.addEventListener('change', onScheme);
   else scheme.addListener(onScheme);
+  return { receiveHandoff };
 }
 
 function markPlayedNote(root, hz) {
