@@ -959,7 +959,8 @@ export function mount(root) {
     if (payload.hardness != null) setShapeNumber('[data-hardness]', '[data-hardness-out]', payload.hardness, 2);
     if (payload.velocity != null) setShapeNumber('[data-velocity]', '[data-velocity-out]', payload.velocity, 2);
     setShapeNumber('[data-tune]', '[data-tune-out]', 0, 0);
-    setShapeNumber('[data-detune]', '[data-detune-out]', 0, 0);
+    const detune = Number(payload.detune) || 0;
+    setShapeNumber('[data-detune]', '[data-detune-out]', Math.round(detune * 100), 0);
     setShapeNumber('[data-modal-decay]', '[data-modal-decay-out]', 0, 0);
     setShapeNumber('[data-decay-kf]', '[data-decay-kf-out]', 0, 0);
     setShapeNumber('[data-absorb]', '[data-absorb-out]', 0, 0);
@@ -967,7 +968,7 @@ export function mount(root) {
     setShapeNumber('[data-normalize]', '[data-normalize-out]', 0, 0);
     const position = payload.position ?? 0.18;
     setShapeNumber('[data-position]', '[data-position-out]', position, 2);
-    state.detune = 0;
+    state.detune = detune;
     state.position = position;
     state.exciter = payload.exciter || state.exciter;
     state.hardness = payload.hardness ?? state.hardness;

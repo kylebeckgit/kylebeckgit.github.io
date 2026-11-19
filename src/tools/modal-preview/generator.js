@@ -239,7 +239,57 @@ export function nudgeVariation(variation, seed, wildness) {
   return next;
 }
 
-export function dressVariations(variations, seed, wildness) {
+function shiftWildPartials(partials, delta) {
+  const floor = Math.min(...partials.map((partial) => partial.ratio));
+  const longest = Math.max(...partials.map((partial) => partial.decay));
+  let next = partials.map((partial) => {
+    const octaves = Math.log2(Math.max(partial.ratio, 1e-9) / floor);
+    let decay = Math.min(30, Math.max(0.05, partial.decay * delta.decay));
+    if (delta.lift && partial.decay < longest * 0.92) {
+      decay = Math.min(30, Math.max(decay, partial.decay + (longest - partial.decay) * delta.lift));
+    }
+    if (partial.ratio > floor * 6 && decay > 1.6 && delta.tilt > 0) decay = 0.4;
+    return { ...partial, gainDb: partial.gainDb + delta.tilt * octaves, decay };
+  });
+  const peak = Math.max(...next.map((partial) => partial.gainDb));
+  next = next.map((partial) => ({ ...partial, gainDb: partial.gainDb - peak }));
+  const loudest = next.reduce((best, partial) => (partial.gainDb > best.gainDb ? partial : best), next[0]);
+  return next.map((partial) => (
+    partial === loudest
+      ? { ...partial, gainDb: 0 }
+      : { ...partial, gainDb: Math.min(partial.gainDb, -3.2) }
+  ));
+}
+
+function keepWildBody(source, card) {
+  const from = source.controls || {};
+  const to = card.controls || {};
+  const delta = {
+    tilt: (to.variationTilt || 0) - (from.variationTilt || 0),
+    decay: (to.variationDecay || 1) / (from.variationDecay || 1),
+    lift: (to.variationLift || 0) - (from.variationLift || 0),
+  };
+  const knobs = { detune: source.detune || 0, density: source.partials.length, position: source.position || 0.18 };
+  let partials = shiftWildPartials(source.partials, delta);
+  if (!assessQuality(partials, knobs).ok) {
+    partials = shiftWildPartials(source.partials, {
+      tilt: delta.tilt * 0.45,
+      decay: 1 + (delta.decay - 1) * 0.45,
+      lift: delta.lift * 0.45,
+    });
+  }
+  if (!assessQuality(partials, knobs).ok) partials = source.partials.map(copyPartial);
+  return {
+    ...card,
+    partials: partials.map(copyPartial),
+    position: source.position,
+    detune: source.detune || 0,
+    controls: sanitizeControls({ ...to, pitchScale: to.pitchScale || from.pitchScale || 1 }),
+  };
+}
+
+export function dressVariations(variations, seed, wildness, source = null) {
+  if (source?.partials?.length) return variations.map((card) => keepWildBody(source, card));
   const amount = Math.min(1, Math.max(0, Number(wildness) || 0));
   if (amount > 0.7) {
     const base = wildenVariation(variations[0], seed, amount);
@@ -281,6 +331,7 @@ export function snapshotVariation(variation) {
     exciter: variation?.exciter || 'mallet',
     hardness: variation?.hardness ?? 0.5,
     position: variation?.position ?? 0.18,
+    detune: variation?.detune || 0,
     velocity: variation?.velocity ?? 0.8,
   };
 }
@@ -399,6 +450,7 @@ export function handoffPayload(session) {
     exciter: snap.exciter,
     hardness: snap.hardness,
     position: snap.position,
+    detune: snap.detune || 0,
     velocity: snap.velocity,
   };
 }
@@ -486,9 +538,9 @@ export function mountGenerator(root, { openInDesigner } = {}) {
     },
     setName() {},
     profileFromState() { return null; },
-    decorateVariations(variations) {
+    decorateVariations(variations, current) {
       seed = (seed + 1) >>> 0;
-      return dressVariations(variations, seed, Number(wild?.value || 0));
+      return dressVariations(variations, seed, Number(wild?.value || 0), current);
     },
     openInDesigner(variation) {
       if (!openInDesigner) return;
@@ -541,6 +593,8 @@ export function applyHandoff(designer, payload) {
   designer.exciter = payload.exciter;
   designer.hardness = payload.hardness;
   designer.position = payload.position;
+  designer.detune = payload.detune || 0;
+  if (designer.knobs) designer.knobs.detune = payload.detune || 0;
   designer.velocity = payload.velocity;
   return designer;
 }

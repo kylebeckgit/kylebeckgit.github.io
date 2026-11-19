@@ -126,13 +126,26 @@ test('wild rolls keep bright, dark, long, and refine', () => {
   const session = createGeneratorSession();
   rollGenerator(session, { wildness: 1, seed: 42 });
   const selected = session.turn.variations[0];
-  const refined = dressVariations(describePrompt('brighter', selected), 99, 1);
+  const ratios = selected.partials.map((partial) => partial.ratio.toFixed(4)).join();
+  const refined = dressVariations(describePrompt('brighter', selected), 99, 1, selected);
   assert.equal(refined.length, 4);
   assert.match(refined[1].name, /^Further /);
+  assert.equal(refined[0].partials.map((partial) => partial.ratio.toFixed(4)).join(), ratios);
+  assert.equal(refined[1].partials.map((partial) => partial.ratio.toFixed(4)).join(), ratios);
+  assert.equal(refined[0].detune, selected.detune);
   assert.notEqual(
     refined[0].partials.map((partial) => partial.gainDb.toFixed(2)).join(),
     refined[1].partials.map((partial) => partial.gainDb.toFixed(2)).join(),
   );
+  const snap = currentSnapshot(session);
+  assert.equal(snap.detune, selected.detune);
+  let moved = 0;
+  for (let i = 1; i <= 30; i++) {
+    const probe = createGeneratorSession();
+    rollGenerator(probe, { wildness: 1, seed: 3000 + i });
+    if (Math.abs(currentSnapshot(probe).detune) > 0.05) moved += 1;
+  }
+  assert.ok(moved >= 10, `only ${moved} wild rolls carried a detune`);
   for (const variation of refined) {
     assert.equal(readRecipe(session.turn.prompt).fallback, false);
     const quality = assessQuality(variation.partials, {
