@@ -248,16 +248,21 @@ function shiftWildPartials(partials, delta) {
     if (delta.lift && partial.decay < longest * 0.92) {
       decay = Math.min(30, Math.max(decay, partial.decay + (longest - partial.decay) * delta.lift));
     }
-    if (partial.ratio > floor * 6 && decay > 1.6 && delta.tilt > 0) decay = 0.4;
     return { ...partial, gainDb: partial.gainDb + delta.tilt * octaves, decay };
   });
   const peak = Math.max(...next.map((partial) => partial.gainDb));
   next = next.map((partial) => ({ ...partial, gainDb: partial.gainDb - peak }));
   const loudest = next.reduce((best, partial) => (partial.gainDb > best.gainDb ? partial : best), next[0]);
-  return next.map((partial) => (
+  next = next.map((partial) => (
     partial === loudest
       ? { ...partial, gainDb: 0 }
       : { ...partial, gainDb: Math.min(partial.gainDb, -3.2) }
+  ));
+  // A long high partial only fails the gate when it is also loud. Quiet highs keep their tail.
+  return next.map((partial) => (
+    partial.ratio > floor * 6 && partial.decay > 2 && partial.gainDb > -8
+      ? { ...partial, decay: 1.5 }
+      : partial
   ));
 }
 

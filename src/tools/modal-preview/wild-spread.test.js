@@ -137,6 +137,25 @@ test('wild rolls keep bright, dark, long, and refine', () => {
     refined[0].partials.map((partial) => partial.gainDb.toFixed(2)).join(),
     refined[1].partials.map((partial) => partial.gainDb.toFixed(2)).join(),
   );
+  const dark = {
+    name: 'Dark bell',
+    partials: [
+      { ratio: 1, gainDb: 0, decay: 6 },
+      { ratio: 2.1, gainDb: -6, decay: 3 },
+      { ratio: 3.3, gainDb: -9, decay: 2 },
+      { ratio: 4.6, gainDb: -12, decay: 1.2 },
+      { ratio: 7.4, gainDb: -36, decay: 14 },
+    ],
+    controls: {
+      preset: 'bell', voice: '', count: 5, stiffness: 0.2, brightness: -0.4, damping: 0.4,
+      oddEven: 0, seed: 1, decayScale: 1, pitchScale: 1, variationTilt: -8, variationDecay: 1, variationLift: 0,
+    },
+    position: 0.18,
+    detune: 0,
+  };
+  const brightened = dressVariations(describePrompt('brighter', dark), 3, 1, dark);
+  const quietHigh = brightened[0].partials.find((partial) => partial.ratio > 6);
+  assert.ok(quietHigh.decay > 2, `brighter refine shortened a quiet high to ${quietHigh.decay}`);
   const snap = currentSnapshot(session);
   assert.equal(snap.detune, selected.detune);
   let moved = 0;
