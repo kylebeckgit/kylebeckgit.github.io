@@ -195,9 +195,11 @@ test('refining a bright card keeps its plan and can walk back', () => {
   for (const card of [bright, gong]) {
     const refined = describePrompt('darker', card);
     const applied = refined[0];
+    const further = refined[1];
     const halfway = refined[2];
     assert.equal(applied.objectName, card.objectName);
     assert.ok(applied.controls.variationTilt < card.controls.variationTilt, card.name);
+    assert.ok(further.controls.variationTilt < applied.controls.variationTilt, `${card.name} further`);
     assert.ok(halfway.controls.variationTilt < card.controls.variationTilt, `${card.name} halfway`);
     assert.ok(halfway.controls.variationTilt > applied.controls.variationTilt, `${card.name} halfway vs darker`);
     const heard = hearPartials(applied);

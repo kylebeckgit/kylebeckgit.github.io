@@ -359,6 +359,13 @@ function pushFurther(core, previous) {
     const delta = core.controls[key] - previous.controls[key];
     if (Math.abs(delta) > 0.001) controls[key] = core.controls[key] + delta * 0.65;
   }
+  // On a clamped gong or black hole the plan, not the knob, is what moved.
+  const tiltDelta = (core.controls.variationTilt || 0) - (previous.controls.variationTilt || 0);
+  if (Math.abs(tiltDelta) > 0.05) controls.variationTilt = (core.controls.variationTilt || 0) + tiltDelta * 0.65;
+  const decayDelta = (core.controls.variationDecay || 1) - (previous.controls.variationDecay || 1);
+  if (Math.abs(decayDelta) > 0.001) controls.variationDecay = (core.controls.variationDecay || 1) + decayDelta * 0.65;
+  const liftDelta = (core.controls.variationLift || 0) - (previous.controls.variationLift || 0);
+  if (Math.abs(liftDelta) > 0.001) controls.variationLift = (core.controls.variationLift || 0) + liftDelta * 0.65;
   return sanitizeControls(controls);
 }
 
