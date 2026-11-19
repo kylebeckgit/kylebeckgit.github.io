@@ -4,7 +4,9 @@
 // --accent in src/styles/global.css.
 export const ACCENT = '#d4421c';
 
-const SIZE = { tiny: 0.52, small: 0.66, medium: 0.8, large: 0.9, huge: 0.98 };
+const SIZE = { tiny: 0.62, small: 0.74, medium: 0.84, large: 0.9, huge: 0.94 };
+// Tall bodies use a smaller unit so a huge shell or tube, plus its shadow, stays inside the canvas.
+const FIT = { bar: 0.5, string: 0.46, plate: 0.44, membrane: 0.42, shell: 0.4, tube: 0.36, box: 0.42 };
 const CARD = '#fbf8f2';
 const MODE_LIMIT = 3;
 const BAND = 0.038;
@@ -65,6 +67,11 @@ export function materialKey(body = {}) {
 
 export function materialFinish(key) {
   return (TONE[key] || TONE.metal).kind;
+}
+
+export function objectUnit(width, height, family = 'bar', size = 'medium') {
+  const scale = SIZE[String(size || 'medium').toLowerCase()] || SIZE.medium;
+  return Math.min(width, height) * (FIT[family] || 0.42) * scale;
 }
 
 // Bar: 1, 2, 3 interior nodes. String and tube: 1, 2, 3 loops.
@@ -237,7 +244,6 @@ export function paintObject(ctx, options) {
   const material = materialKey(options.body || {});
   const tone = TONE[material] || TONE.metal;
   const sizeName = String(options.body?.size || 'medium').toLowerCase();
-  const scale = SIZE[sizeName] || SIZE.medium;
   const partials = options.partials || [];
   const selected = Number.isInteger(options.selected) ? options.selected : -1;
   const age = options.age;
@@ -249,7 +255,7 @@ export function paintObject(ctx, options) {
   ctx.fillRect(0, 0, width, height);
   ctx.save();
   ctx.translate(width / 2, height / 2);
-  const unit = Math.min(width, height) * 0.56 * scale;
+  const unit = objectUnit(width, height, family, sizeName);
   const flare = modes.reduce((sum, mode) => {
     const motion = playing ? Math.sin(phaseOf(mode.index, age)) * mode.env : 1;
     return sum + Math.min(0.08, Math.abs(motion) * mode.amp * 0.05);

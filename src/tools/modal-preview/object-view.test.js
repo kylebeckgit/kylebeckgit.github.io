@@ -11,6 +11,7 @@ import {
   modeEnvelope,
   modeSamples,
   modeShape,
+  objectUnit,
   shownModes,
 } from './object-view.js';
 
@@ -102,4 +103,13 @@ test('a short partial fades before a long one, and the bar bends between its nod
   assert.ok(Math.abs(modeDisplacement('bar', 0, 0.5)) < 1e-9);
   assert.ok(Math.abs(modeDisplacement('bar', 0, 0.25)) > 0.9);
   assert.ok(Math.abs(modeDisplacement('tube', 1, 0.5)) < 1e-9);
+});
+
+test('a huge shell or tube, with its shadow, stays inside the canvas', () => {
+  const height = 400;
+  const tube = objectUnit(520, height, 'tube', 'huge');
+  const shell = objectUnit(520, height, 'shell', 'huge');
+  assert.ok(tube * 1.2 < height / 2, 'tube shadow is clipped');
+  assert.ok(shell * 1.15 < height / 2, 'shell shadow is clipped');
+  assert.ok(objectUnit(520, height, 'bar', 'medium') > tube);
 });
