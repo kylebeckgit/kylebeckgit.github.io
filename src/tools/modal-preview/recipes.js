@@ -91,6 +91,7 @@ function applyEntry(recipe, entry, promptText) {
   recipe.controls.oddEven = entry.oddEven ?? 0;
   recipe.controls.voice = entry.voice || '';
   recipe.controls.count = entry.count || 64;
+  recipe.controls.pitchScale = entry.pitchScale || 1;
   const spread = hashString(entry.name);
   if (entry.fallback) recipe.controls.seed = entry.seed || 1;
   else if (entry.seed) recipe.controls.seed = hashString(promptText || entry.name);

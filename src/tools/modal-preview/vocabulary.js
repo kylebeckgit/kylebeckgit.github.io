@@ -114,7 +114,8 @@ const SPECIFIC = [
   entry(['black hole', 'blackhole', 'singularity'], {
     name: 'Black hole', material: 'void', shape: 'cavity', size: 'huge', preset: 'plate', voice: 'abyss',
     count: 36, stiffness: 0.15, brightness: -0.85, damping: 0.04, oddEven: 0.1,
-    exciter: 'mallet', hardness: 0.55, traits: ['very low', 'dense', 'slow beating', 'extremely long'],
+    exciter: 'mallet', hardness: 0.55, pitchScale: 0.32,
+    traits: ['very low', 'dense', 'slow beating', 'extremely long'],
   }),
   entry(['prayer bell', 'temple bell'], {
     name: 'Prayer bell', material: 'metal', shape: 'shell', size: 'small', preset: 'bell', voice: '',
@@ -212,9 +213,10 @@ const SPECIFIC = [
     exciter: 'mallet', hardness: 0.4, traits: ['long'],
   }),
   entry(['waterphone'], {
-    name: 'Waterphone', material: 'metal', shape: 'cavity', size: 'medium', preset: 'plate', voice: 'abyss',
-    count: 24, stiffness: 0.7, brightness: -0.2, damping: 0.18, oddEven: 0.4,
-    exciter: 'bow', hardness: 0.45, seed: 1, traits: ['inharmonic', 'long'],
+    name: 'Waterphone', material: 'metal', shape: 'cavity', size: 'medium', preset: 'plate', voice: '',
+    count: 28, stiffness: 0.88, brightness: 0.45, damping: 0.14, oddEven: 0.55,
+    exciter: 'bow', hardness: 0.45, seed: 1, pitchScale: 1.35,
+    traits: ['inharmonic', 'bright', 'long'],
   }),
   entry(['ice block', 'iceberg', 'glacier', 'icicle'], {
     name: 'Ice', material: 'ice', shape: 'bar', size: 'large', preset: 'bar', voice: '',

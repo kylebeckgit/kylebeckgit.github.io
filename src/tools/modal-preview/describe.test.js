@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { audiblePartials, carryControls, controlsFromKnobs, previewPartials, zebraDecaySeconds, zebraExport } from './engine.js';
+import { audiblePartials, carryControls, controlsFromKnobs, playedFundamental, previewPartials, zebraDecaySeconds, zebraExport } from './engine.js';
 import { renderPreview } from './resonator.js';
 import { describePrompt, readRecipe } from './recipes.js';
 import { phraseCount } from './vocabulary.js';
@@ -53,14 +53,15 @@ function pagePartial(prompt) {
     oddEven: recipe.controls.oddEven,
     seed: recipe.controls.seed,
   }, carried);
+  const fundamental = playedFundamental(controls.pitchScale);
   const built = previewPartials(controls);
-  const heard = audiblePartials(built, { fundamental: 220, sampleRate: 48000 });
-  const exported = zebraExport(heard, { fundamental: 220, description: prompt });
+  const heard = audiblePartials(built, { fundamental, sampleRate: 48000 });
+  const exported = zebraExport(heard, { fundamental, description: prompt });
   const restored = exported.csv.trim().split('\n').slice(1).map((line) => {
     const [ratio, gainDb, decay] = line.split(';').map(Number);
     return { ratio, gainDb, decay: zebraDecaySeconds(decay, exported.knob) };
   });
-  return { recipe, controls, partials: heard, restored, features: features(heard) };
+  return { recipe, controls, partials: heard, restored, fundamental, features: features(heard, fundamental) };
 }
 
 function profileOf(prompt) {
@@ -68,10 +69,10 @@ function profileOf(prompt) {
   return { recipe: row.recipe, partials: row.partials, features: row.features };
 }
 
-function tailLevel(partials, recipe) {
+function tailLevel(partials, recipe, fundamental = 220) {
   const sampleRate = 48000;
   const samples = renderPreview(partials, {
-    fundamental: 220,
+    fundamental,
     velocity: 0.8,
     position: 0.2,
     exciter: recipe.exciter || 'mallet',
@@ -88,7 +89,7 @@ function tailLevel(partials, recipe) {
   return Math.sqrt(tail / (samples.length - tailStart)) / (Math.sqrt(head / headEnd) + 1e-12);
 }
 
-function features(partials) {
+function features(partials, fundamental = 440) {
   let weight = 0;
   let centroid = 0;
   let decay = 0;
@@ -96,7 +97,7 @@ function features(partials) {
     const amp = 10 ** (partial.gainDb / 20);
     const power = amp * amp;
     weight += power;
-    centroid += power * partial.ratio * 440;
+    centroid += power * partial.ratio * fundamental;
     decay += power * partial.decay;
   }
   const longest = Math.max(...partials.map((partial) => partial.decay));
@@ -251,10 +252,12 @@ test('tiny, gong, and huge gong differ in the rendered audio and the export', ()
   assert.ok(Math.abs(huge.controls.decayScale - 2.3) < 1e-9);
   assert.ok(Math.abs(tiny.controls.pitchScale - 1.9) < 1e-9);
   assert.ok(Math.abs(huge.controls.pitchScale - 0.42) < 1e-9);
+  assert.ok(tiny.partials.some((partial) => Math.abs(partial.ratio - 1) < 0.04));
+  assert.notEqual(readRecipe('waterphone').controls.voice, 'abyss');
   const tails = {
-    tiny: tailLevel(tiny.partials, tiny.recipe),
-    gong: tailLevel(gong.partials, gong.recipe),
-    huge: tailLevel(huge.partials, huge.recipe),
+    tiny: tailLevel(tiny.partials, tiny.recipe, tiny.fundamental),
+    gong: tailLevel(gong.partials, gong.recipe, gong.fundamental),
+    huge: tailLevel(huge.partials, huge.recipe, huge.fundamental),
   };
   assert.ok(tails.tiny < tails.gong * 0.25, `tiny tail ${tails.tiny} gong ${tails.gong}`);
   assert.ok(tails.huge > tails.gong * 1.3, `huge tail ${tails.huge} gong ${tails.gong}`);

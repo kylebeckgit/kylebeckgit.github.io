@@ -131,13 +131,12 @@ function crystalRatios() {
 }
 
 function abyssRatios() {
-  // A low dense pile, under the usual A4 fundamental. Each center has a
-  // twin about 12 cents away, so the mass beats slowly instead of ringing
-  // as one clean tone.
+  // A dense pile around the body, each center split by about 12 cents so
+  // the mass beats slowly. The lowness is the played note, not a ratio
+  // below 1, so the voice curves still see the body at ratio 1.
   const ratios = [];
-  const base = 0.38;
   for (let i = 0; i < 18; i++) {
-    const center = base * (1 + i * 0.07);
+    const center = 1 + i * 0.055;
     ratios.push(center * 0.9965, center * 1.007);
   }
   return ratios;
@@ -319,11 +318,10 @@ export function controlsFromKnobs(knobs, carried) {
 
 export function buildPartials(rawControls) {
   const controls = sanitizeControls(rawControls);
-  const pitch = controls.pitchScale || 1;
   let ratios = baseRatios(controls.preset, controls.voice).slice(0, controls.count).map((ratio, index) => {
     const n = index + 1;
     const b = controls.stiffness * 0.0005;
-    return ratio * pitch * Math.sqrt(1 + b * n * n);
+    return ratio * Math.sqrt(1 + b * n * n);
   });
   if (controls.seed > 0) {
     const rand = mulberry32(controls.seed);
@@ -590,8 +588,10 @@ function compensateForZebra(partial) {
   };
 }
 
-export function zebraHint(knob) {
-  return `In Zebra, set Decay to ${knob}, Position 0, other modal knobs at 0. Rows stop at 6 kHz when the fundamental is A4.`;
+export function zebraHint(knob, fundamental = A4_HZ) {
+  const base = `In Zebra, set Decay to ${knob}, Position 0, other modal knobs at 0. Rows stop at 6 kHz when the fundamental is A4.`;
+  if (!(fundamental > 0) || Math.abs(Math.log2(fundamental / A4_HZ)) < 0.04) return base;
+  return `${base} Play the note near ${Math.round(fundamental)} Hz.`;
 }
 
 function decayCell(unit, longest) {
@@ -618,7 +618,7 @@ export function zebraExport(partials, options = {}) {
   return {
     csv: lines.join('\n') + '\n',
     knob,
-    hint: zebraHint(knob),
+    hint: zebraHint(knob, options.fundamental),
     filename: exportFileName(options.description, knob),
     partials: audible,
     tmax,
@@ -661,6 +661,12 @@ export function fromCsv(text, options = {}) {
 }
 
 export const NOTE_BUTTONS = ['C4', 'C#4', 'D4', 'D#4', 'E4', 'F4', 'F#4', 'G4', 'G#4', 'A4', 'A#4', 'B4', 'C5'];
+
+export function playedFundamental(pitchScale, baseHz = A4_HZ) {
+  const scale = Number(pitchScale);
+  const base = Number(baseHz);
+  return (base > 0 ? base : A4_HZ) * (scale > 0 ? scale : 1);
+}
 
 export function noteFrequency(name) {
   const match = /^([A-G])(#)?(-?\d)$/.exec(name);
