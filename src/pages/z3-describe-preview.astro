@@ -1,40 +1,21 @@
 ---
 import Base from '../layouts/Base.astro';
 ---
-<Base title="Modal generator preview" path="/z3-describe-preview.html" description="Unlisted preview. Describe a sound, hear a few variations, and download the Zebra 3 modal profile." robots="noindex, nofollow">
+<Base title="Modal preview" path="/z3-describe-preview.html" description="Unlisted preview. Design a modal body by hand, or generate variations from a sentence." robots="noindex, nofollow">
   <p class="eyebrow"><a href="/tools/">Tools</a></p>
-  <h1>Modal generator preview</h1>
-  <p class="lede">Describe a sound. Hear a few variations, then refine them on the modal panel.</p>
+  <h1>Modal preview</h1>
+  <p class="lede">Two tools. The designer edits a body by hand. The generator reads a sentence into a few variations.</p>
 
   <div id="modal-app">
-    <section class="describe" aria-labelledby="describe-heading">
-      <h2 id="describe-heading" class="visually-hidden">Describe</h2>
-      <p class="quiet">Unlisted preview. The sentence is read in this browser. Nothing is sent. Command or Ctrl+Enter describes.</p>
-      <div class="ask-bar">
-        <label class="ask">Describe
-          <textarea data-ask rows="3" placeholder="Glass bowl struck softly, slightly detuned, long shimmer"></textarea>
-        </label>
-        <button type="button" class="btn solid" data-ask-btn>Describe</button>
-      </div>
-      <p class="quiet" data-allowance></p>
-      <p class="status" data-studio-status role="status"></p>
+    <div class="tool-switch" role="tablist" aria-label="Tools">
+      <button type="button" class="tool-tab" role="tab" id="tab-designer" data-tool-tab="designer" aria-controls="tool-designer" aria-selected="true">Modal designer</button>
+      <button type="button" class="tool-tab" role="tab" id="tab-generator" data-tool-tab="generator" aria-controls="tool-generator" aria-selected="false">Modal generator</button>
+    </div>
 
-      <div data-results hidden>
-        <h2>Variations</h2>
-        <ol class="thread" data-thread></ol>
-        <div class="var-grid" data-cards></div>
-        <div class="refine">
-          <label>Refine
-            <input data-refine-text type="text" placeholder="Darker, or a shorter tail" enterkeyhint="send">
-          </label>
-          <button type="button" class="btn" data-refine-btn>Refine</button>
-          <button type="button" class="btn" data-step-back disabled>Step back</button>
-        </div>
-      </div>
-    </section>
-
+    <section id="tool-designer" data-tool="designer" role="tabpanel" aria-labelledby="tab-designer">
     <section class="panel" aria-labelledby="modal-heading">
-      <h2 id="modal-heading">Modal</h2>
+      <h2 id="modal-heading">Modal designer</h2>
+      <p class="quiet">Starts from a plain body. Randomize rolls a new one in this tool only.</p>
       <div class="stage">
       <canvas data-view="zebra" aria-label="Modal partials. Click a mode to highlight it."></canvas>
       <div class="stage-play">
@@ -152,7 +133,7 @@ import Base from '../layouts/Base.astro';
           <input data-roll-wildness type="range" min="0" max="1" step="0.01" value="0.3">
         </label>
         <div class="roll-actions">
-          <button type="button" class="btn solid" data-roll>Roll</button>
+          <button type="button" class="btn solid" data-roll>Randomize</button>
           <button type="button" class="btn" data-roll-back disabled>Back</button>
           <button type="button" class="btn" data-roll-forward disabled>Forward</button>
         </div>
@@ -195,12 +176,7 @@ import Base from '../layouts/Base.astro';
           <button type="button" class="btn" data-share>Copy link</button>
           <label class="btn">Import profile<input data-import type="file" accept=".csv,text/csv" hidden></label>
         </div>
-      </div>
-
-      <div class="more-block">
-        <h3>Starters</h3>
-        <p class="quiet">Fixed recipes, for when you want a known object before describing your own.</p>
-        <div class="starter-row" data-starters></div>
+        <p class="status" data-share-status role="status"></p>
       </div>
 
       <div class="more-block">
@@ -268,11 +244,100 @@ import Base from '../layouts/Base.astro';
         <p class="status" data-analyze-msg role="status"></p>
       </div>
     </details>
+    </section>
+
+    <section id="tool-generator" data-tool="generator" role="tabpanel" aria-labelledby="tab-generator" hidden>
+      <h2 class="tool-title">Modal generator</h2>
+      <p class="quiet">The sentence is read in this browser. Nothing is sent. Command or Ctrl+Enter describes. Randomize here does not change the designer.</p>
+      <section class="describe" aria-labelledby="describe-heading">
+        <h3 id="describe-heading" class="visually-hidden">Describe</h3>
+        <div class="ask-bar">
+          <label class="ask">Describe
+            <textarea data-ask rows="3" placeholder="Glass bowl struck softly, slightly detuned, long shimmer"></textarea>
+          </label>
+          <button type="button" class="btn solid" data-ask-btn>Describe</button>
+        </div>
+        <p class="quiet" data-allowance></p>
+        <p class="status" data-studio-status role="status"></p>
+        <div data-results hidden>
+          <h3>Variations</h3>
+          <ol class="thread" data-thread></ol>
+          <div class="var-grid" data-cards></div>
+          <div class="refine">
+            <label>Refine
+              <input data-refine-text type="text" placeholder="Darker, or a shorter tail" enterkeyhint="send">
+            </label>
+            <button type="button" class="btn" data-refine-btn>Refine</button>
+            <button type="button" class="btn" data-step-back disabled>Step back</button>
+          </div>
+        </div>
+      </section>
+      <div class="gen-preview">
+        <canvas data-gen-view aria-label="Generator preview"></canvas>
+        <div class="gen-actions">
+          <button type="button" class="btn" data-gen-hear>Hear</button>
+          <button type="button" class="btn solid" data-open-designer disabled>Open in designer</button>
+        </div>
+      </div>
+      <div class="roll gen-roll">
+        <label class="knob">Wildness <span data-gen-wild-out>0.30</span>
+          <input data-gen-wild type="range" min="0" max="1" step="0.01" value="0.3">
+        </label>
+        <div class="roll-actions">
+          <button type="button" class="btn solid" data-gen-roll>Randomize</button>
+          <button type="button" class="btn" data-gen-back disabled>Back</button>
+          <button type="button" class="btn" data-gen-forward disabled>Forward</button>
+        </div>
+        <p class="quiet">A low wildness rolls familiar bodies. Higher wildness mixes unusual ones that still play.</p>
+      </div>
+      <div class="more-block">
+        <h3>Starters</h3>
+        <p class="quiet">Fixed recipes, when you want a known object before writing your own.</p>
+        <div class="starter-row" data-starters></div>
+      </div>
+    </section>
   </div>
 </Base>
 
 <style>
   #modal-app { margin-top: 1.75rem; }
+  .tool-switch {
+    display: flex;
+    gap: 1.25rem;
+    margin-top: 1.35rem;
+    border-bottom: 1px solid var(--line);
+  }
+  .tool-tab {
+    font: inherit;
+    font-weight: 600;
+    font-size: 1.05rem;
+    color: var(--muted);
+    background: transparent;
+    border: 0;
+    border-bottom: 3px solid transparent;
+    padding: .75rem .1rem .65rem;
+    margin-bottom: -1px;
+    cursor: pointer;
+  }
+  .tool-tab[aria-selected="true"] {
+    color: var(--fg);
+    border-bottom-color: var(--accent);
+  }
+  .tool-title { margin: 1.25rem 0 .35rem; }
+  .gen-preview {
+    display: grid;
+    gap: 1rem;
+    align-items: end;
+    margin-top: 1.25rem;
+  }
+  @media (min-width: 800px) {
+    .gen-preview { grid-template-columns: minmax(0, 22rem) auto; }
+  }
+  canvas[data-gen-view] { width: min(100%, 22rem); }
+  .gen-actions { display: flex; flex-wrap: wrap; gap: .6rem; }
+  .gen-actions .btn { min-height: 2.75rem; }
+  .gen-roll { margin-top: 1.25rem; }
+  .gen-roll > .quiet { grid-column: 1 / -1; margin-top: 0; }
   #modal-app :global(button),
   #modal-app :global(select),
   #modal-app :global(input),
@@ -510,5 +575,32 @@ import Base from '../layouts/Base.astro';
 
 <script>
   import { mount } from '../tools/modal-preview/ui.js';
-  mount(document.getElementById('modal-app'));
+  import { mountGenerator } from '../tools/modal-preview/generator.js';
+
+  const app = document.getElementById('modal-app');
+  const designer = mount(app.querySelector('[data-tool="designer"]'));
+  const tabs = [...app.querySelectorAll('[data-tool-tab]')];
+  const panels = {
+    designer: app.querySelector('[data-tool="designer"]'),
+    generator: app.querySelector('[data-tool="generator"]'),
+  };
+
+  function showTool(name) {
+    for (const tab of tabs) {
+      const on = tab.dataset.toolTab === name;
+      tab.setAttribute('aria-selected', String(on));
+    }
+    for (const [key, panel] of Object.entries(panels)) panel.hidden = key !== name;
+  }
+
+  for (const tab of tabs) {
+    tab.addEventListener('click', () => showTool(tab.dataset.toolTab));
+  }
+
+  mountGenerator(panels.generator, {
+    openInDesigner(payload) {
+      designer.receiveHandoff(payload);
+      showTool('designer');
+    },
+  });
 </script>
