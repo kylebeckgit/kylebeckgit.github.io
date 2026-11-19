@@ -1,6 +1,18 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { bodyFamily, materialKey, modeSamples, modeShape } from './object-view.js';
+import {
+  ACCENT,
+  accentTint,
+  bodyFamily,
+  materialFinish,
+  materialKey,
+  mixHex,
+  modeDisplacement,
+  modeEnvelope,
+  modeSamples,
+  modeShape,
+  shownModes,
+} from './object-view.js';
 
 test('each body maps to its textbook family', () => {
   assert.equal(bodyFamily({ preset: 'bar', shape: 'bar' }), 'bar');
@@ -47,4 +59,47 @@ test('material shading prefers the named material', () => {
   assert.equal(materialKey({ voice: 'crystal' }), 'glass');
   assert.equal(materialKey({ preset: 'membrane' }), 'skin');
   assert.equal(materialKey({ material: 'void' }), 'void');
+  assert.equal(materialFinish('wood'), 'grain');
+  assert.equal(materialFinish('metal'), 'sheen');
+  assert.equal(materialFinish('glass'), 'glass');
+  assert.equal(materialFinish('stone'), 'matte');
+});
+
+test('the solo highlight is the site accent and other modes are a tint of it', () => {
+  assert.equal(ACCENT, '#d4421c');
+  assert.equal(accentTint(ACCENT, true), ACCENT);
+  assert.equal(accentTint('#D4421C', true), ACCENT);
+  const soft = accentTint(ACCENT, false, '#fbf8f2');
+  assert.equal(soft, mixHex(ACCENT, '#fbf8f2', 0.38));
+  assert.notEqual(soft, ACCENT);
+});
+
+test('several partials show at once, and a solo keeps only that one', () => {
+  const partials = [
+    { gainDb: 0, decay: 2.4 },
+    { gainDb: -6, decay: 1.1 },
+    { gainDb: -12, decay: 0.45 },
+    { gainDb: -18, decay: 0.16 },
+    { gainDb: -28, decay: 0.08 },
+  ];
+  const layered = shownModes(partials);
+  assert.deepEqual(layered.map((mode) => mode.index), [0, 1, 2, 3]);
+  assert.equal(layered.every((mode) => mode.hot === false), true);
+  const solo = shownModes(partials, { selected: 3 });
+  assert.deepEqual(solo.map((mode) => mode.index), [3]);
+  assert.equal(solo[0].hot, true);
+});
+
+test('a short partial fades before a long one, and the bar bends between its nodes', () => {
+  const age = 0.5;
+  assert.ok(modeEnvelope(age, 0.16) < modeEnvelope(age, 2.4));
+  const partials = [
+    { gainDb: 0, decay: 2.4 },
+    { gainDb: -3, decay: 0.16 },
+  ];
+  const live = shownModes(partials, { age });
+  assert.ok(live[1].weight < live[0].weight);
+  assert.ok(Math.abs(modeDisplacement('bar', 0, 0.5)) < 1e-9);
+  assert.ok(Math.abs(modeDisplacement('bar', 0, 0.25)) > 0.9);
+  assert.ok(Math.abs(modeDisplacement('tube', 1, 0.5)) < 1e-9);
 });
