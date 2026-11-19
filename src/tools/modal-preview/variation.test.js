@@ -3,7 +3,7 @@ import test from 'node:test';
 import { audiblePartials, carryControls, controlsFromKnobs, heardSeconds, playedFundamental, previewPartials } from './engine.js';
 import { describePrompt } from './recipes.js';
 import { renderPreview, scaleToPeak } from './resonator.js';
-import { shapePartials } from './shape.js';
+import { densityForProfile, shapePartials } from './shape.js';
 
 const PROMPTS = ['black hole', 'wood block', 'chandelier', 'distant thunder', 'gong', 'tiny bell', 'huge gong'];
 
@@ -177,5 +177,31 @@ test('each variation card stays distinct after the knob rebuild', () => {
   console.log('prompt\tcard\tcentroid Hz\tlongest T60 s');
   for (const row of table) {
     console.log(`${row.prompt}\t${row.card}\t${row.centroid.toFixed(0)}\t${row.longest.toFixed(3)}`);
+  }
+});
+
+test('density returns to the chosen grid after a long profile', () => {
+  const steps = [8, 16, 32, 64, 128, 256];
+  assert.equal(densityForProfile(36, 16, steps), 64);
+  assert.equal(densityForProfile(5, 16, steps), 16);
+  assert.equal(densityForProfile(15, 16, steps), 16);
+  assert.equal(densityForProfile(5, 32, steps), 32);
+  assert.equal(densityForProfile(40, 32, steps), 64);
+});
+
+test('refining a bright card keeps its plan and can walk back', () => {
+  const bright = describePrompt('black hole')[1];
+  const gong = describePrompt('gong')[1];
+  for (const card of [bright, gong]) {
+    const refined = describePrompt('darker', card);
+    const applied = refined[0];
+    const halfway = refined[2];
+    assert.equal(applied.objectName, card.objectName);
+    assert.ok(applied.controls.variationTilt < card.controls.variationTilt, card.name);
+    assert.ok(halfway.controls.variationTilt < card.controls.variationTilt, `${card.name} halfway`);
+    assert.ok(halfway.controls.variationTilt > applied.controls.variationTilt, `${card.name} halfway vs darker`);
+    const heard = hearPartials(applied);
+    const from = hearPartials(card);
+    assert.ok(heard.features.centroid < from.features.centroid, `${card.name} centroid`);
   }
 });

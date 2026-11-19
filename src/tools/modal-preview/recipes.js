@@ -102,6 +102,10 @@ function applyEntry(recipe, entry, promptText) {
     recipe.controls.damping = clamp(recipe.controls.damping + (((spread >> 8) % 7) - 3) * 0.05, 0, 1);
     recipe.controls.stiffness = clamp((recipe.controls.stiffness || 0) + (((spread >> 12) % 7) - 3) * 0.04, 0, 1);
   }
+  recipe.controls.variation = '';
+  recipe.controls.variationTilt = 0;
+  recipe.controls.variationDecay = 1;
+  recipe.controls.variationLift = 0;
   recipe.exciter = entry.exciter || 'mallet';
   recipe.hardness = entry.hardness ?? 0.5;
   recipe.position = entry.position ?? recipe.position ?? 0.18;
@@ -177,6 +181,17 @@ function applyWords(recipe, text, refine) {
     if (/wood/.test(text)) controls.damping += 0.16;
     if (/shorter|short tail|tighter|drier|muted/.test(text)) controls.damping += 0.28;
     if (/longer|long tail|shimmer|sustain|ring/.test(text)) controls.damping -= 0.22;
+    // The knobs are already against the clamp on a black hole or a gong.
+    // Move the plan that Hear is actually playing.
+    if (/darker|dark|warm|dull/.test(text)) controls.variationTilt = (controls.variationTilt || 0) - (/darker/.test(text) ? 18 : 12);
+    if (/brighter|bright|thin|glassy/.test(text)) controls.variationTilt = (controls.variationTilt || 0) + 14;
+    if (/shorter|short tail|tighter|drier|muted/.test(text)) {
+      controls.variationDecay = Math.max(0.2, (controls.variationDecay || 1) * 0.62);
+      controls.variationLift = 0;
+    }
+    if (/longer|long tail|shimmer|sustain|ring/.test(text)) {
+      controls.variationDecay = Math.min(4, (controls.variationDecay || 1) * 1.45);
+    }
   } else {
     if (/dark|warm|dull/.test(text)) controls.brightness -= 0.28;
     if (/bright|thin|glassy/.test(text) && !/not bright/.test(text)) controls.brightness += 0.12;
@@ -236,13 +251,7 @@ export function readRecipe(prompt, current = null) {
     size: current.size,
     traits: [...(current.traits || [])],
     fallback: false,
-    controls: {
-      ...current.controls,
-      variation: '',
-      variationTilt: 0,
-      variationDecay: 1,
-      variationLift: 0,
-    },
+    controls: { ...current.controls },
     exciter: current.exciter,
     hardness: current.hardness,
     position: current.position,
@@ -335,6 +344,12 @@ function blendControls(from, to, amount) {
     count: to.count,
     decayScale: (from.decayScale ?? 1) + ((to.decayScale ?? 1) - (from.decayScale ?? 1)) * amount,
     pitchScale: (from.pitchScale ?? 1) + ((to.pitchScale ?? 1) - (from.pitchScale ?? 1)) * amount,
+    variationTilt: (from.variationTilt || 0) + ((to.variationTilt || 0) - (from.variationTilt || 0)) * amount,
+    variationDecay: (from.variationDecay || 1) + ((to.variationDecay || 1) - (from.variationDecay || 1)) * amount,
+    variationLift: (from.variationLift || 0) + ((to.variationLift || 0) - (from.variationLift || 0)) * amount,
+    variation: from.variation === to.variation
+      ? (to.variation || '')
+      : ((amount >= 0.5 ? to.variation : from.variation) || ''),
   });
 }
 
@@ -352,18 +367,23 @@ function sideStep(core, text) {
   const object = core.objectName.toLowerCase();
   if (/dark|warm|dull|wood/.test(text)) {
     controls.damping += 0.18;
+    controls.variationDecay = Math.max(0.2, (controls.variationDecay || 1) * 0.7);
+    controls.variationLift = 0;
     return { controls: sanitizeControls(controls), name: `Shorter ${object}`, line: 'The darker reading, with a shorter tail.' };
   }
   if (/short|tight|dry|muted/.test(text)) {
     controls.brightness -= 0.2;
+    controls.variationTilt = (controls.variationTilt || 0) - 10;
     return { controls: sanitizeControls(controls), name: `Darker ${object}`, line: 'The shorter reading, with less top.' };
   }
   if (/long|shimmer|sustain|ring/.test(text)) {
     controls.brightness += 0.18;
+    controls.variationTilt = (controls.variationTilt || 0) + 10;
     return { controls: sanitizeControls(controls), name: `Brighter ${object}`, line: 'The longer reading, with a brighter top.' };
   }
   if (/detun|beating|imperfect|chorus/.test(text)) {
     controls.damping -= 0.12;
+    controls.variationDecay = Math.min(4, (controls.variationDecay || 1) * 1.35);
     return { controls: sanitizeControls(controls), name: `Longer ${object}`, line: 'The detuned reading, left to ring longer.' };
   }
   controls.stiffness += 0.12;

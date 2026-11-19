@@ -2,7 +2,7 @@ import { A4_HZ, PRESETS, NOTE_BUTTONS, ZEBRA_PARTIAL_LIMIT_HZ, buildPartials, pr
 import { analyzeSamples, decodeRecording, resampleMono, parseRoot, frequencyToNote } from './analyze.js';
 import { renderPreview, scaleToPeak, strikeWeight } from './resonator.js';
 import { aimSlices, createFitMotion, createSliceMotion, defaultCamera, hitPartial, MORPH_MS, paintModalView, sampleSlices, slicesMoving } from './modal-view.js';
-import { shapePartials } from './shape.js';
+import { densityForProfile, shapePartials } from './shape.js';
 import { createRollHistory, defaultLocks, pushRoll, redoRoll, rollSound, undoRoll } from './randomize.js';
 import { mountStudio } from './studio.js';
 
@@ -117,16 +117,16 @@ export function mount(root) {
     return list.map((partial) => ({ ratio: partial.ratio, gainDb: partial.gainDb, decay: partial.decay }));
   }
 
+  let densityChoice = null;
+
   function coverProfile() {
     const select = root.querySelector('[data-density]');
     const count = state.profilePartials?.length || 0;
     if (!select || select.tagName !== 'SELECT' || !(count > 0)) return false;
-    const options = [...select.options].map((option) => Number(option.value)).filter((value) => value > 0);
-    options.sort((a, b) => a - b);
-    const current = Number(select.value);
-    if (current >= count) return false;
-    const next = options.find((value) => value >= count) ?? options[options.length - 1];
-    if (!(next > current)) return false;
+    if (densityChoice == null) densityChoice = Number(select.value) || 16;
+    const options = [...select.options].map((option) => Number(option.value));
+    const next = densityForProfile(count, densityChoice, options);
+    if (Number(select.value) === next) return false;
     select.value = String(next);
     return true;
   }
@@ -451,6 +451,7 @@ export function mount(root) {
   const density = root.querySelector('[data-density]');
   if (density && density.tagName === 'SELECT') {
     density.addEventListener('change', () => {
+      densityChoice = Number(density.value);
       publishShape(MORPH_MS);
       render();
       pushModes();
@@ -536,7 +537,10 @@ export function mount(root) {
     if (position) position.value = knobs.position.toFixed(2);
     if (positionOut) positionOut.textContent = knobs.position.toFixed(2);
     const density = root.querySelector('[data-density]');
-    if (density) density.value = String(knobs.density);
+    if (density) {
+      density.value = String(knobs.density);
+      densityChoice = Number(knobs.density);
+    }
     if (profile?.length) {
       state.profilePartials = profile.map((partial) => ({
         ratio: partial.ratio,

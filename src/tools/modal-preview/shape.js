@@ -14,6 +14,19 @@ function clamp(value, lo, hi) {
   return Math.min(hi, Math.max(lo, value));
 }
 
+const DENSITY_STEPS = [8, 16, 32, 64, 128, 256];
+
+// The grid has to cover the profile, then return to the density the listener
+// chose. An automatic raise for a black hole must not stay put for the next
+// wood block.
+export function densityForProfile(count, floor, options = DENSITY_STEPS) {
+  const steps = [...options].map(Number).filter((value) => value > 0).sort((a, b) => a - b);
+  const needed = steps.find((value) => value >= count) ?? steps[steps.length - 1] ?? count;
+  const chosen = Number(floor);
+  const kept = Number.isFinite(chosen) && chosen > 0 ? chosen : needed;
+  return Math.max(needed, kept);
+}
+
 export function shapePartials(partials, shape = {}) {
   if (!partials.length) return [];
   const absorb = clamp(Number(shape.absorb) || 0, -1, 1);
