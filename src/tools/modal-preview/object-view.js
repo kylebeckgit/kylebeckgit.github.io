@@ -343,7 +343,7 @@ function drawBend(ctx, family, index, unit, bend, tint, tone, hot) {
   } else if (family === 'tube') {
     drawTubeCrest(ctx, unit, index, bend, tint);
   } else {
-    drawBox(ctx, unit, (t) => modeDisplacement('box', index, t) * unit * 0.08 * bend, tone, tint);
+    drawBoxBend(ctx, unit, (t) => modeDisplacement('box', index, t) * unit * 0.08 * bend, tint);
   }
 }
 
@@ -476,9 +476,9 @@ function drawDisk(ctx, unit, family, grow, tone, tint, glass) {
     }
     ctx.closePath();
   };
-  trace(1);
   ctx.save();
   ctx.translate(unit * 0.05, unit * 0.07);
+  trace(1);
   ctx.fillStyle = tint ? mixHex(tint, tone.shade, 0.5) : tone.shade;
   ctx.fill();
   ctx.restore();
@@ -640,6 +640,25 @@ function drawTube(ctx, unit, extra, tone, tint, glass) {
   ctx.lineWidth = Math.max(1, unit * 0.015);
   ctx.beginPath();
   ctx.ellipse(0, -unit * 1.01, unit * 0.22, unit * 0.045, 0, Math.PI, Math.PI * 2);
+  ctx.stroke();
+}
+
+function drawBoxBend(ctx, unit, bow, tint) {
+  ctx.beginPath();
+  const steps = 16;
+  ctx.moveTo(-unit * 0.7, -unit * 0.15);
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    ctx.lineTo(-unit * 0.7 + t * unit * 1.6, -unit * 0.15 + bow(t) * 0.25);
+  }
+  for (let i = steps; i >= 0; i--) {
+    const t = i / steps;
+    ctx.lineTo(-unit * 0.7 + t * unit * 1.6, unit * 0.7 + bow(t));
+  }
+  ctx.closePath();
+  ctx.fillStyle = tint;
+  ctx.fill();
+  ctx.strokeStyle = mixHex(tint, '#3c403c', 0.35);
   ctx.stroke();
 }
 
