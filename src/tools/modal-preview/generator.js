@@ -7,17 +7,26 @@ import { defaultCamera, paintModalView } from './modal-view.js';
 import { describePrompt } from './recipes.js';
 import { renderPreview, scaleToPeak } from './resonator.js';
 import { mountStudio } from './studio.js';
-import { createRollHistory, defaultLocks, identityKnobs, pushRoll, redoRoll, rollSound, undoRoll } from './randomize.js';
+import { assessQuality, createRollHistory, defaultLocks, identityKnobs, pushRoll, redoRoll, rollSound, undoRoll } from './randomize.js';
 
-const CALM = [
-  'wood block', 'glass bowl', 'gong', 'marimba', 'ceramic bowl', 'bell', 'string',
-  'skin', 'plate', 'tube', 'chime', 'stone', 'bamboo', 'ice', 'log drum', 'crystal',
+const EVERYDAY = [
+  'wood block', 'glass bowl', 'gong', 'marimba', 'ceramic bowl', 'prayer bell', 'cowbell',
+  'string', 'plate', 'chime', 'wind chime', 'stone', 'bamboo', 'log drum', 'crystal',
+  'cymbal', 'flute', 'kalimba', 'handpan', 'wine glass', 'music box', 'anvil', 'cajon',
+  'temple block', 'clave', 'vibraphone', 'didgeridoo', 'clarinet', 'typewriter', 'trash can',
+  'cardboard box', 'plastic bottle', 'church bell', 'singing bowl', 'thumb piano',
 ];
-const WILD = [
-  'broken glass', 'underwater bell', 'frozen lake', 'rusty pipe', 'alien chime',
-  'distant thunder', 'chandelier', 'hollow log', 'tiny bell', 'huge gong', 'black hole',
+const MATERIALS = ['glass', 'wood', 'ice', 'stone', 'metal', 'skin', 'clay', 'water'];
+const ADJECTIVES = ['tiny', 'huge', 'broken', 'frozen', 'rusty', 'hollow', 'distant', 'alien', 'underwater'];
+const STATES = ['melting', 'burning', 'underwater', 'inside out', 'frozen', 'hollow'];
+const ABSTRACTS = [
+  'the color of rust',
+  'a memory of rain',
+  'a memory of thunder',
+  'a memory of a bell',
+  'distant rain',
+  'alien thunder',
 ];
-const ADJECTIVES = ['tiny', 'huge', 'broken', 'frozen', 'rusty', 'hollow', 'distant', 'alien'];
 
 function mulberry32(seed) {
   let a = seed >>> 0;
@@ -34,17 +43,232 @@ function pick(rng, list) {
   return list[Math.floor(rng() * list.length)];
 }
 
+export function promptSpaceSize() {
+  const everyday = EVERYDAY.length;
+  const mid = ADJECTIVES.length * EVERYDAY.length + MATERIALS.length * EVERYDAY.length;
+  const madeOf = EVERYDAY.length * MATERIALS.length;
+  const scales = EVERYDAY.length * 2;
+  const states = STATES.length * EVERYDAY.length;
+  const places = EVERYDAY.length;
+  const multi = ADJECTIVES.length * EVERYDAY.length * STATES.length;
+  const high = madeOf + scales + states + places + ABSTRACTS.length + multi;
+  return { everyday, mid, high, total: everyday + mid + high };
+}
+
 export function promptForRoll(seed, wildness = 0.3) {
   const rng = mulberry32(Number(seed) || 1);
-  const wild = Number(wildness) >= 0.66;
-  if (wild && rng() < 0.55) return `${pick(rng, ADJECTIVES)} ${pick(rng, CALM)}`;
-  return pick(rng, wild ? WILD : CALM);
+  const wild = Math.min(1, Math.max(0, Number(wildness) || 0));
+  const object = () => pick(rng, EVERYDAY);
+  const material = () => pick(rng, MATERIALS);
+  const adjective = () => pick(rng, ADJECTIVES);
+  const state = () => pick(rng, STATES);
+  if (wild < 0.34) return object();
+  if (wild < 0.7) {
+    return rng() < 0.55 ? `${adjective()} ${object()}` : `${material()} ${object()}`;
+  }
+  const roll = rng();
+  const noun = object();
+  if (roll < 0.07) return `${noun} made of ${material()}`;
+  if (roll < 0.13) return `planet-sized ${noun}`;
+  if (roll < 0.19) return `a ${noun} the size of a grain of sand`;
+  if (roll < 0.26) return `${state()} ${noun}`;
+  if (roll < 0.33) return `${noun} in a cathedral at the bottom of the sea`;
+  if (roll < 0.38) return pick(rng, ABSTRACTS);
+  return `${adjective()} ${noun} made of ${material()}, ${state()}`;
+}
+
+const BLEND_VOICES = [
+  { preset: 'bar', voice: '', count: 6 },
+  { preset: 'bell', voice: '', count: 7 },
+  { preset: 'plate', voice: '', count: 7 },
+  { preset: 'membrane', voice: '', count: 6 },
+  { preset: 'string', voice: '', count: 7 },
+  { preset: 'plate', voice: 'glass', count: 6 },
+  { preset: 'plate', voice: 'crystal', count: 7 },
+];
+
+function copyPartial(partial) {
+  return { ratio: partial.ratio, gainDb: partial.gainDb, decay: partial.decay };
+}
+
+function spacePartials(partials) {
+  const sorted = partials.filter((partial) => partial.ratio > 0).sort((a, b) => a.ratio - b.ratio);
+  const kept = [];
+  for (const partial of sorted) {
+    const prev = kept[kept.length - 1];
+    if (prev && Math.abs(1200 * Math.log2(partial.ratio / prev.ratio)) < 40) continue;
+    kept.push(partial);
+    if (kept.length === 10) break;
+  }
+  return kept;
+}
+
+function logPitch(rng) {
+  const t = rng();
+  return 0.25 * 16 ** t;
+}
+
+function shapeWild(base, rng) {
+  const lists = [base];
+  const extras = rng() > 0.42 ? 2 : 1;
+  for (let i = 0; i < extras; i++) {
+    const spec = pick(rng, BLEND_VOICES);
+    lists.push(previewPartials(sanitizeControls({
+      preset: spec.preset,
+      voice: spec.voice,
+      count: spec.count,
+      stiffness: 0.05 + rng() * 0.9,
+      brightness: rng() * 1.6 - 0.8,
+      damping: 0.05 + rng() * 0.85,
+      seed: 1 + Math.floor(rng() * 9000),
+    })));
+  }
+  let donors = spacePartials(lists.flat().map(copyPartial));
+  if (donors.length < 5) return null;
+  const count = 6 + Math.floor(rng() * 3);
+  const family = donors.slice(0, count);
+  while (family.length < count) family.push(donors[family.length % donors.length]);
+  const templates = [
+    [1, 1.09, 1.2, 1.34, 7.2, 16],
+    [1, 6.2, 16, 34],
+    [1, 2.02, 2.98, 4.05, 5.1, 6.4],
+    [1, 1.35, 2.4, 9.5, 11.2, 30],
+  ];
+  const template = templates[Math.floor(rng() * templates.length)];
+  const root = 0.55 + rng() * 1.1;
+  let partials = family.slice(0, template.length).map((partial, index) => ({
+    ...partial,
+    ratio: root * template[index] * (0.97 + rng() * 0.06),
+  }));
+  partials = spacePartials(partials.sort((a, b) => a.ratio - b.ratio));
+  if (partials.length < 4) return null;
+  const decayMode = rng();
+  const floorRatio = partials[0].ratio;
+  partials = partials.map((partial, index) => {
+    const high = partial.ratio > floorRatio * 6;
+    let decay;
+    if (high || decayMode < 0.3) decay = 0.05 + rng() * 0.12;
+    else if (decayMode < 0.7) decay = index % 2 === 0 ? 0.05 + rng() * 0.12 : 18 + rng() * 12;
+    else decay = 0.4 + rng() * 4;
+    return { ...partial, decay: Math.min(30, Math.max(0.05, decay)) };
+  });
+  const loud = rng() < 0.6 ? partials.length - 1 : Math.floor(rng() * Math.min(3, partials.length));
+  partials = partials.map((partial, index) => ({
+    ...partial,
+    gainDb: index === loud ? 0 : (partial.ratio > floorRatio * 6 ? -14 - rng() * 10 : -5 - rng() * 12),
+  }));
+  return partials;
+}
+
+function applyWildPlan(partials, controls) {
+  const tilt = Number(controls?.variationTilt) || 0;
+  const decayMul = Number(controls?.variationDecay) || 1;
+  const lift = Number(controls?.variationLift) || 0;
+  const floor = Math.min(...partials.map((partial) => partial.ratio));
+  const longest = Math.max(...partials.map((partial) => partial.decay));
+  let next = partials.map((partial) => {
+    const octaves = Math.log2(Math.max(partial.ratio, 1e-9) / floor);
+    let decay = Math.min(30, Math.max(0.05, partial.decay * decayMul));
+    if (lift && partial.decay < longest * 0.92) decay = Math.min(30, Math.max(decay, longest * lift));
+    const high = partial.ratio > floor * 6;
+    if (high && decay > 1.6 && tilt > 0) decay = 0.4;
+    return { ...partial, gainDb: partial.gainDb + tilt * octaves, decay };
+  });
+  const peak = Math.max(...next.map((partial) => partial.gainDb));
+  next = next.map((partial) => ({ ...partial, gainDb: partial.gainDb - peak }));
+  const loudest = next.reduce((best, partial) => (partial.gainDb > best.gainDb ? partial : best), next[0]);
+  return next.map((partial) => (
+    partial === loudest
+      ? { ...partial, gainDb: 0 }
+      : { ...partial, gainDb: Math.min(partial.gainDb, -3.2) }
+  ));
+}
+
+export function wildenVariation(variation, seed, wildness) {
+  const rng = mulberry32((Number(seed) || 1) ^ 0x9e3779b9);
+  const controls = sanitizeControls(variation.controls || {});
+  const base = previewPartials(controls);
+  let partials = null;
+  let detune = 0;
+  let position = variation.position ?? 0.18;
+  for (let attempt = 0; attempt < 28 && !partials; attempt++) {
+    const candidate = shapeWild(base, rng);
+    if (!candidate) continue;
+    detune = (rng() * 1.1 - 0.55) * Math.min(1, wildness);
+    position = 0.04 + rng() * 0.78;
+    const knobs = { detune, density: candidate.length, position, absorb: 0, decay: 0 };
+    const quality = assessQuality(candidate, knobs);
+    if (quality.ok) partials = candidate;
+  }
+  if (!partials) partials = spacePartials(base.map(copyPartial)).slice(0, 8);
+  const pitch = logPitch(rng);
+  return {
+    ...variation,
+    position,
+    detune,
+    partials: partials.map(copyPartial),
+    controls: sanitizeControls({ ...controls, pitchScale: pitch, decayScale: 0.25 + rng() * 3.5 }),
+  };
+}
+
+export function nudgeVariation(variation, seed, wildness) {
+  const rng = mulberry32((Number(seed) || 1) ^ 0x51f1);
+  const controls = sanitizeControls(variation.controls || {});
+  const built = previewPartials(controls).map(copyPartial);
+  const fund = built[0]?.ratio || 1;
+  const stretch = 1 + (rng() * 2 - 1) * 0.22 * (wildness / 0.7);
+  const decayGain = 0.3 + rng() * 2.5;
+  let partials = spacePartials(built.map((partial) => ({
+    ...partial,
+    ratio: fund * (partial.ratio / fund) ** stretch,
+    decay: Math.min(30, Math.max(0.05, partial.decay * decayGain)),
+  })));
+  const pitch = (controls.pitchScale || 1) * (0.62 + rng() * 0.9);
+  const next = {
+    ...variation,
+    partials,
+    controls: sanitizeControls({ ...controls, pitchScale: pitch }),
+  };
+  const quality = assessQuality(partials, { detune: 0, density: partials.length, position: next.position || 0.18 });
+  if (!quality.ok) {
+    return {
+      ...variation,
+      controls: sanitizeControls({ ...controls, pitchScale: pitch, decayScale: (controls.decayScale || 1) * decayGain }),
+    };
+  }
+  return next;
+}
+
+export function dressVariations(variations, seed, wildness) {
+  const amount = Math.min(1, Math.max(0, Number(wildness) || 0));
+  if (amount > 0.7) {
+    const base = wildenVariation(variations[0], seed, amount);
+    return variations.map((card, index) => {
+      const partials = index === 0 ? base.partials : applyWildPlan(base.partials, card.controls);
+      const knobs = { detune: base.detune || 0, density: partials.length, position: base.position || 0.18 };
+      const quality = assessQuality(partials, knobs);
+      return {
+        ...card,
+        partials: quality.ok ? partials.map(copyPartial) : base.partials.map(copyPartial),
+        position: base.position,
+        detune: base.detune || 0,
+        controls: sanitizeControls({ ...card.controls, pitchScale: base.controls.pitchScale }),
+      };
+    });
+  }
+  if (amount >= 0.34) {
+    return variations.map((variation, index) => nudgeVariation(variation, seed + index * 17, amount));
+  }
+  return variations;
 }
 
 export function snapshotVariation(variation) {
   const controls = sanitizeControls(variation?.controls || variation || {});
   const fundamental = playedFundamental(controls.pitchScale);
-  const partials = audiblePartials(previewPartials(controls), { fundamental, sampleRate: 48000 }).map((partial) => ({
+  const built = variation?.partials?.length
+    ? variation.partials
+    : audiblePartials(previewPartials(controls), { fundamental, sampleRate: 48000 });
+  const partials = built.map((partial) => ({
     ratio: partial.ratio,
     gainDb: partial.gainDb,
     decay: partial.decay,
@@ -99,8 +323,14 @@ export function redoGenerator(session) {
 
 export function rollGenerator(session, { wildness = 0.3, seed } = {}) {
   const nextSeed = Number.isFinite(seed) ? seed : (session.seed = (session.seed + 1) >>> 0);
-  const prompt = promptForRoll(nextSeed, wildness);
-  return { prompt, turn: loadGeneratorTurn(session, prompt) };
+  const amount = Math.min(1, Math.max(0, Number(wildness) || 0));
+  const prompt = promptForRoll(nextSeed, amount);
+  const turn = loadGeneratorTurn(session, prompt);
+  if (amount >= 0.34) {
+    turn.variations = dressVariations(turn.variations, nextSeed, amount);
+    session.turn = turn;
+  }
+  return { prompt, turn };
 }
 
 export function currentSnapshot(session) {
@@ -173,7 +403,7 @@ export function handoffPayload(session) {
   };
 }
 
-function paintPreview(canvas, partials) {
+function paintPreview(canvas, partials, { detune = 0, position = 0.18 } = {}) {
   if (!canvas) return;
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   const width = canvas.clientWidth || 420;
@@ -200,8 +430,8 @@ function paintPreview(canvas, partials) {
     },
     invertPanel: true,
     selected: -1,
-    detune: 0,
-    position: 0.18,
+    detune,
+    position,
     now: performance.now(),
   });
 }
@@ -251,11 +481,15 @@ export function mountGenerator(root, { openInDesigner } = {}) {
   const controller = mountStudio(root, {
     applyRecipe(variation, { hear = false } = {}) {
       const snap = snapshotVariation(variation);
-      paintPreview(canvas, snap.partials);
+      paintPreview(canvas, snap.partials, snap);
       if (hear) playSnapshot(audioState, snap);
     },
     setName() {},
     profileFromState() { return null; },
+    decorateVariations(variations) {
+      seed = (seed + 1) >>> 0;
+      return dressVariations(variations, seed, Number(wild?.value || 0));
+    },
     openInDesigner(variation) {
       if (!openInDesigner) return;
       openInDesigner(snapshotVariation(variation));
@@ -270,13 +504,15 @@ export function mountGenerator(root, { openInDesigner } = {}) {
     const variation = controller?.current();
     if (!variation) return;
     const snap = snapshotVariation(variation);
-    paintPreview(canvas, snap.partials);
+    paintPreview(canvas, snap.partials, snap);
     playSnapshot(audioState, snap);
   });
+  const session = createGeneratorSession();
   root.querySelector('[data-gen-roll]')?.addEventListener('click', () => {
     seed = (seed + 1) >>> 0;
-    const prompt = promptForRoll((Date.now() ^ seed) >>> 0, Number(wild?.value || 0));
-    controller?.showFresh(prompt, true);
+    const wildness = Number(wild?.value || 0);
+    const rolled = rollGenerator(session, { wildness, seed: (Date.now() ^ seed) >>> 0 });
+    controller?.showTurn(rolled.prompt, rolled.turn.variations, true);
   });
   installGestureUnlock(root, () => {
     const ctx = beginAudio(audioState.ctx);
@@ -285,7 +521,10 @@ export function mountGenerator(root, { openInDesigner } = {}) {
   });
   window.addEventListener('resize', () => {
     const variation = controller?.current();
-    if (variation) paintPreview(canvas, snapshotVariation(variation).partials);
+    if (variation) {
+      const snap = snapshotVariation(variation);
+      paintPreview(canvas, snap.partials, snap);
+    }
   });
   return controller;
 }
