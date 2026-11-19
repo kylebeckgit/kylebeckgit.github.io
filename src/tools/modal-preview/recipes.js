@@ -130,8 +130,24 @@ function applyAdjectives(recipe, text) {
     if (adjective.hardness != null) recipe.hardness = adjective.hardness;
     if (adjective.velocity != null) recipe.velocity = adjective.velocity;
     if (adjective.decayScale) recipe.controls.decayScale = (recipe.controls.decayScale || 1) * adjective.decayScale;
+    if (adjective.pitchScale) recipe.controls.pitchScale = (recipe.controls.pitchScale || 1) * adjective.pitchScale;
     if (adjective.seed) recipe.controls.seed = hashString(text);
     recipe.traits = [...(recipe.traits || []), adjective.label];
+  }
+}
+
+function applyImagery(recipe, text) {
+  const broken = /\bbroken\b|\bcracked\b|\bshattered\b|\bsplintered\b/.test(text);
+  if (broken && recipe.material === 'glass') {
+    recipe.controls.preset = 'plate';
+    recipe.controls.voice = '';
+    recipe.controls.brightness = Math.max(recipe.controls.brightness, 0.7);
+    recipe.controls.damping = Math.max(recipe.controls.damping, 0.78);
+    recipe.controls.stiffness = Math.max(recipe.controls.stiffness, 0.72);
+    recipe.controls.seed = hashString(text);
+    recipe.controls.count = Math.max(12, Math.min(28, recipe.controls.count || 16));
+    recipe.controls.decayScale = Math.min(recipe.controls.decayScale || 1, 0.28);
+    recipe.traits = [...new Set([...(recipe.traits || []), 'bright', 'short', 'noisy'])];
   }
 }
 
@@ -238,6 +254,7 @@ export function readRecipe(prompt, current = null) {
     overlayMaterial(recipe, reading.material);
   }
   applyAdjectives(recipe, text);
+  applyImagery(recipe, text);
   applyWords(recipe, text, Boolean(current));
   recipe.reading = composeReading(recipe, text);
   recipe.controls = sanitizeControls(recipe.controls);
@@ -307,6 +324,7 @@ function blendControls(from, to, amount) {
     voice: to.voice,
     count: to.count,
     decayScale: (from.decayScale ?? 1) + ((to.decayScale ?? 1) - (from.decayScale ?? 1)) * amount,
+    pitchScale: (from.pitchScale ?? 1) + ((to.pitchScale ?? 1) - (from.pitchScale ?? 1)) * amount,
   });
 }
 

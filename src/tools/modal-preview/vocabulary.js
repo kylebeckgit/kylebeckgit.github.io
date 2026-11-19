@@ -30,7 +30,7 @@ const metalBell = {
 };
 const glassShell = {
   material: 'glass', shape: 'shell', size: 'medium', preset: 'plate', voice: 'glass',
-  count: 7, stiffness: 0.02, brightness: -0.08, damping: 0.08, oddEven: 0,
+  count: 7, stiffness: 0.02, brightness: 0.5, damping: 0.1, oddEven: 0,
   exciter: 'mallet', hardness: 0.25,
 };
 const skinHead = {
@@ -63,7 +63,7 @@ const clayBody = {
 const SPECIFIC = [
   entry(['wood block', 'woodblock', 'wood-block'], {
     name: 'Wood block', material: 'wood', shape: 'bar', size: 'small', preset: 'bar', voice: 'block',
-    count: 5, stiffness: 0.34, brightness: -0.24, damping: 0.84, oddEven: 0,
+    count: 5, stiffness: 0.34, brightness: 0.22, damping: 0.84, oddEven: 0,
     exciter: 'click', hardness: 0.94, traits: ['short', 'dry', 'hard click'],
   }),
   entry(['temple block', 'jam block'], {
@@ -98,7 +98,7 @@ const SPECIFIC = [
   }),
   entry(['glass bowl', 'crystal bowl', 'singing bowl'], {
     name: 'Glass bowl', material: 'glass', shape: 'shell', size: 'medium', preset: 'plate', voice: 'glass',
-    count: 7, stiffness: 0.02, brightness: -0.08, damping: 0.08, oddEven: 0,
+    count: 7, stiffness: 0.02, brightness: 0.58, damping: 0.08, oddEven: 0,
     exciter: 'mallet', hardness: 0.25, traits: ['glassy', 'long'],
   }),
   entry(['crystal'], {
@@ -113,8 +113,8 @@ const SPECIFIC = [
   }),
   entry(['black hole', 'blackhole', 'singularity'], {
     name: 'Black hole', material: 'void', shape: 'cavity', size: 'huge', preset: 'plate', voice: 'abyss',
-    count: 36, stiffness: 0.92, brightness: -1, damping: 0.08, oddEven: 0.35,
-    exciter: 'mallet', hardness: 0.7, seed: 1, traits: ['huge', 'very dark', 'extremely long', 'low cluster'],
+    count: 36, stiffness: 0.15, brightness: -0.85, damping: 0.04, oddEven: 0.1,
+    exciter: 'mallet', hardness: 0.55, traits: ['very low', 'dense', 'slow beating', 'extremely long'],
   }),
   entry(['prayer bell', 'temple bell'], {
     name: 'Prayer bell', material: 'metal', shape: 'shell', size: 'small', preset: 'bell', voice: '',
@@ -143,8 +143,8 @@ const SPECIFIC = [
   }),
   entry(['gong', 'tam-tam', 'tam tam'], {
     name: 'Gong', material: 'metal', shape: 'plate', size: 'large', preset: 'plate', voice: 'gong',
-    count: 40, stiffness: 0, brightness: 0.02, damping: 0.12, oddEven: 0,
-    exciter: 'mallet', hardness: 0.7, traits: ['long'],
+    count: 40, stiffness: 0.04, brightness: -0.35, damping: 0.05, oddEven: 0,
+    exciter: 'mallet', hardness: 0.55, traits: ['dark', 'long', 'bloom'],
   }),
   entry(['cymbal', 'ride cymbal', 'crash cymbal', 'hi-hat', 'hi hat'], {
     name: 'Cymbal', material: 'metal', shape: 'plate', size: 'medium', preset: 'plate', voice: 'gong',
@@ -153,7 +153,7 @@ const SPECIFIC = [
   }),
   entry(['steel plate', 'metal plate', 'stahlplatte'], {
     name: 'Metal plate', material: 'metal', shape: 'plate', size: 'large', preset: 'plate', voice: '',
-    count: 64, stiffness: 0.05, brightness: 0.48, damping: 0.3, oddEven: 0,
+    count: 48, stiffness: 0.08, brightness: 0.42, damping: 0.28, oddEven: 0,
     exciter: 'mallet', hardness: 0.72,
   }),
   entry(['gamelan', 'bonang', 'gender', 'gangsa'], {
@@ -232,13 +232,13 @@ const SPECIFIC = [
     exciter: 'mallet', hardness: 0.3, traits: ['dark', 'muffled'],
   }),
   entry(['thunder', 'distant thunder'], {
-    name: 'Thunder', material: 'air', shape: 'cavity', size: 'huge', preset: 'membrane', voice: 'abyss',
-    count: 20, stiffness: 0.5, brightness: -0.85, damping: 0.35, oddEven: 0.2,
-    exciter: 'mallet', hardness: 0.9, traits: ['huge', 'dark', 'long'],
+    name: 'Thunder', material: 'air', shape: 'cavity', size: 'huge', preset: 'membrane', voice: '',
+    count: 16, stiffness: 0.2, brightness: -0.7, damping: 0.42, oddEven: 0.1,
+    exciter: 'mallet', hardness: 0.85, traits: ['huge', 'dark'],
   }),
   entry(['cave', 'cavern', 'canyon', 'cathedral', 'well', 'tunnel'], {
-    name: 'Cavern', material: 'stone', shape: 'cavity', size: 'huge', preset: 'plate', voice: 'abyss',
-    count: 24, stiffness: 0.45, brightness: -0.7, damping: 0.12, oddEven: 0.15,
+    name: 'Cavern', material: 'stone', shape: 'cavity', size: 'huge', preset: 'plate', voice: '',
+    count: 18, stiffness: 0.3, brightness: -0.55, damping: 0.22, oddEven: 0.1,
     exciter: 'mallet', hardness: 0.4, traits: ['huge', 'dark', 'long'],
   }),
   entry(['music box'], {
@@ -283,7 +283,7 @@ const SPECIFIC = [
   }),
   entry(['plate'], {
     name: 'Metal plate', material: 'metal', shape: 'plate', size: 'large', preset: 'plate', voice: '',
-    count: 64, stiffness: 0.05, brightness: 0.48, damping: 0.3, oddEven: 0,
+    count: 48, stiffness: 0.08, brightness: 0.42, damping: 0.28, oddEven: 0,
     exciter: 'mallet', hardness: 0.72,
   }),
   entry(['bowl'], {
@@ -336,8 +336,8 @@ const WATER = entry(['water'], {
 export const OBJECTS = [WATER, ...SPECIFIC, ...MATERIALS];
 
 export const ADJECTIVES = [
-  { test: /\btiny\b|\bminiature\b|\bminuscule\b|\bteeny\b/, label: 'tiny', size: 'tiny', damping: 0.42, brightness: 0.48, countScale: 0.35, decayScale: 0.45 },
-  { test: /\bhuge\b|\bvast\b|\benormous\b|\bgiant\b|\bmassive\b|\bcolossal\b/, label: 'huge', size: 'huge', damping: -0.45, brightness: -0.55, countScale: 1.8, decayScale: 2.2 },
+  { test: /\btiny\b|\bminiature\b|\bminuscule\b|\bteeny\b/, label: 'tiny', size: 'tiny', damping: 0.38, brightness: 0.62, countScale: 0.4, decayScale: 0.4, pitchScale: 1.9 },
+  { test: /\bhuge\b|\bvast\b|\benormous\b|\bgiant\b|\bmassive\b|\bcolossal\b/, label: 'huge', size: 'huge', damping: -0.4, brightness: -0.85, countScale: 1.6, decayScale: 2.3, pitchScale: 0.42 },
   { test: /\bbroken\b|\bcracked\b|\bshattered\b|\bsplintered\b/, label: 'broken', stiffness: 0.55, oddEven: 0.6, damping: 0.32, countScale: 0.45, seed: true },
   { test: /\bunderwater\b|\bsubmerged\b|\bdrowned\b|\bsoaked\b/, label: 'underwater', brightness: -0.75, damping: 0.48, hardness: 0.22 },
   { test: /\bfrozen\b|\bicy\b|\bfrosty\b/, label: 'frozen', brightness: 0.4, stiffness: 0.35, damping: -0.2, material: 'ice' },

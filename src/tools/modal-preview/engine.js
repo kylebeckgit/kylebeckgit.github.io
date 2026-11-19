@@ -131,10 +131,15 @@ function crystalRatios() {
 }
 
 function abyssRatios() {
-  // A dense inharmonic pile that stays low, then stretches upward. The
-  // levels, not the ratios, swallow the high partials.
+  // A low dense pile, under the usual A4 fundamental. Each center has a
+  // twin about 12 cents away, so the mass beats slowly instead of ringing
+  // as one clean tone.
   const ratios = [];
-  for (let i = 0; i < 40; i++) ratios.push(1 + (i ** 1.42) * 0.22);
+  const base = 0.38;
+  for (let i = 0; i < 18; i++) {
+    const center = base * (1 + i * 0.07);
+    ratios.push(center * 0.9965, center * 1.007);
+  }
   return ratios;
 }
 
@@ -282,6 +287,7 @@ export function sanitizeControls(input) {
     oddEven: num(input?.oddEven, -1, 1, base.oddEven),
     seed: Number.isFinite(seedNum) ? Math.trunc(clamp(seedNum, 0, 1_000_000_000)) : 0,
     decayScale: num(input?.decayScale, 0.2, 4, 1),
+    pitchScale: num(input?.pitchScale, 0.25, 4, 1),
     voice,
     count: Number.isFinite(countNum) && countNum > 0 ? Math.round(clamp(countNum, 1, PARTIALS)) : PARTIALS,
   };
@@ -296,6 +302,7 @@ export function carryControls(controls) {
     voice: clean.voice,
     count: clean.count,
     decayScale: clean.decayScale,
+    pitchScale: clean.pitchScale,
   };
 }
 
@@ -306,15 +313,17 @@ export function controlsFromKnobs(knobs, carried) {
     voice: keep ? carried.voice : '',
     count: keep ? carried.count : 64,
     decayScale: keep ? carried.decayScale : 1,
+    pitchScale: keep ? carried.pitchScale : 1,
   });
 }
 
 export function buildPartials(rawControls) {
   const controls = sanitizeControls(rawControls);
+  const pitch = controls.pitchScale || 1;
   let ratios = baseRatios(controls.preset, controls.voice).slice(0, controls.count).map((ratio, index) => {
     const n = index + 1;
     const b = controls.stiffness * 0.0005;
-    return ratio * Math.sqrt(1 + b * n * n);
+    return ratio * pitch * Math.sqrt(1 + b * n * n);
   });
   if (controls.seed > 0) {
     const rand = mulberry32(controls.seed);
@@ -344,10 +353,13 @@ export function buildPartials(rawControls) {
     });
   }
   if (controls.voice === 'gong') {
-    // The delayed shimmer sits on the high cluster, not the fundamental.
+    // The body is the loud part. The high wash is a quieter bloom, so a
+    // gong stays dark instead of turning into a cymbal.
     for (const partial of partials) {
-      const dist = Math.abs(Math.log2(partial.ratio / 22.5));
-      partial.gainDb = (partial.ratio > 12 ? -4.5 * dist : -11 - 2.5 * Math.abs(Math.log2(partial.ratio))) + controls.brightness * 10;
+      const octaves = Math.log2(Math.max(partial.ratio, 1e-6));
+      const body = -6.5 * Math.max(0, octaves);
+      const bloom = octaves > 2.2 ? -20 - 3 * (octaves - 2.2) : -40;
+      partial.gainDb = Math.max(body, bloom) + controls.brightness * 7;
     }
   }
   if (controls.voice === 'bonsho' || controls.voice === 'glass' || controls.voice === 'gong' || controls.voice === 'marimba' || controls.voice === 'cup' || controls.voice === 'shell' || controls.voice === 'neutral') {
@@ -447,7 +459,7 @@ export function previewPartials(rawControls) {
       return {
         ...partial,
         gainDb: clamp(-20 * Math.log10(harm), -96, 0),
-        decay: clamp(fundSeconds / harm, 0.05, 30),
+        decay: clamp((fundSeconds / harm) * (controls.decayScale || 1), 0.05, 30),
       };
     });
   }

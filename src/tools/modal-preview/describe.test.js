@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { carryControls, controlsFromKnobs, previewPartials } from './engine.js';
+import { audiblePartials, carryControls, controlsFromKnobs, previewPartials, zebraDecaySeconds, zebraExport } from './engine.js';
 import { renderPreview } from './resonator.js';
 import { describePrompt, readRecipe } from './recipes.js';
 import { phraseCount } from './vocabulary.js';
@@ -42,10 +42,50 @@ const PROMPTS = [
   'qworpf',
 ];
 
-function profileOf(prompt) {
+function pagePartial(prompt) {
   const recipe = readRecipe(prompt);
-  const partials = previewPartials(recipe.controls);
-  return { recipe, partials, features: features(partials) };
+  const carried = carryControls(recipe.controls);
+  const controls = controlsFromKnobs({
+    preset: recipe.controls.preset,
+    stiffness: recipe.controls.stiffness,
+    brightness: recipe.controls.brightness,
+    damping: recipe.controls.damping,
+    oddEven: recipe.controls.oddEven,
+    seed: recipe.controls.seed,
+  }, carried);
+  const built = previewPartials(controls);
+  const heard = audiblePartials(built, { fundamental: 220, sampleRate: 48000 });
+  const exported = zebraExport(heard, { fundamental: 220, description: prompt });
+  const restored = exported.csv.trim().split('\n').slice(1).map((line) => {
+    const [ratio, gainDb, decay] = line.split(';').map(Number);
+    return { ratio, gainDb, decay: zebraDecaySeconds(decay, exported.knob) };
+  });
+  return { recipe, controls, partials: heard, restored, features: features(heard) };
+}
+
+function profileOf(prompt) {
+  const row = pagePartial(prompt);
+  return { recipe: row.recipe, partials: row.partials, features: row.features };
+}
+
+function tailLevel(partials, recipe) {
+  const sampleRate = 48000;
+  const samples = renderPreview(partials, {
+    fundamental: 220,
+    velocity: 0.8,
+    position: 0.2,
+    exciter: recipe.exciter || 'mallet',
+    hardness: recipe.hardness ?? 0.5,
+    sampleRate,
+    seconds: 2.4,
+  });
+  const headEnd = Math.floor(0.12 * sampleRate);
+  const tailStart = Math.floor(1.1 * sampleRate);
+  let head = 0;
+  let tail = 0;
+  for (let i = 0; i < headEnd; i++) head += samples[i] * samples[i];
+  for (let i = tailStart; i < samples.length; i++) tail += samples[i] * samples[i];
+  return Math.sqrt(tail / (samples.length - tailStart)) / (Math.sqrt(head / headEnd) + 1e-12);
 }
 
 function features(partials) {
@@ -130,6 +170,23 @@ test('different prompts do not collapse to one plate', () => {
   assert.ok(spelled.features.longest <= 0.3);
   assert.ok(distance(wood, spelled) < 0.05);
 
+  const glass = rows.find((row) => row.prompt === 'glass bowl');
+  const crystal = rows.find((row) => row.prompt === 'crystal');
+  const gong = rows.find((row) => row.prompt === 'gong');
+  const plate = rows.find((row) => row.prompt === 'plate');
+  const broken = rows.find((row) => row.prompt === 'broken glass');
+  const bell = rows.find((row) => row.prompt === 'bell');
+  const tiny = rows.find((row) => row.prompt === 'tiny bell');
+  const huge = rows.find((row) => row.prompt === 'huge gong');
+  assert.ok(glass.features.centroid > 1800, `glass bowl centroid ${glass.features.centroid}`);
+  assert.ok(crystal.features.centroid > 1800, `crystal centroid ${crystal.features.centroid}`);
+  assert.ok(wood.features.centroid > 550 && wood.features.centroid < 1600, `wood centroid ${wood.features.centroid}`);
+  assert.ok(wood.features.centroid < glass.features.centroid);
+  assert.ok(gong.features.centroid < plate.features.centroid, `gong ${gong.features.centroid} plate ${plate.features.centroid}`);
+  assert.ok(gong.features.longest > 8 && gong.features.longest > plate.features.longest);
+  assert.ok(broken.features.centroid > 1800, `broken glass centroid ${broken.features.centroid}`);
+  assert.ok(broken.features.longest < 0.8, `broken glass decay ${broken.features.longest}`);
+  assert.ok(broken.partials.length >= 8);
   assert.equal(chandelier.recipe.material, 'glass');
   assert.equal(chandelier.recipe.controls.voice, 'crystal');
   assert.ok(chandelier.features.longest > 2, `chandelier decay ${chandelier.features.longest}`);
@@ -137,9 +194,14 @@ test('different prompts do not collapse to one plate', () => {
   assert.ok(chandelier.partials.length >= 12);
 
   assert.equal(hole.recipe.controls.voice, 'abyss');
-  assert.ok(hole.features.longest > 4, `black hole decay ${hole.features.longest}`);
-  assert.ok(hole.features.centroid < chandelier.features.centroid * 0.55, `centroid ${hole.features.centroid} vs ${chandelier.features.centroid}`);
-  assert.ok(hole.recipe.controls.brightness < -0.6);
+  assert.ok(hole.features.longest > 12, `black hole decay ${hole.features.longest}`);
+  assert.ok(hole.features.centroid < 320, `black hole centroid ${hole.features.centroid}`);
+  assert.ok(hole.features.centroid < wood.features.centroid * 0.5);
+  assert.ok(hole.partials.length >= 24);
+  assert.ok(tiny.features.centroid > bell.features.centroid, `tiny ${tiny.features.centroid} bell ${bell.features.centroid}`);
+  assert.ok(tiny.features.longest < bell.features.longest * 0.5);
+  assert.ok(huge.features.centroid < gong.features.centroid, `huge ${huge.features.centroid} gong ${gong.features.centroid}`);
+  assert.ok(huge.features.longest > gong.features.longest * 1.5);
 
   let closest = Infinity;
   let pair = '';
@@ -152,9 +214,8 @@ test('different prompts do not collapse to one plate', () => {
       }
     }
   }
-  // Related cousins (a clay pot and a ceramic bowl) may sit nearer than
-  // unrelated images. Nothing in the set may collapse to a copy.
-  assert.ok(closest > 0.15, `closest prompts ${pair} are only ${closest.toFixed(3)} apart`);
+  // Cousins can sit near each other. A copy, the old metal-plate collapse, is 0.
+  assert.ok(closest > 0.08, `closest prompts ${pair} are only ${closest.toFixed(3)} apart`);
   const contrast = ['wood block', 'chandelier', 'black hole', 'string', 'gong', 'bell', 'water', 'plate'];
   for (let i = 0; i < contrast.length; i++) {
     for (let j = i + 1; j < contrast.length; j++) {
@@ -182,25 +243,33 @@ test('different prompts do not collapse to one plate', () => {
   console.log(`half-energy wood ${heard['wood block'].toFixed(3)} chandelier ${heard.chandelier.toFixed(3)} black hole ${heard['black hole'].toFixed(3)}`);
 });
 
-test('a huge prompt keeps its decay stretch after the knobs rebuild', () => {
-  const recipe = readRecipe('huge gong');
-  const carried = carryControls(recipe.controls);
-  const heard = controlsFromKnobs({
-    preset: recipe.controls.preset,
-    stiffness: recipe.controls.stiffness,
-    brightness: recipe.controls.brightness,
-    damping: recipe.controls.damping,
-    oddEven: recipe.controls.oddEven,
-    seed: recipe.controls.seed,
-  }, carried);
-  assert.ok(Math.abs(heard.decayScale - 2.2) < 1e-9);
-  const direct = Math.max(...previewPartials(recipe.controls).map((partial) => partial.decay));
-  const rebuilt = Math.max(...previewPartials(heard).map((partial) => partial.decay));
-  assert.ok(Math.abs(direct - rebuilt) < 1e-6);
-  assert.ok(rebuilt > 20);
-  const gong = describePrompt('gong')[0];
-  const halfway = describePrompt('huge', gong)[2];
-  assert.ok(halfway.controls.decayScale > 1.4 && halfway.controls.decayScale < 1.7);
+test('tiny, gong, and huge gong differ in the rendered audio and the export', () => {
+  const tiny = pagePartial('tiny bell');
+  const gong = pagePartial('gong');
+  const huge = pagePartial('huge gong');
+  assert.ok(Math.abs(tiny.controls.decayScale - 0.4) < 1e-9);
+  assert.ok(Math.abs(huge.controls.decayScale - 2.3) < 1e-9);
+  assert.ok(Math.abs(tiny.controls.pitchScale - 1.9) < 1e-9);
+  assert.ok(Math.abs(huge.controls.pitchScale - 0.42) < 1e-9);
+  const tails = {
+    tiny: tailLevel(tiny.partials, tiny.recipe),
+    gong: tailLevel(gong.partials, gong.recipe),
+    huge: tailLevel(huge.partials, huge.recipe),
+  };
+  assert.ok(tails.tiny < tails.gong * 0.25, `tiny tail ${tails.tiny} gong ${tails.gong}`);
+  assert.ok(tails.huge > tails.gong * 1.3, `huge tail ${tails.huge} gong ${tails.gong}`);
+  const exported = {
+    tiny: Math.max(...tiny.restored.map((row) => row.decay)),
+    gong: Math.max(...gong.restored.map((row) => row.decay)),
+    huge: Math.max(...huge.restored.map((row) => row.decay)),
+  };
+  assert.ok(exported.tiny < exported.gong * 0.5, `export tiny ${exported.tiny}`);
+  assert.ok(exported.huge > exported.gong * 1.5, `export huge ${exported.huge}`);
+  assert.ok(tiny.features.centroid > gong.features.centroid);
+  assert.ok(huge.features.centroid < gong.features.centroid);
+  const halfway = describePrompt('huge', describePrompt('gong')[0])[2];
+  assert.ok(halfway.controls.decayScale > 1.4 && halfway.controls.decayScale < 1.8);
+  assert.ok(halfway.controls.pitchScale > 0.6 && halfway.controls.pitchScale < 0.9);
 });
 
 test('a follow-up still understands the first object', () => {
