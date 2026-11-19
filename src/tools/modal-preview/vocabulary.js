@@ -101,7 +101,12 @@ const SPECIFIC = [
     count: 14, stiffness: 0.06, brightness: 0.45, damping: 0.16, oddEven: 0,
     exciter: 'mallet', hardness: 0.4, traits: ['bright', 'long'],
   }),
-  entry(['glass bowl', 'crystal bowl', 'singing bowl'], {
+  entry(['singing bowl'], {
+    name: 'Singing bowl', material: 'metal', shape: 'bowl', size: 'medium', preset: 'bell', voice: '',
+    count: 12, stiffness: 0.08, brightness: 0.2, damping: 0.16, oddEven: 0,
+    exciter: 'mallet', hardness: 0.32, traits: ['long'],
+  }),
+  entry(['glass bowl', 'crystal bowl'], {
     name: 'Glass bowl', material: 'glass', shape: 'shell', size: 'medium', preset: 'plate', voice: 'glass',
     count: 7, stiffness: 0.02, brightness: 0.58, damping: 0.08, oddEven: 0,
     exciter: 'mallet', hardness: 0.25, traits: ['glassy', 'long'],
@@ -245,7 +250,7 @@ const SPECIFIC = [
     traits: ['huge', 'dark', 'long'],
   }),
   entry(['cave', 'cavern', 'canyon', 'cathedral', 'well', 'tunnel', 'chasm'], {
-    name: 'Cavern', material: 'stone', shape: 'cavity', size: 'huge', preset: 'plate', voice: 'rumble',
+    name: 'Cavern', place: true, material: 'stone', shape: 'cavity', size: 'huge', preset: 'plate', voice: 'rumble',
     count: 18, stiffness: 0.22, brightness: -0.65, damping: 0.12, oddEven: 0.08,
     exciter: 'mallet', hardness: 0.4, pitchScale: 0.48,
     traits: ['huge', 'dark', 'long'],
@@ -355,7 +360,7 @@ export const ADJECTIVES = [
   { test: /\bhuge\b|\bvast\b|\benormous\b|\bgiant\b|\bmassive\b|\bcolossal\b/, label: 'huge', size: 'huge', damping: -0.4, brightness: -0.85, countScale: 1.6, decayScale: 2.3, pitchScale: 0.42 },
   { test: /\bbroken\b|\bcracked\b|\bshattered\b|\bsplintered\b/, label: 'broken', stiffness: 0.55, oddEven: 0.6, damping: 0.32, countScale: 0.45, seed: true },
   { test: /\bunderwater\b|\bsubmerged\b|\bdrowned\b|\bsoaked\b/, label: 'underwater', brightness: -0.75, damping: 0.48, hardness: 0.22 },
-  { test: /\bfrozen\b|\bicy\b|\bfrosty\b/, label: 'frozen', brightness: 0.4, stiffness: 0.35, damping: -0.2, material: 'ice' },
+  { test: /\bfrozen\b|\bicy\b|\bfrosty\b/, label: 'frozen', brightness: 0.4, stiffness: 0.35, damping: 0.18 },
   { test: /\brusty\b|\bcorroded\b|\btarnished\b|\brust\b/, label: 'rusty', brightness: -0.6, damping: 0.4, stiffness: 0.3, countScale: 0.6, seed: true },
   { test: /\bhollow\b/, label: 'hollow', damping: -0.32, brightness: -0.28, countScale: 0.5 },
   { test: /\bdistant\b|\bfaraway\b|\bfar away\b|\bremote\b/, label: 'distant', brightness: -0.65, damping: 0.28, velocity: 0.35, hardness: 0.22 },
@@ -396,13 +401,17 @@ export function matchReading(text) {
     }
   }
   hits.sort((a, b) => b.phrase.length - a.phrase.length);
-  const objectHit = hits.find((hit) => hit.item.role !== 'material') || null;
+  const objectHits = hits.filter((hit) => hit.item.role !== 'material' && !hit.item.place);
+  const placeHits = hits.filter((hit) => hit.item.place);
+  const materialHits = hits.filter((hit) => hit.item.role === 'material');
+  const objectHit = objectHits[0] || (placeHits.length && materialHits[0]) || placeHits[0] || null;
   const material = hits.find((hit) => {
     if (hit.item.role !== 'material') return false;
     if (!objectHit) return true;
     return !objectHit.phrase.includes(hit.phrase);
   })?.item || null;
-  return { object: objectHit?.item || null, material };
+  const place = (objectHits.length || (placeHits.length && materialHits.length)) && placeHits.length ? placeHits[0].item : null;
+  return { object: objectHit?.item || null, material, place };
 }
 
 export function matchObject(text) {

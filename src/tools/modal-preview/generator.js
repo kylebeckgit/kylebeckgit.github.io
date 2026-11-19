@@ -43,15 +43,47 @@ function pick(rng, list) {
   return list[Math.floor(rng() * list.length)];
 }
 
+const CLASHES = [
+  ['frozen', 'melting'],
+  ['frozen', 'burning'],
+  ['burning', 'underwater'],
+  ['burning', 'ice'],
+  ['burning', 'water'],
+];
+
+function clashes(left, right) {
+  return CLASHES.some(([a, b]) => (left === a && right === b) || (left === b && right === a));
+}
+
+function statesFor(adjective, material) {
+  const states = STATES.filter((state) => state !== adjective && !clashes(adjective, state) && !clashes(material, state));
+  return states.length ? states : ['inside out'];
+}
+
+export function highWildPrompts() {
+  const prompts = [];
+  for (const noun of EVERYDAY) {
+    for (const material of MATERIALS) prompts.push(`${noun} made of ${material}`);
+    prompts.push(`planet-sized ${noun}`, `a ${noun} the size of a grain of sand`, `${noun} in a cathedral at the bottom of the sea`);
+    for (const state of STATES) prompts.push(`${state} ${noun}`);
+  }
+  prompts.push(...ABSTRACTS);
+  for (const adjective of ADJECTIVES) {
+    for (const noun of EVERYDAY) {
+      for (const material of MATERIALS) {
+        for (const state of statesFor(adjective, material)) {
+          prompts.push(`${adjective} ${noun} made of ${material}, ${state}`);
+        }
+      }
+    }
+  }
+  return prompts;
+}
+
 export function promptSpaceSize() {
   const everyday = EVERYDAY.length;
   const mid = ADJECTIVES.length * EVERYDAY.length + MATERIALS.length * EVERYDAY.length;
-  const madeOf = EVERYDAY.length * MATERIALS.length;
-  const scales = EVERYDAY.length * 2;
-  const states = STATES.length * EVERYDAY.length;
-  const places = EVERYDAY.length;
-  const multi = ADJECTIVES.length * EVERYDAY.length * STATES.length;
-  const high = madeOf + scales + states + places + ABSTRACTS.length + multi;
+  const high = highWildPrompts().length;
   return { everyday, mid, high, total: everyday + mid + high };
 }
 
@@ -74,7 +106,9 @@ export function promptForRoll(seed, wildness = 0.3) {
   if (roll < 0.26) return `${state()} ${noun}`;
   if (roll < 0.33) return `${noun} in a cathedral at the bottom of the sea`;
   if (roll < 0.38) return pick(rng, ABSTRACTS);
-  return `${adjective()} ${noun} made of ${material()}, ${state()}`;
+  const adj = adjective();
+  const mat = material();
+  return `${adj} ${noun} made of ${mat}, ${pick(rng, statesFor(adj, mat))}`;
 }
 
 const BLEND_VOICES = [
