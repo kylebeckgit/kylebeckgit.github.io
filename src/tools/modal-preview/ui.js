@@ -5,6 +5,7 @@ import { aimSlices, createFitMotion, createSliceMotion, defaultCamera, hitPartia
 import { densityForProfile, shapePartials } from './shape.js';
 import { createRollHistory, defaultLocks, pushRoll, redoRoll, rollSound, undoRoll } from './randomize.js';
 import { decodeProfile, encodeProfile } from './studio.js';
+import { SILENT_MODE_HINT, audioContextClass, beginAudio, installGestureUnlock, playSilentUnlock, prepareAudioSession, resumeInGesture } from './audio-session.js';
 
 export function mount(root) {
   const describeUrl = (root.dataset.describeUrl || '').trim();
@@ -357,11 +358,15 @@ export function mount(root) {
     strike(state, true);
   });
   const release = () => {
+    primeAudio(state);
     state.userHolding = false;
     strike(state, false);
   };
   keys.addEventListener('pointerup', release);
   keys.addEventListener('pointercancel', release);
+  // iOS fires touchend as well as pointerup for one lift. A second release
+  // can cut off the next note, so touchend is only for browsers without pointer events.
+  if (typeof PointerEvent !== 'function') keys.addEventListener('touchend', release);
   root.querySelector('[data-stop]').addEventListener('click', () => silence(state));
 
   drawButton.addEventListener('click', () => {
@@ -989,6 +994,11 @@ export function mount(root) {
   updateHistoryButtons();
   showRoot();
   root.addEventListener('pointerdown', () => primeAudio(state), true);
+  installGestureUnlock(root, () => {
+    const ctx = beginAudio(state.audio);
+    if (ctx) state.audio = ctx;
+    return state.audio;
+  });
   root.querySelector('[data-note="A4"]')?.setAttribute('aria-pressed', 'true');
   window.addEventListener('resize', () => draw(canvas, state.partials, state));
   const scheme = window.matchMedia('(prefers-color-scheme: dark)');
@@ -1183,17 +1193,14 @@ function capAudible(partials) {
 }
 
 function playHeard(state, recipe) {
-  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  const AudioCtx = audioContextClass();
   if (!AudioCtx) throw new Error('This browser cannot play audio.');
+  prepareAudioSession();
   if (!state.audio) state.audio = new AudioCtx();
   const ctx = state.audio;
   // Safari stays silent unless a buffer is started in this gesture, before any await.
-  const unlock = ctx.createBuffer(1, 1, ctx.sampleRate);
-  const unlockSource = ctx.createBufferSource();
-  unlockSource.buffer = unlock;
-  unlockSource.connect(ctx.destination);
-  unlockSource.start();
-  const resumed = ctx.resume();
+  const resumed = resumeInGesture(ctx);
+  playSilentUnlock(ctx);
   const exciter = recipe.exciter || state.exciter;
   const zebra = state.canvas?.dataset.view === 'zebra';
   const fundamental = state.hearFundamental || noteFrequency(state.note);
@@ -1227,9 +1234,9 @@ function playHeard(state, recipe) {
   source.start();
   state.hearSource = source;
   const root = state.canvas?.closest('#modal-app');
-  resumed.then(() => {
-    if (ctx.state !== 'running') setPlayError(root, 'The browser blocked audio. Click Hear again.');
-  }).catch(() => setPlayError(root, 'The browser blocked audio. Click Hear again.'));
+  Promise.resolve(resumed).then(() => {
+    if (ctx.state === 'suspended' || ctx.state === 'interrupted') setPlayError(root, SILENT_MODE_HINT);
+  }).catch(() => setPlayError(root, SILENT_MODE_HINT));
 }
 
 function drawZebra(canvas, partials, state) {
@@ -1308,10 +1315,10 @@ function sendModesFrom(state) {
 }
 
 function primeAudio(state) {
-  const AudioCtx = window.AudioContext || window.webkitAudioContext;
-  if (!AudioCtx) return null;
-  if (!state.audio) state.audio = new AudioCtx();
-  const pending = state.audio.resume();
+  const ctx = beginAudio(state.audio);
+  if (!ctx) return null;
+  state.audio = ctx;
+  const pending = resumeInGesture(ctx);
   state.resumePromise = pending;
   return pending;
 }
@@ -1336,11 +1343,12 @@ function watchWorklet(state) {
 }
 
 async function ensureAudio(state, resume = true) {
-  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  const AudioCtx = audioContextClass();
   if (!AudioCtx) throw new Error('This browser cannot play audio.');
+  prepareAudioSession();
   if (!state.audio) state.audio = new AudioCtx();
   // Start resume in this turn, before any await, so the user gesture still counts.
-  const resumed = resume ? state.audio.resume() : null;
+  const resumed = resume ? resumeInGesture(state.audio) : null;
   if (!state.workletReady && !state.workletFailed && !state.workletLoading) {
     state.workletLoading = (async () => {
       try {
