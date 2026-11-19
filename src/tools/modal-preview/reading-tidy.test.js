@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { highWildPrompts, promptForRoll } from './generator.js';
-import { readRecipe } from './recipes.js';
+import { HIGH_WILDNESS, dressVariations, highWildPrompts, promptForRoll } from './generator.js';
+import { describePrompt, readRecipe } from './recipes.js';
 
 const STOP = new Set(['a', 'of', 'the']);
 const CONFLICTS = [
@@ -73,11 +73,38 @@ test('explicit materials, scenes, and singing bowls keep a clean reading', () =>
   assert.equal(woodBowl.material, 'wood');
   assert.equal(woodBowl.controls.voice, '');
 
+  const shattered = readRecipe('broken glass');
+  const woodGlass = readRecipe('broken glass made of wood');
+  const metalGlass = readRecipe('broken glass bowl made of metal');
+  assert.equal(shattered.material, 'glass');
+  assert.ok(shattered.controls.damping >= 0.78);
+  assert.equal(woodGlass.material, 'wood');
+  assert.equal(woodGlass.controls.preset, 'bar');
+  assert.equal(woodGlass.controls.voice, '');
+  assert.ok(woodGlass.controls.damping < 0.78);
+  assert.match(woodGlass.reading, /\bwood\b/);
+  assert.doesNotMatch(woodGlass.reading, /noisy/);
+  assert.equal(metalGlass.material, 'metal');
+  assert.equal(metalGlass.controls.preset, 'plate');
+  assert.equal(metalGlass.controls.voice, '');
+  assert.match(metalGlass.reading, /\bmetal\b/);
+
   const clay = readRecipe('singing bowl made of clay');
   assert.equal(clay.objectName, 'Singing bowl');
   assert.equal(clay.material, 'clay');
   assert.match(clay.reading, /\bclay\b/);
   assert.doesNotMatch(clay.reading, /glass/i);
+});
+
+test('wildness 0.70 is high for the prompt and the body', () => {
+  const prompt = promptForRoll(8, HIGH_WILDNESS);
+  const below = promptForRoll(8, HIGH_WILDNESS - 0.01);
+  assert.ok(/made of|planet-sized|grain of sand|cathedral|memory|color of|melting|burning|underwater|inside out|frozen|hollow/.test(prompt), prompt);
+  assert.doesNotMatch(below, /made of|planet-sized|grain of sand|cathedral/);
+  const body = dressVariations(describePrompt('wood block'), 3, HIGH_WILDNESS);
+  const mid = dressVariations(describePrompt('wood block'), 3, HIGH_WILDNESS - 0.01);
+  assert.equal(typeof body[0].detune, 'number');
+  assert.equal(mid[0].detune, undefined);
 });
 
 test('every high-wildness prompt and a long random sample reads cleanly', () => {

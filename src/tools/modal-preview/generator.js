@@ -87,6 +87,8 @@ export function promptSpaceSize() {
   return { everyday, mid, high, total: everyday + mid + high };
 }
 
+export const HIGH_WILDNESS = 0.7;
+
 export function promptForRoll(seed, wildness = 0.3) {
   const rng = mulberry32(Number(seed) || 1);
   const wild = Math.min(1, Math.max(0, Number(wildness) || 0));
@@ -95,7 +97,7 @@ export function promptForRoll(seed, wildness = 0.3) {
   const adjective = () => pick(rng, ADJECTIVES);
   const state = () => pick(rng, STATES);
   if (wild < 0.34) return object();
-  if (wild < 0.7) {
+  if (wild < HIGH_WILDNESS) {
     return rng() < 0.55 ? `${adjective()} ${object()}` : `${material()} ${object()}`;
   }
   const roll = rng();
@@ -330,7 +332,7 @@ function keepWildBody(source, card) {
 export function dressVariations(variations, seed, wildness, source = null) {
   if (source?.partials?.length) return variations.map((card) => keepWildBody(source, card));
   const amount = Math.min(1, Math.max(0, Number(wildness) || 0));
-  if (amount > 0.7) {
+  if (amount >= HIGH_WILDNESS) {
     const base = wildenVariation(variations[0], seed, amount);
     return variations.map((card, index) => {
       const partials = index === 0 ? base.partials : applyWildPlan(base.partials, card.controls);

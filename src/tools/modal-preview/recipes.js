@@ -121,6 +121,20 @@ function overlayMaterial(recipe, material, statedWord = '') {
     if (statedWord) recipe.material = word;
     return;
   }
+  if (statedWord) {
+    recipe.material = word;
+    recipe.controls.preset = material.preset || recipe.controls.preset;
+    recipe.controls.voice = material.voice || '';
+    if (material.stiffness != null) recipe.controls.stiffness = material.stiffness;
+    if (material.brightness != null) recipe.controls.brightness = material.brightness;
+    if (material.damping != null) recipe.controls.damping = material.damping;
+    if (material.count) recipe.controls.count = material.count;
+    recipe.controls.decayScale = 1;
+    if (material.exciter) recipe.exciter = material.exciter;
+    if (material.hardness != null) recipe.hardness = material.hardness;
+    recipe.traits = (recipe.traits || []).filter((trait) => trait !== 'glassy' && trait !== 'noisy');
+    return;
+  }
   recipe.material = word;
   recipe.controls.brightness = clamp(recipe.controls.brightness + (material.brightness ?? 0) * 0.45, -1, 1);
   recipe.controls.damping = clamp(recipe.controls.damping + Math.max(-0.2, Math.min(0.2, (material.damping ?? 0.4) - 0.4)), 0, 1);
@@ -334,9 +348,9 @@ export function readRecipe(prompt, current = null) {
     overlayMaterial(recipe, reading.material);
   }
   applyAdjectives(recipe, text);
+  if (stated) overlayMaterial(recipe, stated.entry, stated.word);
   applyImagery(recipe, text);
   if (reading.place) applyPlace(recipe, reading.place);
-  if (stated) overlayMaterial(recipe, stated.entry, stated.word);
   applyWords(recipe, text, Boolean(current));
   recipe.reading = composeReading(recipe, text);
   recipe.controls = sanitizeControls(recipe.controls);
