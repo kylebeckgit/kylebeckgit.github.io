@@ -1,6 +1,7 @@
 // The generator keeps its own variations. The designer is a separate body
 // until Open in designer copies the chosen partials across.
 
+import { SILENT_MODE_HINT, beginAudio, installGestureUnlock, playSilentUnlock, prepareAudioSession, resumeInGesture, audioContextClass } from './audio-session.js';
 import { audiblePartials, defaultControls, heardSeconds, playedFundamental, previewPartials, sanitizeControls } from './engine.js';
 import { defaultCamera, paintModalView } from './modal-view.js';
 import { describePrompt } from './recipes.js';
@@ -206,16 +207,20 @@ function paintPreview(canvas, partials) {
 }
 
 function playSnapshot(audioState, snap) {
-  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  const AudioCtx = audioContextClass();
   if (!AudioCtx || !snap?.partials?.length) return;
+  prepareAudioSession();
   if (!audioState.ctx) audioState.ctx = new AudioCtx();
   const ctx = audioState.ctx;
-  const unlock = ctx.createBuffer(1, 1, ctx.sampleRate);
-  const unlockSource = ctx.createBufferSource();
-  unlockSource.buffer = unlock;
-  unlockSource.connect(ctx.destination);
-  unlockSource.start();
-  ctx.resume();
+  const resumed = resumeInGesture(ctx);
+  playSilentUnlock(ctx);
+  Promise.resolve(resumed).then(() => {
+    const hint = audioState.hint;
+    if (!hint) return;
+    hint.textContent = (ctx.state === 'suspended' || ctx.state === 'interrupted') ? SILENT_MODE_HINT : '';
+  }).catch(() => {
+    if (audioState.hint) audioState.hint.textContent = SILENT_MODE_HINT;
+  });
   const seconds = heardSeconds(snap.partials, { exciter: snap.exciter });
   const samples = scaleToPeak(renderPreview(snap.partials, {
     fundamental: snap.fundamental,
@@ -241,7 +246,7 @@ function playSnapshot(audioState, snap) {
 export function mountGenerator(root, { openInDesigner } = {}) {
   if (!root || typeof document === 'undefined') return null;
   const canvas = root.querySelector('[data-gen-view]');
-  const audioState = { ctx: null, source: null };
+  const audioState = { ctx: null, source: null, hint: root.querySelector('[data-gen-audio]') };
   let seed = 1;
   const controller = mountStudio(root, {
     applyRecipe(variation, { hear = false } = {}) {
@@ -273,12 +278,11 @@ export function mountGenerator(root, { openInDesigner } = {}) {
     const prompt = promptForRoll((Date.now() ^ seed) >>> 0, Number(wild?.value || 0));
     controller?.showFresh(prompt, true);
   });
-  root.addEventListener('pointerdown', () => {
-    const AudioCtx = window.AudioContext || window.webkitAudioContext;
-    if (!AudioCtx) return;
-    if (!audioState.ctx) audioState.ctx = new AudioCtx();
-    audioState.ctx.resume();
-  }, true);
+  installGestureUnlock(root, () => {
+    const ctx = beginAudio(audioState.ctx);
+    if (ctx) audioState.ctx = ctx;
+    return audioState.ctx;
+  });
   window.addEventListener('resize', () => {
     const variation = controller?.current();
     if (variation) paintPreview(canvas, snapshotVariation(variation).partials);
