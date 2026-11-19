@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { previewPartials } from './engine.js';
+import { carryControls, controlsFromKnobs, previewPartials } from './engine.js';
 import { renderPreview } from './resonator.js';
 import { describePrompt, readRecipe } from './recipes.js';
 import { phraseCount } from './vocabulary.js';
@@ -180,6 +180,27 @@ test('different prompts do not collapse to one plate', () => {
   }
   console.log(`closest ${pair} ${closest.toFixed(3)}`);
   console.log(`half-energy wood ${heard['wood block'].toFixed(3)} chandelier ${heard.chandelier.toFixed(3)} black hole ${heard['black hole'].toFixed(3)}`);
+});
+
+test('a huge prompt keeps its decay stretch after the knobs rebuild', () => {
+  const recipe = readRecipe('huge gong');
+  const carried = carryControls(recipe.controls);
+  const heard = controlsFromKnobs({
+    preset: recipe.controls.preset,
+    stiffness: recipe.controls.stiffness,
+    brightness: recipe.controls.brightness,
+    damping: recipe.controls.damping,
+    oddEven: recipe.controls.oddEven,
+    seed: recipe.controls.seed,
+  }, carried);
+  assert.ok(Math.abs(heard.decayScale - 2.2) < 1e-9);
+  const direct = Math.max(...previewPartials(recipe.controls).map((partial) => partial.decay));
+  const rebuilt = Math.max(...previewPartials(heard).map((partial) => partial.decay));
+  assert.ok(Math.abs(direct - rebuilt) < 1e-6);
+  assert.ok(rebuilt > 20);
+  const gong = describePrompt('gong')[0];
+  const halfway = describePrompt('huge', gong)[2];
+  assert.ok(halfway.controls.decayScale > 1.4 && halfway.controls.decayScale < 1.7);
 });
 
 test('a follow-up still understands the first object', () => {

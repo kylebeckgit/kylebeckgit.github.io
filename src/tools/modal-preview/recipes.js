@@ -306,6 +306,7 @@ function blendControls(from, to, amount) {
     seed: to.seed,
     voice: to.voice,
     count: to.count,
+    decayScale: (from.decayScale ?? 1) + ((to.decayScale ?? 1) - (from.decayScale ?? 1)) * amount,
   });
 }
 

@@ -287,6 +287,28 @@ export function sanitizeControls(input) {
   };
 }
 
+// The preset menu has no decay-scale knob. These fields ride along with the
+// voice so a tiny or huge reading survives the rebuild from the knobs.
+export function carryControls(controls) {
+  const clean = sanitizeControls(controls);
+  return {
+    preset: clean.preset,
+    voice: clean.voice,
+    count: clean.count,
+    decayScale: clean.decayScale,
+  };
+}
+
+export function controlsFromKnobs(knobs, carried) {
+  const keep = carried && carried.preset === knobs?.preset;
+  return sanitizeControls({
+    ...knobs,
+    voice: keep ? carried.voice : '',
+    count: keep ? carried.count : 64,
+    decayScale: keep ? carried.decayScale : 1,
+  });
+}
+
 export function buildPartials(rawControls) {
   const controls = sanitizeControls(rawControls);
   let ratios = baseRatios(controls.preset, controls.voice).slice(0, controls.count).map((ratio, index) => {
