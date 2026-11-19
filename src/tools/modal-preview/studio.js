@@ -78,7 +78,8 @@ export function mountStudio(root, api) {
       setStatus(`This session has used its ${ALLOWANCE} describes. The starters under More still play.`);
       return false;
     }
-    const variations = describePrompt(prompt, current);
+    let variations = describePrompt(prompt, current);
+    if (current?.partials?.length && api.decorateVariations) variations = api.decorateVariations(variations, current);
     if (variations[0].reading) setStatus(variations[0].reading);
     else if (!variations[0].recognized && !current) setStatus('No material was named, so this was read as a metal plate.');
     else setStatus('');
@@ -218,6 +219,16 @@ export function mountStudio(root, api) {
     },
     current() {
       return turns[turns.length - 1]?.variations[selected] || null;
+    },
+    showTurn(prompt, variations, hear = true) {
+      const previous = turns[turns.length - 1];
+      if (previous) previous.selected = selected;
+      future.length = 0;
+      turns.push({ thread: [prompt], variations, selected: 0 });
+      selected = 0;
+      if (variations[0]?.reading) setStatus(variations[0].reading);
+      choose(0, hear);
+      return variations;
     },
   };
   const starterRoot = root.querySelector('[data-starters]');
