@@ -175,3 +175,29 @@ test('wild rolls keep bright, dark, long, and refine', () => {
     assert.equal(quality.ok, true, quality.reasons.join(','));
   }
 });
+
+test('twenty max-wild rolls in one session stay distinct', () => {
+  const session = createGeneratorSession();
+  const names = [];
+  const specs = [];
+  for (let i = 0; i < 20; i++) {
+    rollGenerator(session, { wildness: 1, seed: 8000 + i * 19 });
+    const snap = currentSnapshot(session);
+    names.push(snap.objectName);
+    specs.push(snap.partials.map((partial) => partial.ratio / snap.partials[0].ratio));
+  }
+  const distinct = new Set(names).size;
+  let far = 0;
+  let pairs = 0;
+  for (let i = 0; i < specs.length; i++) {
+    for (let j = i + 1; j < specs.length; j++) {
+      const n = Math.min(specs[i].length, specs[j].length, 4);
+      let sum = 0;
+      for (let k = 1; k < n; k++) sum += Math.abs(Math.log2(specs[i][k]) - Math.log2(specs[j][k]));
+      pairs += 1;
+      if (sum / (n - 1) >= 0.45) far += 1;
+    }
+  }
+  assert.ok(distinct >= 15, `only ${distinct} objects`);
+  assert.ok(far / pairs >= 0.55, `${far} of ${pairs} pairs were far apart`);
+});

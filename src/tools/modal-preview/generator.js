@@ -116,6 +116,56 @@ export function promptForRoll(seed, wildness = 0.3) {
   return `${adj} ${noun} made of ${mat}, ${pick(rng, statesFor(adj, mat))}`;
 }
 
+const WILD_BODIES = [
+  { name: 'Kelp harp', material: 'water', shape: 'string', preset: 'string', voice: '', size: 'large' },
+  { name: 'Glass lung', material: 'glass', shape: 'shell', preset: 'bell', voice: 'glass', size: 'medium' },
+  { name: 'Salt drum', material: 'stone', shape: 'membrane', preset: 'membrane', voice: '', size: 'small' },
+  { name: 'Rust choir', material: 'metal', shape: 'plate', preset: 'plate', voice: '', size: 'large' },
+  { name: 'Paper hive', material: 'cardboard', shape: 'box', preset: 'bar', voice: '', size: 'tiny' },
+  { name: 'Bone flute', material: 'stone', shape: 'tube', preset: 'open-pipe', voice: '', size: 'small' },
+  { name: 'Amber string', material: 'wood', shape: 'string', preset: 'string', voice: '', size: 'medium' },
+  { name: 'Ice harp', material: 'ice', shape: 'string', preset: 'string', voice: '', size: 'large' },
+  { name: 'Coral drum', material: 'ceramic', shape: 'membrane', preset: 'membrane', voice: '', size: 'medium' },
+  { name: 'Tin forest', material: 'metal', shape: 'bar', preset: 'bar', voice: '', size: 'huge' },
+  { name: 'Wax tongue', material: 'plastic', shape: 'bar', preset: 'bar', voice: '', size: 'small' },
+  { name: 'Slate wing', material: 'stone', shape: 'plate', preset: 'plate', voice: '', size: 'large' },
+  { name: 'Fog horn', material: 'air', shape: 'tube', preset: 'closed-pipe', voice: '', size: 'huge' },
+  { name: 'Cork skull', material: 'wood', shape: 'box', preset: 'bar', voice: '', size: 'medium' },
+  { name: 'Lead petal', material: 'metal', shape: 'plate', preset: 'plate', voice: '', size: 'tiny' },
+  { name: 'Silk membrane', material: 'skin', shape: 'membrane', preset: 'membrane', voice: '', size: 'large' },
+  { name: 'Charcoal block', material: 'wood', shape: 'bar', preset: 'bar', voice: '', size: 'small' },
+  { name: 'Mercury drop', material: 'metal', shape: 'shell', preset: 'bell', voice: '', size: 'tiny' },
+  { name: 'Linen drum', material: 'skin', shape: 'membrane', preset: 'membrane', voice: '', size: 'medium' },
+  { name: 'Quartz thorn', material: 'glass', shape: 'bar', preset: 'bar', voice: 'crystal', size: 'small' },
+  { name: 'Ash cradle', material: 'ceramic', shape: 'shell', preset: 'bell', voice: '', size: 'medium' },
+  { name: 'Rubber moon', material: 'rubber', shape: 'shell', preset: 'bell', voice: '', size: 'large' },
+  { name: 'Helium jar', material: 'air', shape: 'box', preset: 'bar', voice: '', size: 'small' },
+  { name: 'Obsidian cup', material: 'stone', shape: 'shell', preset: 'bell', voice: '', size: 'small' },
+  { name: 'Driftwood harp', material: 'wood', shape: 'string', preset: 'string', voice: '', size: 'large' },
+  { name: 'Boiler heart', material: 'metal', shape: 'box', preset: 'bar', voice: '', size: 'huge' },
+  { name: 'Velvet anvil', material: 'skin', shape: 'bar', preset: 'bar', voice: '', size: 'medium' },
+  { name: 'Thunder nail', material: 'metal', shape: 'bar', preset: 'bar', voice: '', size: 'tiny' },
+  { name: 'Spider wire', material: 'string', shape: 'string', preset: 'string', voice: '', size: 'tiny' },
+  { name: 'Marble lung', material: 'stone', shape: 'shell', preset: 'bell', voice: '', size: 'large' },
+  { name: 'Radio ghost', material: 'void', shape: 'plate', preset: 'plate', voice: '', size: 'medium' },
+  { name: 'Kiln door', material: 'ceramic', shape: 'plate', preset: 'plate', voice: '', size: 'large' },
+  { name: 'Moth wing', material: 'plastic', shape: 'membrane', preset: 'membrane', voice: '', size: 'tiny' },
+  { name: 'Subway brake', material: 'metal', shape: 'plate', preset: 'plate', voice: '', size: 'huge' },
+  { name: 'Clock lung', material: 'metal', shape: 'box', preset: 'bar', voice: '', size: 'small' },
+  { name: 'Sand organ', material: 'stone', shape: 'tube', preset: 'open-pipe', voice: '', size: 'large' },
+];
+
+const WILD_TEMPLATES = [
+  [1, 1.09, 1.2, 1.34, 7.2, 16],
+  [1, 6.2, 16, 34],
+  [1, 2.02, 2.98, 4.05, 5.1, 6.4],
+  [1, 1.35, 2.4, 9.5, 11.2, 30],
+  [1, 1.5, 2.3, 3.6, 5.8, 9.4],
+  [1, 3.2, 5.5, 9.1, 14.4],
+  [1, 4.4, 11, 26],
+  [1, 1.7, 3.1, 6.4, 13, 27],
+];
+
 const BLEND_VOICES = [
   { preset: 'bar', voice: '', count: 6 },
   { preset: 'bell', voice: '', count: 7 },
@@ -147,7 +197,7 @@ function logPitch(rng) {
   return 0.25 * 16 ** t;
 }
 
-function shapeWild(base, rng) {
+function shapeWild(base, rng, familyIndex = null) {
   const lists = [base];
   const extras = rng() > 0.42 ? 2 : 1;
   for (let i = 0; i < extras; i++) {
@@ -167,13 +217,7 @@ function shapeWild(base, rng) {
   const count = 6 + Math.floor(rng() * 3);
   const family = donors.slice(0, count);
   while (family.length < count) family.push(donors[family.length % donors.length]);
-  const templates = [
-    [1, 1.09, 1.2, 1.34, 7.2, 16],
-    [1, 6.2, 16, 34],
-    [1, 2.02, 2.98, 4.05, 5.1, 6.4],
-    [1, 1.35, 2.4, 9.5, 11.2, 30],
-  ];
-  const template = templates[Math.floor(rng() * templates.length)];
+  const template = WILD_TEMPLATES[(familyIndex == null ? Math.floor(rng() * WILD_TEMPLATES.length) : familyIndex) % WILD_TEMPLATES.length];
   const root = 0.55 + rng() * 1.1;
   let partials = family.slice(0, template.length).map((partial, index) => ({
     ...partial,
@@ -223,7 +267,7 @@ function applyWildPlan(partials, controls) {
   ));
 }
 
-export function wildenVariation(variation, seed, wildness) {
+export function wildenVariation(variation, seed, wildness, familyIndex = null) {
   const rng = mulberry32((Number(seed) || 1) ^ 0x9e3779b9);
   const controls = sanitizeControls(variation.controls || {});
   const base = previewPartials(controls);
@@ -231,7 +275,7 @@ export function wildenVariation(variation, seed, wildness) {
   let detune = 0;
   let position = variation.position ?? 0.18;
   for (let attempt = 0; attempt < 28 && !partials; attempt++) {
-    const candidate = shapeWild(base, rng);
+    const candidate = shapeWild(base, rng, familyIndex);
     if (!candidate) continue;
     detune = (rng() * 1.1 - 0.55) * Math.min(1, wildness);
     position = 0.04 + rng() * 0.78;
@@ -332,11 +376,11 @@ function keepWildBody(source, card) {
   };
 }
 
-export function dressVariations(variations, seed, wildness, source = null) {
+export function dressVariations(variations, seed, wildness, source = null, familyIndex = null) {
   if (source?.partials?.length) return variations.map((card) => keepWildBody(source, card));
   const amount = Math.min(1, Math.max(0, Number(wildness) || 0));
   if (amount >= HIGH_WILDNESS) {
-    const base = wildenVariation(variations[0], seed, amount);
+    const base = wildenVariation(variations[0], seed, amount, familyIndex);
     return variations.map((card, index) => {
       const partials = index === 0 ? base.partials : applyWildPlan(base.partials, card.controls);
       const knobs = { detune: base.detune || 0, density: partials.length, position: base.position || 0.18 };
@@ -441,13 +485,78 @@ export function redoGenerator(session) {
   return session.turn;
 }
 
+function nextFamily(session, seed) {
+  const count = WILD_TEMPLATES.length;
+  if (session.familyCursor == null) session.familyCursor = Math.abs(Number(seed) || 1) % count;
+  else session.familyCursor = (session.familyCursor + 1) % count;
+  return session.familyCursor;
+}
+
+function nextWildBody(session, seed) {
+  const rng = mulberry32((Number(seed) || 1) ^ 0x51ed);
+  const recent = new Set(session.recentWild || []);
+  const pool = WILD_BODIES.filter((body) => !recent.has(body.name));
+  const body = pick(rng, pool.length ? pool : WILD_BODIES);
+  session.recentWild = [...(session.recentWild || []), body.name].slice(-24);
+  return body;
+}
+
+function stampWild(variations, body) {
+  const noun = body.name;
+  return variations.map((card, index) => ({
+    ...card,
+    name: index === 0 ? noun
+      : index === 1 ? `Bright ${noun.toLowerCase()}`
+      : index === 2 ? `Dark ${noun.toLowerCase()}`
+      : index === 3 ? `Long ${noun.toLowerCase()}`
+      : card.name,
+    objectName: noun,
+    material: body.material,
+    shape: body.shape,
+    size: body.size,
+    reading: `${noun}: a ${body.size} ${body.material} ${body.shape}.`,
+    controls: sanitizeControls({ ...card.controls, preset: body.preset, voice: body.voice || '' }),
+  }));
+}
+
+export function makeWildCard(session, seed) {
+  const body = nextWildBody(session, seed);
+  const family = nextFamily(session, seed);
+  const base = {
+    name: body.name,
+    objectName: body.name,
+    material: body.material,
+    shape: body.shape,
+    size: body.size,
+    controls: sanitizeControls({
+      preset: body.preset,
+      voice: body.voice || '',
+      stiffness: 0.35,
+      brightness: 0,
+      damping: 0.3,
+      oddEven: 0,
+      seed: Math.abs(Number(seed) || 1) % 9000,
+    }),
+    exciter: 'mallet',
+    hardness: 0.42,
+    position: 0.2,
+    velocity: 0.8,
+  };
+  return stampWild([wildenVariation(base, seed, 1, family)], body)[0];
+}
+
 export function rollGenerator(session, { wildness = 0.3, seed } = {}) {
   const nextSeed = Number.isFinite(seed) ? seed : (session.seed = (session.seed + 1) >>> 0);
   const amount = Math.min(1, Math.max(0, Number(wildness) || 0));
   const prompt = promptForRoll(nextSeed, amount);
   const turn = loadGeneratorTurn(session, prompt);
+  const family = amount >= HIGH_WILDNESS ? nextFamily(session, nextSeed) : null;
   if (amount >= 0.34) {
-    turn.variations = dressVariations(turn.variations, nextSeed, amount);
+    turn.variations = dressVariations(turn.variations, nextSeed, amount, null, family);
+    session.turn = turn;
+  }
+  if (amount >= HIGH_WILDNESS) {
+    turn.variations = stampWild(turn.variations, nextWildBody(session, nextSeed));
     session.turn = turn;
   }
   return { prompt, turn };
@@ -787,6 +896,11 @@ export function mountGenerator(root, { openInDesigner } = {}) {
     openInDesigner(variation) {
       if (!openInDesigner) return;
       openInDesigner(snapshotVariation(variation));
+    },
+    moreWild() {
+      const next = (Date.now() ^ (session.seed = (session.seed + 1) >>> 0)) >>> 0;
+      const card = makeWildCard(session, next);
+      return card ? [card] : [];
     },
   });
   const wild = root.querySelector('[data-gen-wild]');

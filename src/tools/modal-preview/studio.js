@@ -124,6 +124,15 @@ export function mountStudio(root, api) {
     const turn = turns[turns.length - 1];
     if (!turn || turn.variations.length >= VARIATION_CAP) return;
     const base = turn.variations[turn.selected] || turn.variations[0];
+    const wild = Number(root.querySelector('[data-gen-wild]')?.value || 0);
+    if (wild >= 0.7 && api.moreWild) {
+      const cards = api.moreWild();
+      if (cards?.length) {
+        turn.variations.push(...cards);
+        render();
+        return;
+      }
+    }
     const prompt = turn.thread[turn.thread.length - 1] || '';
     const extra = moreVariations(prompt, turn.variations, base);
     if (!extra.length) {
