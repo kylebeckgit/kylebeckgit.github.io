@@ -515,6 +515,7 @@ function stampWild(variations, body) {
     shape: body.shape,
     size: body.size,
     reading: `${noun}: a ${body.size} ${body.material} ${body.shape}.`,
+    line: card.line || `A ${body.size} ${body.material} ${body.shape}.`,
     controls: sanitizeControls({ ...card.controls, preset: body.preset, voice: body.voice || '' }),
   }));
 }
@@ -548,15 +549,62 @@ export function makeWildCard(session, seed) {
 export function rollGenerator(session, { wildness = 0.3, seed } = {}) {
   const nextSeed = Number.isFinite(seed) ? seed : (session.seed = (session.seed + 1) >>> 0);
   const amount = Math.min(1, Math.max(0, Number(wildness) || 0));
+  if (amount >= HIGH_WILDNESS) {
+    const body = nextWildBody(session, nextSeed);
+    const family = nextFamily(session, nextSeed);
+    const prompt = body.name;
+    const seedVar = {
+      name: body.name,
+      objectName: body.name,
+      material: body.material,
+      shape: body.shape,
+      size: body.size,
+      line: `A ${body.size} ${body.material} ${body.shape}.`,
+      controls: sanitizeControls({
+        preset: body.preset,
+        voice: body.voice || '',
+        stiffness: 0.35,
+        brightness: 0,
+        damping: 0.3,
+        oddEven: 0,
+        seed: Math.abs(nextSeed) % 9000,
+      }),
+      exciter: 'mallet',
+      hardness: 0.42,
+      position: 0.2,
+      velocity: 0.8,
+    };
+    const wild = wildenVariation(seedVar, nextSeed, amount, family);
+    const plans = [
+      {},
+      { variation: 'bright', variationTilt: 14, variationDecay: 1, variationLift: 0 },
+      { variation: 'dark', variationTilt: -12, variationDecay: 0.65, variationLift: 0 },
+      { variation: 'long', variationTilt: 0, variationDecay: 1.6, variationLift: 0.4 },
+    ];
+    const cards = plans.map((plan) => {
+      const controls = sanitizeControls({ ...wild.controls, ...plan });
+      const partials = plan.variation ? applyWildPlan(wild.partials, controls) : wild.partials;
+      const knobs = { detune: wild.detune || 0, density: partials.length, position: wild.position || 0.18 };
+      const quality = assessQuality(partials, knobs);
+      return {
+        ...wild,
+        partials: (quality.ok ? partials : wild.partials).map(copyPartial),
+        controls,
+      };
+    });
+    const variations = stampWild(cards, body);
+    if (session.turn) {
+      session.past.push(session.turn);
+      if (session.past.length > 12) session.past.shift();
+    }
+    session.future = [];
+    session.turn = { prompt, variations, selected: 0 };
+    return { prompt, turn: session.turn };
+  }
   const prompt = promptForRoll(nextSeed, amount);
   const turn = loadGeneratorTurn(session, prompt);
-  const family = amount >= HIGH_WILDNESS ? nextFamily(session, nextSeed) : null;
   if (amount >= 0.34) {
-    turn.variations = dressVariations(turn.variations, nextSeed, amount, null, family);
-    session.turn = turn;
-  }
-  if (amount >= HIGH_WILDNESS) {
-    turn.variations = stampWild(turn.variations, nextWildBody(session, nextSeed));
+    turn.variations = dressVariations(turn.variations, nextSeed, amount);
     session.turn = turn;
   }
   return { prompt, turn };
