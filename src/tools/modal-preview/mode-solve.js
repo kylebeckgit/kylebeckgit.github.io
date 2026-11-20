@@ -53,11 +53,24 @@ export const SHAPE_SOUND = true;
 
 export function applyShapeSound(partials, modes) {
   if (!SHAPE_SOUND || !partials?.length || !modes?.length || !(modes[0].omega > 0)) return partials;
-  const fund = modes[0].omega;
+  // The tuned note is the partial nearest ratio 1. A bell's hum sits at 0.5
+  // and its prime is that note, so the lowest mode must not be forced to 1.
+  let anchor = 0;
+  let best = Infinity;
+  for (let index = 0; index < partials.length && index < modes.length; index++) {
+    const ratio = partials[index].ratio;
+    if (!(ratio > 0) || !(modes[index].omega > 0)) continue;
+    const distance = Math.abs(Math.log(ratio));
+    if (distance < best - 1e-12) {
+      best = distance;
+      anchor = index;
+    }
+  }
+  const scale = partials[anchor].ratio / modes[anchor].omega;
   let changed = false;
   const next = partials.map((partial, index) => {
     if (index >= modes.length) return partial;
-    const ratio = modes[index].omega / fund;
+    const ratio = modes[index].omega * scale;
     if (!(ratio > 0) || Math.abs(partial.ratio - ratio) < 1e-6) return partial;
     changed = true;
     return { ...partial, ratio };

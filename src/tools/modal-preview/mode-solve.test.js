@@ -185,6 +185,22 @@ test('a shell solve returns ordered modes on the drawn profile', () => {
   assert.ok(Math.abs(next[1].ratio - metal.modes[1].omega / metal.modes[0].omega) < 1e-9);
 });
 
+test('a bell keeps its prime on the tuned note', () => {
+  const modes = [{ omega: 100 }, { omega: 180 }, { omega: 240 }];
+  const partials = [
+    { ratio: 0.5, gainDb: -18, decay: 8 },
+    { ratio: 1, gainDb: -6, decay: 4 },
+    { ratio: 1.2, gainDb: -3, decay: 3 },
+  ];
+  const next = applyShapeSound(partials, modes);
+  assert.equal(next[1].ratio, 1);
+  assert.ok(Math.abs(next[0].ratio - 100 / 180) < 1e-9);
+  assert.ok(Math.abs(next[2].ratio - 240 / 180) < 1e-9);
+  assert.equal(next[0].gainDb, -18);
+  assert.equal(next[1].decay, 4);
+  assert.equal(next[0].decay, 8);
+});
+
 test('shape sound replaces ratios and keeps level, decay, and the fundamental', () => {
   const solved = solveFlatModes({ shape: 'disc', model: 'plate', material: 'metal' });
   const partials = [
