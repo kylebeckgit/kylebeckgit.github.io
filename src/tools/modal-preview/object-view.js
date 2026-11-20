@@ -4,9 +4,22 @@
 // --accent in src/styles/global.css.
 export const ACCENT = '#d4421c';
 
-const SIZE = { tiny: 0.62, small: 0.74, medium: 0.84, large: 0.9, huge: 0.94 };
-// Tall bodies use a smaller unit so a huge shell or tube, plus its shadow, stays inside the canvas.
-const FIT = { bar: 0.5, string: 0.46, plate: 0.44, membrane: 0.42, shell: 0.4, tube: 0.36, box: 0.42 };
+// How far each body reaches from center, in units, including its shadow.
+const REACH = {
+  bar: { x: 1.02, y: 0.36, span: 2.02 },
+  string: { x: 1.12, y: 0.82, span: 2.24 },
+  plate: { x: 1.02, y: 1.06, span: 2.05 },
+  membrane: { x: 1.12, y: 0.85, span: 2.1 },
+  shell: { x: 0.82, y: 0.86, span: 1.62 },
+  flared: { x: 0.82, y: 0.86, span: 1.62 },
+  tube: { x: 0.4, y: 1.08, span: 2.14 },
+  box: { x: 0.95, y: 0.85, span: 1.9 },
+  cowbell: { x: 0.53, y: 0.67, span: 1.27 },
+  handpan: { x: 0.77, y: 0.36, span: 1.53 },
+  disc: { x: 0.93, y: 1.07, span: 1.9 },
+};
+// Fraction of the stage's shorter side the body should occupy, shadow included.
+const FILL = { tiny: 0.75, small: 0.78, medium: 0.8, large: 0.83, huge: 0.85 };
 const CARD = '#fbf8f2';
 const MODE_LIMIT = 3;
 const BAND = 0.038;
@@ -70,9 +83,16 @@ export function materialFinish(key) {
 }
 
 export function objectUnit(width, height, family = 'bar', size = 'medium') {
-  const scale = SIZE[String(size || 'medium').toLowerCase()] || SIZE.medium;
-  const key = FIT[family] ? family : (FIT_ALIAS[family] || 'bar');
-  return Math.min(width, height) * (FIT[key] || 0.42) * scale;
+  const key = REACH[family] ? family : (FIT_ALIAS[family] || 'bar');
+  const reach = REACH[key] || REACH.bar;
+  const name = String(size || 'medium').toLowerCase();
+  const fill = FILL[name] || FILL.medium;
+  const span = reach.span || 2 * Math.max(reach.x, reach.y);
+  const limit = Math.min(width, height);
+  const fitted = (fill * limit) / span;
+  const capW = (width * 0.92) / (2 * reach.x);
+  const capH = (height * 0.92) / (2 * reach.y);
+  return Math.min(fitted, capW, capH);
 }
 
 // Bar: 1, 2, 3 interior nodes. String and tube: 1, 2, 3 loops.
@@ -377,13 +397,9 @@ export function paintObject(ctx, options) {
   for (const mode of ordered) {
     const motion = motionOf(mode);
     const bend = motion * (solo ? 0.85 : 0.4 + mode.amp * 0.35);
-    const glass = tone.kind === 'glass';
-    const paleFace = glass || kind === 'cowbell' || kind === 'handpan' || kind === 'flared' || kind === 'disc';
-    const tint = mode.hot || paleFace ? accent : accentTint(accent, false, card);
-    const presence = Math.max(0.62, Math.min(1, Math.abs(motion)));
-    const fade = presence * (mode.hot ? 0.96 : paleFace ? 0.92 : 0.7 + mode.amp * 0.2);
+    const tint = mode.hot ? accent : accentTint(accent, false, card);
     ctx.save();
-    ctx.globalAlpha = fade;
+    ctx.globalAlpha = 1;
     drawBend(ctx, family, mode.index, unit, bend, tint, mode.hot, kind);
     ctx.restore();
   }
@@ -541,27 +557,15 @@ function drawCrest(ctx, unit, yAt) {
 
 function drawTubeBand(ctx, unit, index, bend) {
   const samples = 28;
-  const color = ctx.strokeStyle;
-  const width = Math.max(ctx.lineWidth, unit * 0.055);
-  const trace = () => {
-    ctx.beginPath();
-    for (let i = 0; i < samples; i++) {
-      const t = i / (samples - 1);
-      const y = -unit * 0.86 + t * unit * 1.72;
-      const x = modeDisplacement('tube', index, t) * bend * unit * 0.15;
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    }
-  };
-  ctx.save();
-  ctx.strokeStyle = mixHex(String(color), '#3a2014', 0.55);
-  ctx.lineWidth = width + 2.4;
-  trace();
-  ctx.stroke();
-  ctx.restore();
-  ctx.lineWidth = width;
-  ctx.strokeStyle = color;
-  trace();
+  ctx.lineWidth = Math.max(ctx.lineWidth, unit * 0.055);
+  ctx.beginPath();
+  for (let i = 0; i < samples; i++) {
+    const t = i / (samples - 1);
+    const y = -unit * 0.86 + t * unit * 1.72;
+    const x = modeDisplacement('tube', index, t) * bend * unit * 0.15;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
   ctx.stroke();
 }
 
@@ -752,22 +756,23 @@ function drawShell(ctx, unit, flare, tone, tint, glass) {
   ctx.stroke();
 }
 
-// Half-width of a church bell, mouth down. Narrow under the canon, rounded
-// shoulder, concave waist, then a flare out to the lip.
+// Half-width of a church bell, mouth down. The crown rounds out to the
+// shoulder. Below the shoulder the side only gets wider: a gently concave
+// waist, then the sound bow and the flared lip.
 export function flaredHalf(n) {
   const y = Number(n) || 0;
-  if (y <= -0.42) return 0.12;
-  if (y < -0.02) {
-    const t = (y + 0.42) / 0.4;
-    return 0.12 + 0.36 * Math.sin(t * Math.PI / 2);
+  const shoulderY = -0.06;
+  const shoulder = 0.4;
+  const lipY = 0.68;
+  const lip = 0.76;
+  if (y <= -0.5) return 0.1;
+  if (y < shoulderY) {
+    const t = (y + 0.5) / (shoulderY + 0.5);
+    const u = Math.max(0, Math.min(1, t));
+    return 0.1 + (shoulder - 0.1) * Math.sin(u * Math.PI / 2);
   }
-  if (y < 0.34) {
-    const t = (y + 0.02) / 0.36;
-    return 0.48 - 0.07 * Math.sin(t * Math.PI);
-  }
-  const t = Math.max(0, Math.min(1, (y - 0.34) / 0.34));
-  const s = t * t * (3 - 2 * t);
-  return 0.48 + 0.24 * s;
+  const t = Math.max(0, Math.min(1, (y - shoulderY) / (lipY - shoulderY)));
+  return shoulder + (lip - shoulder) * Math.pow(t, 1.55);
 }
 
 function handpanHalf(n) {
@@ -966,6 +971,22 @@ function drawSilhouette(ctx, kind, unit, flare, tone, tint, glass) {
   if (!tint) paintSurface(ctx, tone, unit, true, { cx: -unit * 0.18, cy: kind === 'flared' ? -unit * 0.28 : -unit * 0.08, rx: unit * 0.26, ry: unit * 0.12 });
   ctx.restore();
   if (kind === 'flared') {
+    const bow = (sign) => {
+      ctx.beginPath();
+      for (let i = 0; i <= 8; i++) {
+        const n = 0.36 + (0.28 * i) / 8;
+        const x = sign * flaredHalf(n) * unit * (1 + flare * 0.5) * 0.86;
+        if (i === 0) ctx.moveTo(x, n * unit);
+        else ctx.lineTo(x, n * unit);
+      }
+    };
+    ctx.lineWidth = Math.max(3, unit * 0.045);
+    ctx.strokeStyle = tone.shade;
+    ctx.lineCap = 'round';
+    bow(1);
+    ctx.stroke();
+    bow(-1);
+    ctx.stroke();
     const lip = flaredHalf(0.64) * unit * (1 + flare * 0.5);
     ctx.beginPath();
     ctx.ellipse(0, unit * 0.66, lip * 0.86, unit * 0.085, 0, 0, Math.PI * 2);
@@ -1146,7 +1167,7 @@ function drawBoxBend(ctx, unit, bow, tint) {
   ctx.closePath();
   ctx.fillStyle = tint;
   ctx.fill();
-  ctx.strokeStyle = mixHex(tint, '#3c403c', 0.35);
+  ctx.strokeStyle = tint;
   ctx.stroke();
 }
 
