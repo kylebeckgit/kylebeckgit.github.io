@@ -14,6 +14,7 @@ import {
   knobDistance,
   pushRoll,
   redoRoll,
+  EXTREME_WILDNESS,
   rollSound,
   undoRoll,
 } from './randomize.js';
@@ -367,6 +368,21 @@ test('locks and a small amount keep the current knobs', () => {
   assert.equal(nudged.knobs.tune, 7);
   assert.ok(Math.abs(nudged.knobs.decay - current.decay) < 0.12);
   assert.equal(assessQuality(nudged.partials, nudged.knobs).ok, true);
+});
+
+test('extreme wildness stays audible and does not clip', () => {
+  assert.ok(EXTREME_WILDNESS > 1);
+  for (let seed = 1; seed <= 8; seed++) {
+    const rolled = rollSound({ material: 'metal', wildness: EXTREME_WILDNESS, amount: 1, seed });
+    const heard = audiblePartials(rolled.partials);
+    assert.ok(heard.length > 0, `seed ${seed} silent`);
+    const loudest = Math.max(...heard.map((partial) => partial.gainDb));
+    assert.ok(loudest <= 0, `seed ${seed} clips at ${loudest}`);
+    assert.ok(loudest > -40, `seed ${seed} too quiet ${loudest}`);
+    for (const partial of heard) {
+      assert.ok(partial.decay >= 0.05 && partial.decay <= 30, `seed ${seed} decay ${partial.decay}`);
+    }
+  }
 });
 
 test('roll history keeps the last ten and walks back and forward', () => {

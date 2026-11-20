@@ -139,6 +139,8 @@ test('bells keep distinct silhouettes and modal families', () => {
   assert.equal(shellKind({ name: 'Cowbell', shape: 'shell' }), 'cowbell');
   assert.equal(shellKind({ name: 'Gong', shape: 'plate', voice: 'gong' }), 'disc');
   assert.equal(shellKind({ name: 'Handpan', shape: 'shell' }), 'handpan');
+  assert.equal(shellKind({ name: 'Wine glass', shape: 'shell', voice: 'glass' }), 'goblet');
+  assert.equal(objectCaption({ name: 'Wine glass', material: 'glass', shape: 'shell' }, { selected: 0, count: 4 }), 'Glass goblet, mode 1 of 4');
   assert.equal(objectCaption({ name: 'Church bell', material: 'metal', shape: 'shell' }, { selected: 2, count: 16 }), 'Metal shell, mode 3 of 16');
   assert.equal(objectCaption({ preset: 'bar' }, { selected: -1, count: 4 }), '');
 });
@@ -163,6 +165,7 @@ test('each body fills most of the stage and keeps a margin', () => {
     cowbell: { x: 0.53, y: 0.67, span: 1.27 },
     handpan: { x: 0.77, y: 0.36, span: 1.53 },
     disc: { x: 0.93, y: 1.07, span: 1.9 },
+    goblet: { x: 0.52, y: 0.6, span: 1.2 },
   };
   const stages = [
     { width: 640, height: 516 },

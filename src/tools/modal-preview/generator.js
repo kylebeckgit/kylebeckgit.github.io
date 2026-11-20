@@ -4,7 +4,8 @@
 import { SILENT_MODE_HINT, beginAudio, installGestureUnlock, playSilentUnlock, prepareAudioSession, resumeInGesture, audioContextClass } from './audio-session.js';
 import { audiblePartials, defaultControls, heardSeconds, playedFundamental, previewPartials, sanitizeControls } from './engine.js';
 import { combHeights, defaultCamera, hitPartial, paintModalView, sliceFromPartial, spaceByLog } from './modal-view.js';
-import { bodySignature, objectCaption, paintObject } from './object-view.js';
+import { bodySignature, hitObjectMode, objectCaption, paintObject } from './object-view.js';
+import { applyShapeSound, SHAPE_SOUND } from './mode-solve.js';
 import { cachedModes, flatSpec, patternNote, solveMs, trackFlatModes } from './mode-client.js';
 import { describePrompt } from './recipes.js';
 import { renderPreview, scaleToPeak } from './resonator.js';
@@ -560,7 +561,7 @@ export function previewHitSlices(partials, position = 0.18) {
   return combHeights(slices, position);
 }
 
-function paintPreview(canvas, partials, { detune = 0, position = 0.18 } = {}) {
+function paintPreview(canvas, partials, { detune = 0, position = 0.18, selected = -1 } = {}) {
   if (!canvas) return;
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   const width = canvas.clientWidth || 420;
@@ -586,7 +587,7 @@ function paintPreview(canvas, partials, { detune = 0, position = 0.18 } = {}) {
       font: getComputedStyle(document.body).fontFamily,
     },
     invertPanel: true,
-    selected: -1,
+    selected,
     detune,
     position,
     now: performance.now(),
@@ -635,12 +636,32 @@ export function mountGenerator(root, { openInDesigner } = {}) {
   if (!root || typeof document === 'undefined') return null;
   const canvas = root.querySelector('[data-gen-view]');
   const objectCanvas = root.querySelector('[data-gen-object]');
-  const audioState = { ctx: null, source: null, hint: root.querySelector('[data-gen-audio]'), snap: null, selected: -1, strike: 0, frame: 0 };
+  const audioState = { ctx: null, source: null, hint: root.querySelector('[data-gen-audio]'), snap: null, selected: -1, hover: -1, strike: 0, frame: 0 };
   let seed = 1;
+
+  function hotIndex() {
+    return audioState.hover >= 0 ? audioState.hover : audioState.selected;
+  }
 
   function paintCurrent(age = null) {
     const snap = audioState.snap;
-    if (snap && !canvas?.hidden) paintPreview(canvas, snap.partials, snap);
+    if (SHAPE_SOUND && snap) {
+      const modes = cachedModes(snap);
+      const shaped = applyShapeSound(snap.partials, modes);
+      if (shaped !== snap.partials) {
+        snap.partials = shaped;
+        const variation = controller?.current?.();
+        if (variation?.partials) {
+          variation.partials = shaped.map((partial) => ({
+            ratio: partial.ratio,
+            gainDb: partial.gainDb,
+            decay: partial.decay,
+          }));
+        }
+      }
+    }
+    const hot = hotIndex();
+    if (snap && !canvas?.hidden) paintPreview(canvas, snap.partials, { ...snap, selected: hot });
     const shown = snap || restingSnap();
     const sig = bodySignature(shown, shown.partials);
     if (audioState.shown && audioState.shown.sig !== sig) {
@@ -653,7 +674,7 @@ export function mountGenerator(root, { openInDesigner } = {}) {
       const ms = solveMs(shown);
       if (ms != null) objectCanvas.dataset.solveMs = String(Math.round(ms));
     }
-    paintObjectCanvas(objectCanvas, blend < 1 ? audioState.fade.from.body : shown, { selected: audioState.selected, age, solvedModes: blend < 1 ? null : solvedModes });
+    paintObjectCanvas(objectCanvas, blend < 1 ? audioState.fade.from.body : shown, { selected: hot, age, solvedModes: blend < 1 ? null : solvedModes });
     if (blend < 1 && objectCanvas && !objectCanvas.hidden) {
       if (!audioState.fadeCanvas) audioState.fadeCanvas = document.createElement('canvas');
       audioState.fadeCanvas.width = objectCanvas.width;
@@ -666,7 +687,7 @@ export function mountGenerator(root, { openInDesigner } = {}) {
         height: objectCanvas.clientHeight || 280,
         body: shown,
         partials: shown.partials || [],
-        selected: audioState.selected,
+        selected: hot,
         age,
         now: performance.now(),
         solvedModes,
@@ -687,7 +708,7 @@ export function mountGenerator(root, { openInDesigner } = {}) {
     const caption = root.querySelector('[data-gen-caption]');
     if (caption) {
       caption.hidden = !objectCanvas || objectCanvas.hidden;
-      const base = objectCaption(shown, { selected: audioState.selected, count: (shown.partials || []).length });
+      const base = objectCaption(shown, { selected: hot, count: (shown.partials || []).length });
       const note = patternNote(flatSpec(shown), cachedModes(shown) ? 'ready' : 'pending');
       caption.textContent = [base, note].filter(Boolean).join(' ');
     }
@@ -752,7 +773,8 @@ export function mountGenerator(root, { openInDesigner } = {}) {
     }
   }
 
-  const controller = mountStudio(root, {
+  let controller = null;
+  controller = mountStudio(root, {
     applyRecipe(variation, { hear = false } = {}) {
       showSnap(variation, { hear });
     },
@@ -795,14 +817,45 @@ export function mountGenerator(root, { openInDesigner } = {}) {
       }
     });
   }
-  canvas?.addEventListener('pointerup', (event) => {
+  const pickBar = (event, stick) => {
     const snap = audioState.snap;
     if (!snap?.partials?.length || canvas.hidden) return;
     const rect = canvas.getBoundingClientRect();
     const slices = previewHitSlices(snap.partials, snap.position);
-    audioState.selected = hitPartial(slices, defaultCamera(), canvas.clientWidth, canvas.clientHeight, event.clientX - rect.left, event.clientY - rect.top, snap.detune || 0);
+    const hit = hitPartial(slices, defaultCamera(), canvas.clientWidth, canvas.clientHeight, event.clientX - rect.left, event.clientY - rect.top, snap.detune || 0);
+    if (stick) audioState.selected = hit;
+    audioState.hover = hit;
     const age = audioState.strike ? (performance.now() - audioState.strike) / 1000 : null;
     paintCurrent(audioState.strike ? age : null);
+  };
+  canvas?.addEventListener('pointermove', (event) => pickBar(event, false));
+  canvas?.addEventListener('pointerup', (event) => pickBar(event, true));
+  canvas?.addEventListener('pointerleave', () => {
+    audioState.hover = -1;
+    paintCurrent(audioState.strike ? (performance.now() - audioState.strike) / 1000 : null);
+  });
+  const pickLine = (event, stick) => {
+    const snap = audioState.snap;
+    if (!snap || !objectCanvas || objectCanvas.hidden) return;
+    const rect = objectCanvas.getBoundingClientRect();
+    const hit = hitObjectMode({
+      width: objectCanvas.clientWidth,
+      height: objectCanvas.clientHeight,
+      body: snap,
+      partials: snap.partials,
+      solvedModes: cachedModes(snap),
+      selected: hotIndex(),
+    }, event.clientX - rect.left, event.clientY - rect.top);
+    if (stick) audioState.selected = hit;
+    audioState.hover = hit;
+    const age = audioState.strike ? (performance.now() - audioState.strike) / 1000 : null;
+    paintCurrent(audioState.strike ? age : null);
+  };
+  objectCanvas?.addEventListener('pointermove', (event) => pickLine(event, false));
+  objectCanvas?.addEventListener('pointerup', (event) => pickLine(event, true));
+  objectCanvas?.addEventListener('pointerleave', () => {
+    audioState.hover = -1;
+    paintCurrent(audioState.strike ? (performance.now() - audioState.strike) / 1000 : null);
   });
   const session = createGeneratorSession();
   root.querySelector('[data-gen-roll]')?.addEventListener('click', () => {

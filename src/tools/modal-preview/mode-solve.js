@@ -41,6 +41,24 @@ export function specKey(spec) {
   return `${spec.shape}|${spec.model}|${spec.material}`;
 }
 
+// Solved flat shapes can replace partial frequency ratios. Levels, decays,
+// and Tune stay put. Set this false to hear the old ratios again.
+export const SHAPE_SOUND = true;
+
+export function applyShapeSound(partials, modes) {
+  if (!SHAPE_SOUND || !partials?.length || !modes?.length || !(modes[0].omega > 0)) return partials;
+  const fund = modes[0].omega;
+  let changed = false;
+  const next = partials.map((partial, index) => {
+    if (index >= modes.length) return partial;
+    const ratio = modes[index].omega / fund;
+    if (!(ratio > 0) || Math.abs(partial.ratio - ratio) < 1e-6) return partial;
+    changed = true;
+    return { ...partial, ratio };
+  });
+  return changed ? next : partials;
+}
+
 export function patternNote(spec, phase) {
   if (!spec) return '';
   if (phase === 'ready') return 'Nodal lines are solved from the shape. The sound is unchanged.';

@@ -1,8 +1,9 @@
 import { A4_HZ, PRESETS, NOTE_BUTTONS, ZEBRA_PARTIAL_LIMIT_HZ, buildPartials, previewPartials, zebraExport, audiblePartials, fromCsv, noteFrequency, playedFundamental, heardSeconds, defaultControls, sanitizeControls, alignReference, carryControls, controlsFromKnobs } from './engine.js';
+import { applyShapeSound, SHAPE_SOUND } from './mode-solve.js';
 import { analyzeSamples, decodeRecording, resampleMono, parseRoot, frequencyToNote } from './analyze.js';
 import { renderPreview, scaleToPeak, strikeWeight } from './resonator.js';
 import { aimSlices, createFitMotion, createSliceMotion, defaultCamera, hitPartial, MORPH_MS, paintModalView, sampleSlices, slicesMoving } from './modal-view.js';
-import { bodySignature, objectCaption, paintObject } from './object-view.js';
+import { bodySignature, hitObjectMode, objectCaption, paintObject } from './object-view.js';
 import { cachedModes, flatSpec, patternNote, solveMs, trackFlatModes } from './mode-client.js';
 import { densityForProfile, shapePartials } from './shape.js';
 import { createRollHistory, defaultLocks, pushRoll, redoRoll, rollSound, undoRoll } from './randomize.js';
@@ -10,7 +11,11 @@ import { decodeProfile, encodeProfile } from './studio.js';
 import { SILENT_MODE_HINT, audioContextClass, beginAudio, installGestureUnlock, playSilentUnlock, prepareAudioSession, resumeInGesture } from './audio-session.js';
 
 export function mount(root) {
-  const flatTrack = trackFlatModes(() => paintDesignerObject());
+  const flatTrack = trackFlatModes(() => {
+    syncShapeSound();
+    if (objectCanvas && !objectCanvas.hidden) paintDesignerObject();
+    else if (canvas && !canvas.hidden) draw(canvas, state.partials, state);
+  });
   const describeUrl = (root.dataset.describeUrl || '').trim();
   const membershipOn = root.dataset.membership === 'true';
   const state = {
@@ -224,6 +229,24 @@ export function mount(root) {
       state.partials = audiblePartials(copy, heardOptions());
     }
     if (custom != null) state.custom = custom;
+    syncShapeSound();
+  }
+
+  function syncShapeSound() {
+    root.dataset.shapeSound = SHAPE_SOUND ? 'on' : 'off';
+    if (!SHAPE_SOUND) return;
+    const body = objectBody();
+    if (!flatSpec(body)) return;
+    flatTrack(body);
+    const modes = cachedModes(body);
+    const profile = state.profilePartials || state.partials;
+    if (!modes || !profile) return;
+    const shaped = applyShapeSound(profile, modes);
+    if (shaped === profile) return;
+    state.profilePartials = shaped;
+    publishShape(0);
+    pushModes();
+    render();
   }
 
   function pushHistory() {
@@ -581,6 +604,26 @@ export function mount(root) {
     };
   });
   canvas.addEventListener('pointermove', (event) => {
+    if (!state.gesture && canvas.dataset.view === 'zebra' && !canvas.hidden) {
+      const point = canvasPoint(canvas, event);
+      const hit = hitPartial(
+        sampleSlices(state.slices, performance.now()),
+        defaultCamera(),
+        canvas.clientWidth,
+        canvas.clientHeight,
+        point.x,
+        point.y,
+        state.detune || 0,
+        state.fit.shown,
+      );
+      if (hit !== state.hoverPartial) {
+        state.hoverPartial = hit;
+        draw(canvas, state.partials, state);
+        paintDesignerObject();
+        markPartialRow(hit >= 0 ? hit : state.selectedPartial);
+      }
+      return;
+    }
     if (!state.gesture) return;
     const point = canvasPoint(canvas, event);
     if (state.gesture.select) return;
@@ -619,6 +662,47 @@ export function mount(root) {
     state.gesture = null;
   });
   canvas.addEventListener('pointercancel', () => { state.gesture = null; });
+  canvas.addEventListener('pointerleave', () => {
+    if (state.hoverPartial >= 0) {
+      state.hoverPartial = -1;
+      draw(canvas, state.partials, state);
+      paintDesignerObject();
+      markPartialRow(state.selectedPartial);
+    }
+  });
+  const objectPoint = (event) => {
+    const rect = objectCanvas.getBoundingClientRect();
+    return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+  };
+  const hoverObject = (event, stick) => {
+    if (!objectCanvas || objectCanvas.hidden) return;
+    const point = objectPoint(event);
+    const hit = hitObjectMode({
+      width: objectCanvas.clientWidth,
+      height: objectCanvas.clientHeight,
+      body: objectBody(),
+      partials: state.partials,
+      solvedModes: cachedModes(objectBody()),
+      selected: state.hoverPartial >= 0 ? state.hoverPartial : state.selectedPartial,
+    }, point.x, point.y);
+    if (stick) state.selectedPartial = hit;
+    state.hoverPartial = hit;
+    draw(canvas, state.partials, state);
+    paintDesignerObject();
+    markPartialRow(hit >= 0 ? hit : state.selectedPartial);
+  };
+  objectCanvas?.addEventListener('pointermove', (event) => hoverObject(event, false));
+  objectCanvas?.addEventListener('pointerup', (event) => hoverObject(event, true));
+  objectCanvas?.addEventListener('pointerleave', () => {
+    state.hoverPartial = -1;
+    draw(canvas, state.partials, state);
+    paintDesignerObject();
+    markPartialRow(state.selectedPartial);
+  });
+  function markPartialRow(index) {
+    for (const row of tableBody?.querySelectorAll('tr') || []) row.classList.remove('is-selected');
+    if (index >= 0) tableBody?.querySelector(`[data-index="${index}"]`)?.closest('tr')?.classList.add('is-selected');
+  }
   const styleSelect = root.querySelector('[data-draw-style]');
   if (styleSelect) {
     state.drawStyle = styleSelect.value || 'fast';
@@ -684,7 +768,10 @@ export function mount(root) {
   const wildnessSlider = root.querySelector('[data-roll-wildness]');
   wildnessSlider?.addEventListener('input', () => {
     const out = root.querySelector('[data-roll-wildness-out]');
-    if (out) out.textContent = Number(wildnessSlider.value).toFixed(2);
+    if (out) {
+      const amount = Number(wildnessSlider.value);
+      out.textContent = amount >= 1.2 ? 'extreme' : amount.toFixed(2);
+    }
   });
   const readRollKnobs = () => ({
     tune: Number(root.querySelector('[data-tune]')?.value || 0),
@@ -1448,7 +1535,7 @@ function drawZebra(canvas, partials, state) {
     style: state.drawStyle || 'fast',
     colors,
     invertPanel: canvas.dataset.panel !== 'cream',
-    selected: state.selectedPartial,
+    selected: state.hoverPartial >= 0 ? state.hoverPartial : state.selectedPartial,
     detune: state.detune || 0,
     position: state.position,
     now: performance.now(),

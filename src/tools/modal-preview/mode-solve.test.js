@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { flatSpec, materialFactor, saddlePairs, solveFlatModes } from './mode-solve.js';
+import { applyShapeSound, flatSpec, materialFactor, saddlePairs, solveFlatModes } from './mode-solve.js';
 
 function maxTurn(lines) {
   let worst = 0;
@@ -130,6 +130,22 @@ test('a square (2,2) mode crosses as a plus', () => {
     const b = side(line[line.length - 1]);
     assert.equal(opposite[a], b, `ends on ${a} and ${b}`);
   }
+});
+
+test('shape sound replaces ratios and keeps level, decay, and the fundamental', () => {
+  const solved = solveFlatModes({ shape: 'disc', model: 'plate', material: 'metal' });
+  const partials = [
+    { ratio: 1, gainDb: 0, decay: 2.5 },
+    { ratio: 4.2, gainDb: -8, decay: 0.8 },
+    { ratio: 9, gainDb: -14, decay: 0.3 },
+  ];
+  const next = applyShapeSound(partials, solved.modes);
+  assert.equal(next[0].ratio, 1);
+  assert.ok(Math.abs(next[1].ratio - solved.modes[1].omega / solved.modes[0].omega) < 1e-9);
+  assert.equal(next[1].gainDb, -8);
+  assert.equal(next[1].decay, 0.8);
+  assert.equal(applyShapeSound(partials, null), partials);
+  assert.equal(applyShapeSound(partials, []), partials);
 });
 
 test('a stiffer material raises the plate frequency and not the nodal shape', () => {
