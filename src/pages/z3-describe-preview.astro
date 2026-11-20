@@ -24,6 +24,7 @@ import Base from '../layouts/Base.astro';
         </div>
         <canvas data-view="zebra" aria-label="Modal partials. Click a mode to highlight it."></canvas>
         <canvas data-object hidden aria-label="Sounding object. Each partial is a mode of this body."></canvas>
+        <p class="object-caption" data-object-caption hidden></p>
       </div>
       <div class="stage-play">
       <p class="quiet">Click a line, or a row under More, to highlight it. Hold a key for the bow.</p>
@@ -287,6 +288,7 @@ import Base from '../layouts/Base.astro';
           </div>
           <canvas data-gen-view aria-label="Generator preview"></canvas>
           <canvas data-gen-object hidden aria-label="Sounding object. Each partial is a mode of this body."></canvas>
+          <p class="object-caption" data-gen-caption hidden></p>
         </div>
         <div class="gen-actions">
           <button type="button" class="btn" data-gen-hear>Hear</button>
@@ -354,6 +356,8 @@ import Base from '../layouts/Base.astro';
   .view-switch .btn[aria-pressed="true"] { background: var(--fg); color: var(--bg); }
   canvas[hidden] { display: none; }
   canvas[data-object], canvas[data-gen-object] { touch-action: pan-y; cursor: default; }
+  .object-caption { margin: .35rem 0 0; min-height: 1.4em; color: var(--muted); font-size: .92rem; }
+  .object-caption[hidden] { display: none; }
   .gen-actions { display: flex; flex-wrap: wrap; gap: .6rem; }
   .gen-actions .btn { min-height: 2.75rem; }
   .gen-roll { margin-top: 1.25rem; }

@@ -16,7 +16,7 @@ const TONE = {
   metal: { lit: '#f4f1ea', mid: '#9aa09a', shade: '#2c302c', rim: '#ffffff', kind: 'sheen' },
   glass: { lit: '#f7fbff', mid: '#d7e7ee', shade: '#6d8b96', rim: '#ffffff', kind: 'glass' },
   skin: { lit: '#efe0c4', mid: '#c4a574', shade: '#7a5a32', rim: '#f6ead4', kind: 'matte' },
-  stone: { lit: '#b7b1a6', mid: '#7a746c', shade: '#3a3632', rim: '#d4cec4', kind: 'matte' },
+  stone: { lit: '#b7b1a6', mid: '#7a746c', shade: '#3a3632', rim: '#d4cec4', kind: 'matte', speckle: true },
   ceramic: { lit: '#f0c2a8', mid: '#c46a45', shade: '#6e3424', rim: '#f8dccb', kind: 'gloss' },
   ice: { lit: '#ffffff', mid: '#d5e7ef', shade: '#7aa0b0', rim: '#ffffff', kind: 'glass' },
   water: { lit: '#d5e8f2', mid: '#6f93a8', shade: '#2c4a5c', rim: '#f4fbff', kind: 'glass' },
@@ -71,7 +71,8 @@ export function materialFinish(key) {
 
 export function objectUnit(width, height, family = 'bar', size = 'medium') {
   const scale = SIZE[String(size || 'medium').toLowerCase()] || SIZE.medium;
-  return Math.min(width, height) * (FIT[family] || 0.42) * scale;
+  const key = FIT[family] ? family : (FIT_ALIAS[family] || 'bar');
+  return Math.min(width, height) * (FIT[key] || 0.42) * scale;
 }
 
 // Bar: 1, 2, 3 interior nodes. String and tube: 1, 2, 3 loops.
@@ -83,8 +84,60 @@ export function modeShape(family, index = 0) {
   if (family === 'membrane' || family === 'plate') {
     return { family, spokes: n % 4, rings: 1 + Math.floor(n / 4) };
   }
-  if (family === 'shell') return { family: 'shell', meridians: 2 + (n % 6) };
+  if (family === 'shell') {
+    const patterns = [
+      { meridians: 2, circles: 0 },
+      { meridians: 2, circles: 1 },
+      { meridians: 3, circles: 1 },
+      { meridians: 3, circles: 2 },
+      { meridians: 4, circles: 1 },
+    ];
+    return { family: 'shell', ...patterns[n % patterns.length] };
+  }
   return { family: 'box', panels: 1 + (n % 4) };
+}
+
+const FIT_ALIAS = { flared: 'shell', bowl: 'shell', cowbell: 'box', disc: 'plate', handpan: 'shell' };
+
+export function shellKind(body = {}) {
+  const name = `${body.name || ''} ${body.objectName || ''}`.toLowerCase();
+  const shape = String(body.shape || '').toLowerCase();
+  const voice = String(body.voice || body.controls?.voice || '').toLowerCase();
+  const text = `${name} ${shape} ${voice}`;
+  if (/handpan|\bhang\b/.test(text)) return 'handpan';
+  if (/gong|cymbal|tam-tam|tam tam/.test(text) || voice === 'gong') return 'disc';
+  if (/cowbell/.test(text)) return 'cowbell';
+  if (/singing bowl|\bbowl\b/.test(text) || shape === 'bowl') return 'bowl';
+  if (/church|hand bell|prayer|bonsho|carillon|tower|\bbell\b/.test(text) || voice === 'bonsho' || voice === 'cup') return 'flared';
+  if (bodyFamily(body) === 'shell') return 'flared';
+  return '';
+}
+
+export function drawKind(body = {}) {
+  return shellKind(body) || bodyFamily(body);
+}
+
+const MATERIAL_LABEL = {
+  wood: 'Wood', metal: 'Metal', glass: 'Glass', skin: 'Skin', stone: 'Stone',
+  ceramic: 'Ceramic', ice: 'Ice', water: 'Water', void: 'Void', cardboard: 'Cardboard',
+  plastic: 'Plastic', air: 'Air', string: 'String', rubber: 'Rubber',
+};
+
+const KIND_LABEL = {
+  flared: 'shell', bowl: 'bowl', cowbell: 'bell', disc: 'disc', handpan: 'handpan',
+  bar: 'bar', plate: 'plate', membrane: 'membrane', tube: 'tube', string: 'string', box: 'box', shell: 'shell',
+};
+
+export function objectCaption(body = {}, { selected = -1, count = 0 } = {}) {
+  if (!Number.isInteger(selected) || selected < 0 || count < 1) return '';
+  const material = MATERIAL_LABEL[materialKey(body)] || 'Metal';
+  const word = KIND_LABEL[drawKind(body)] || 'body';
+  return `${material} ${word}, mode ${selected + 1} of ${count}`;
+}
+
+export function bodySignature(body = {}, partials = []) {
+  const head = (partials || []).slice(0, 3).map((partial) => Math.round((Number(partial?.ratio) || 0) * 100)).join('.');
+  return `${materialKey(body)}|${drawKind(body)}|${body.size || ''}|${head}`;
 }
 
 export function modeDisplacement(family, index, t) {
@@ -203,7 +256,7 @@ function paintSurface(ctx, tone, unit, across, sheen) {
   ctx.clip();
   if (tone.kind === 'grain') {
     ctx.save();
-    ctx.globalAlpha = 0.18;
+    ctx.globalAlpha = 0.22;
     ctx.strokeStyle = tone.shade;
     ctx.lineWidth = Math.max(1, unit * 0.012);
     const lines = across ? 5 : 4;
@@ -221,10 +274,47 @@ function paintSurface(ctx, tone, unit, across, sheen) {
     }
     ctx.restore();
   }
-  if (sheen && tone.kind !== 'matte' && tone.kind !== 'grain' && tone.kind !== 'void') {
-    const alpha = tone.kind === 'sheen' ? 0.55 : tone.kind === 'glass' ? 0.5 : 0.32;
+  if (tone.speckle) {
     ctx.save();
-    ctx.globalAlpha *= alpha;
+    ctx.globalAlpha = 0.28;
+    ctx.fillStyle = tone.shade;
+    const specks = [[-0.22, 0.08], [0.18, -0.12], [0.05, 0.22], [-0.08, -0.18], [0.28, 0.16], [-0.3, 0.2]];
+    for (const [sx, sy] of specks) {
+      ctx.beginPath();
+      ctx.ellipse(sx * unit, sy * unit, unit * 0.014, unit * 0.01, 0.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+  if (tone.kind === 'sheen' && sheen) {
+    ctx.save();
+    ctx.globalAlpha = 0.22;
+    ctx.fillStyle = tone.rim;
+    for (let i = 0; i < 3; i++) {
+      ctx.beginPath();
+      ctx.ellipse(sheen.cx, sheen.cy + i * sheen.ry * 0.55, sheen.rx * 1.15, Math.max(1.5, sheen.ry * 0.22), -0.15, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  } else if (tone.kind === 'glass' && sheen) {
+    ctx.save();
+    ctx.globalAlpha = 0.35;
+    ctx.fillStyle = '#d7e7ee';
+    ctx.beginPath();
+    ctx.ellipse(sheen.cx + unit * 0.08, sheen.cy + unit * 0.06, sheen.rx * 0.7, sheen.ry * 0.55, 0.3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  } else if (sheen && tone.kind === 'gloss') {
+    ctx.save();
+    ctx.globalAlpha = 0.28;
+    ctx.fillStyle = tone.rim;
+    ctx.beginPath();
+    ctx.ellipse(sheen.cx, sheen.cy, sheen.rx * 1.2, sheen.ry * 0.7, -0.3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  } else if (sheen && tone.kind !== 'matte' && tone.kind !== 'grain' && tone.kind !== 'void') {
+    ctx.save();
+    ctx.globalAlpha = 0.4;
     ctx.fillStyle = tone.rim;
     ctx.beginPath();
     ctx.ellipse(sheen.cx, sheen.cy, Math.max(2, sheen.rx), Math.max(2, sheen.ry), -0.4, 0, Math.PI * 2);
@@ -255,13 +345,18 @@ export function paintObject(ctx, options) {
   ctx.fillRect(0, 0, width, height);
   ctx.save();
   ctx.translate(width / 2, height / 2);
-  const unit = objectUnit(width, height, family, sizeName);
+  const kind = drawKind(options.body || {});
+  const unit = objectUnit(width, height, kind, sizeName);
+  const now = Number.isFinite(options.now) ? options.now : 0;
   const flare = modes.reduce((sum, mode) => {
     const motion = playing ? Math.sin(phaseOf(mode.index, age)) * mode.env : 1;
     return sum + Math.min(0.08, Math.abs(motion) * mode.amp * 0.05);
   }, 0);
 
-  const motionOf = (mode) => (playing ? Math.sin(phaseOf(mode.index, age)) * mode.env : 1);
+  const motionOf = (mode) => {
+    if (!playing) return 1 + 0.035 * Math.sin(now / 900 + mode.index * 0.7);
+    return Math.sin(phaseOf(mode.index, age)) * mode.env;
+  };
   const shift = (familyName, t) => {
     let y = 0;
     for (const mode of modes) {
@@ -274,10 +369,10 @@ export function paintObject(ctx, options) {
   };
 
   contactShadow(ctx, family, unit, tone.shade);
-  drawBody(ctx, family, unit, tone, flare, shift);
+  drawBody(ctx, family, unit, tone, flare, shift, kind);
 
   ctx.save();
-  clipBody(ctx, family, unit, flare, shift);
+  clipBody(ctx, family, unit, flare, shift, kind);
   const ordered = [...modes].sort((a, b) => a.amp - b.amp);
   for (const mode of ordered) {
     const motion = motionOf(mode);
@@ -287,7 +382,7 @@ export function paintObject(ctx, options) {
     const tint = accentTint(accent, mode.hot, card);
     ctx.save();
     ctx.globalAlpha = fade;
-    drawBend(ctx, family, mode.index, unit, bend, tint, mode.hot);
+    drawBend(ctx, family, mode.index, unit, bend, tint, mode.hot, kind);
     ctx.restore();
   }
   ctx.restore();
@@ -299,31 +394,32 @@ function phaseOf(index, age) {
 }
 
 function contactShadow(ctx, family, unit, shade) {
+  const place = family === 'bar' || family === 'string'
+    ? [unit * 0.04, unit * 0.4, unit * 0.86, unit * 0.06]
+    : family === 'tube'
+      ? [unit * 0.04, unit * 1.06, unit * 0.32, unit * 0.06]
+      : family === 'shell'
+        ? [unit * 0.04, unit * 0.92, unit * 0.62, unit * 0.07]
+        : family === 'box'
+          ? [unit * 0.08, unit * 0.78, unit * 0.7, unit * 0.06]
+          : [unit * 0.04, unit * 0.72, unit * 0.7, unit * 0.08];
   ctx.save();
   ctx.fillStyle = shade;
-  ctx.globalAlpha = 0.14;
-  if (family === 'bar' || family === 'string') {
-    ctx.beginPath();
-    ctx.ellipse(unit * 0.05, unit * 0.42, unit * 0.9, unit * 0.07, 0, 0, Math.PI * 2);
-  } else if (family === 'tube') {
-    ctx.beginPath();
-    ctx.ellipse(unit * 0.04, unit * 1.08, unit * 0.28, unit * 0.07, 0, 0, Math.PI * 2);
-  } else if (family === 'shell') {
-    ctx.beginPath();
-    ctx.ellipse(unit * 0.06, unit * 1.02, unit * 0.7, unit * 0.09, 0, 0, Math.PI * 2);
-  } else if (family === 'box') {
-    ctx.beginPath();
-    ctx.ellipse(unit * 0.1, unit * 0.78, unit * 0.72, unit * 0.08, 0, 0, Math.PI * 2);
-  } else {
-    ctx.beginPath();
-    ctx.ellipse(unit * 0.06, unit * 0.78, unit * 0.72, unit * 0.1, 0, 0, Math.PI * 2);
-  }
+  ctx.globalAlpha = 0.2;
+  ctx.beginPath();
+  ctx.ellipse(place[0], place[1], place[2] * 0.55, place[3] * 0.65, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 0.1;
+  ctx.beginPath();
+  ctx.ellipse(place[0], place[1] + place[3] * 0.35, place[2], place[3], 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
 }
 
-function clipBody(ctx, family, unit, flare, shift) {
-  if (family === 'bar') {
+function clipBody(ctx, family, unit, flare, shift, kind) {
+  if (kind === 'flared' || kind === 'cowbell' || kind === 'handpan' || kind === 'disc' || kind === 'bowl') {
+    traceSilhouette(ctx, kind, unit, flare);
+  } else if (family === 'bar') {
     const pts = barPoints(unit, (t) => -shift('bar', t) * unit * 0.16);
     ribbon(ctx, pts, unit * 0.22, 0, 0);
   } else if (family === 'string') {
@@ -348,7 +444,7 @@ function clipBody(ctx, family, unit, flare, shift) {
   ctx.clip();
 }
 
-function drawBody(ctx, family, unit, tone, flare, shift) {
+function drawBody(ctx, family, unit, tone, flare, shift, kind) {
   ctx.lineJoin = 'round';
   ctx.lineWidth = Math.max(1.25, unit * 0.02);
   ctx.strokeStyle = tone.shade;
@@ -361,8 +457,8 @@ function drawBody(ctx, family, unit, tone, flare, shift) {
     drawStringCord(ctx, unit, (t) => -shift('string', t) * unit * 0.2, tone, null);
   } else if (family === 'membrane' || family === 'plate') {
     drawDisk(ctx, unit, family, (angle) => 1 + shift(family, angle / (Math.PI * 2)) * 0.08, tone, null, glass);
-  } else if (family === 'shell') {
-    drawShell(ctx, unit, flare, tone, null, glass);
+  } else if (kind === 'flared' || kind === 'cowbell' || kind === 'handpan' || kind === 'disc' || kind === 'bowl' || family === 'shell') {
+    drawSilhouette(ctx, kind || 'flared', unit, flare, tone, null, glass);
   } else if (family === 'tube') {
     drawTube(ctx, unit, (t) => tubeBulge(unit, shift, t), tone, null, glass);
   } else {
@@ -370,7 +466,7 @@ function drawBody(ctx, family, unit, tone, flare, shift) {
   }
 }
 
-function drawBend(ctx, family, index, unit, bend, tint, hot) {
+function drawBend(ctx, family, index, unit, bend, tint, hot, kind) {
   const width = Math.max(1.5, unit * (hot ? BAND * 1.35 : BAND));
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
@@ -378,17 +474,35 @@ function drawBend(ctx, family, index, unit, bend, tint, hot) {
   ctx.strokeStyle = tint;
   if (family === 'bar') {
     drawCrest(ctx, unit, (t) => -modeDisplacement('bar', index, t) * unit * 0.1 * bend);
+    if (hot) drawBarNodes(ctx, unit, index, width);
   } else if (family === 'string') {
     drawCrest(ctx, unit, (t) => unit * 0.22 - modeDisplacement('string', index, t) * unit * 0.16 * bend);
   } else if (family === 'membrane' || family === 'plate') {
     drawDiskRidges(ctx, unit, family, index, width);
-  } else if (family === 'shell') {
-    drawShellRibs(ctx, unit, index, width);
+  } else if (kind === 'flared' || kind === 'bowl' || kind === 'cowbell' || kind === 'handpan' || family === 'shell') {
+    drawShellRibs(ctx, unit, index, width, kind || 'flared');
+  } else if (kind === 'disc') {
+    drawDiskRidges(ctx, unit, 'plate', index, width);
   } else if (family === 'tube') {
     drawTubeBand(ctx, unit, index, bend);
   } else {
     drawBoxBend(ctx, unit, (t) => modeDisplacement('box', index, t) * unit * 0.05 * bend, tint);
   }
+}
+
+function drawBarNodes(ctx, unit, index, width) {
+  const waves = modeShape('bar', index).nodes + 1;
+  ctx.save();
+  ctx.setLineDash([Math.max(2, width * 1.6), Math.max(3, width * 2.2)]);
+  ctx.lineWidth = Math.max(1, width * 0.7);
+  for (let k = 1; k < waves; k++) {
+    const x = -unit + (k / waves) * unit * 2;
+    ctx.beginPath();
+    ctx.moveTo(x, -unit * 0.1);
+    ctx.lineTo(x, unit * 0.1);
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 
 function drawCrest(ctx, unit, yAt) {
@@ -604,16 +718,116 @@ function drawShell(ctx, unit, flare, tone, tint, glass) {
   ctx.stroke();
 }
 
-function drawShellRibs(ctx, unit, index, width) {
-  const meridians = Math.min(4, modeShape('shell', index).meridians);
+function drawShellRibs(ctx, unit, index, width, kind) {
+  const shape = modeShape('shell', index);
+  const meridians = Math.min(4, shape.meridians);
   ctx.lineWidth = width;
+  const mouthDown = kind !== 'bowl';
   for (let i = 0; i < meridians; i++) {
     const side = (i / (meridians - 1 || 1) - 0.5) * 2;
-    const x = side * unit * 0.46;
+    const x = side * unit * (kind === 'cowbell' ? 0.32 : 0.42);
     ctx.beginPath();
-    ctx.moveTo(x * 0.42, -unit * 0.08);
-    ctx.quadraticCurveTo(x, unit * 0.28, x * 0.18, unit * 0.78);
+    if (mouthDown) {
+      ctx.moveTo(x * 0.35, -unit * 0.45);
+      ctx.quadraticCurveTo(x * 0.7, unit * 0.05, x, unit * 0.62);
+    } else {
+      ctx.moveTo(x * 0.42, -unit * 0.05);
+      ctx.quadraticCurveTo(x, unit * 0.28, x * 0.18, unit * 0.72);
+    }
     ctx.stroke();
+  }
+  ctx.save();
+  ctx.setLineDash([Math.max(3, width * 2), Math.max(4, width * 2.6)]);
+  ctx.lineWidth = Math.max(1, width * 0.75);
+  for (let circle = 1; circle <= (shape.circles || 0); circle++) {
+    const y = mouthDown ? -unit * 0.2 + circle * unit * 0.28 : -unit * 0.02 + circle * unit * 0.22;
+    const rx = unit * (0.28 + circle * 0.12);
+    ctx.beginPath();
+    ctx.ellipse(0, y, rx, unit * 0.07, 0, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function traceSilhouette(ctx, kind, unit, flare) {
+  const w = 1 + flare * 0.5;
+  ctx.beginPath();
+  if (kind === 'flared') {
+    ctx.moveTo(-unit * 0.2 * w, -unit * 0.78);
+    ctx.quadraticCurveTo(-unit * 0.16 * w, -unit * 0.35, -unit * 0.26 * w, unit * 0.02);
+    ctx.quadraticCurveTo(-unit * 0.62 * w, unit * 0.48, -unit * 0.74 * w, unit * 0.74);
+    ctx.quadraticCurveTo(0, unit * 0.9, unit * 0.74 * w, unit * 0.74);
+    ctx.quadraticCurveTo(unit * 0.62 * w, unit * 0.48, unit * 0.26 * w, unit * 0.02);
+    ctx.quadraticCurveTo(unit * 0.16 * w, -unit * 0.35, unit * 0.2 * w, -unit * 0.78);
+    ctx.quadraticCurveTo(0, -unit * 0.92, -unit * 0.2 * w, -unit * 0.78);
+  } else if (kind === 'cowbell') {
+    ctx.moveTo(-unit * 0.22, -unit * 0.62);
+    ctx.lineTo(unit * 0.22, -unit * 0.62);
+    ctx.lineTo(unit * 0.5 * w, unit * 0.72);
+    ctx.lineTo(-unit * 0.5 * w, unit * 0.72);
+  } else if (kind === 'handpan') {
+    ctx.moveTo(-unit * 0.86, unit * 0.05);
+    ctx.quadraticCurveTo(-unit * 0.2, -unit * 0.62, unit * 0.86, unit * 0.05);
+    ctx.quadraticCurveTo(unit * 0.2, unit * 0.38, -unit * 0.86, unit * 0.05);
+  } else if (kind === 'disc') {
+    ctx.ellipse(0, unit * 0.08, unit * 0.9, unit * 0.9, 0, 0, Math.PI * 2);
+  } else {
+    ctx.moveTo(-unit * 0.72 * w, -unit * 0.15);
+    ctx.quadraticCurveTo(-unit * 0.98 * w, unit * 0.82, 0, unit * 0.96);
+    ctx.quadraticCurveTo(unit * 0.98 * w, unit * 0.82, unit * 0.72 * w, -unit * 0.15);
+    ctx.quadraticCurveTo(0, -unit * 0.5, -unit * 0.72 * w, -unit * 0.15);
+  }
+  ctx.closePath();
+}
+
+function drawSilhouette(ctx, kind, unit, flare, tone, tint, glass) {
+  ctx.save();
+  ctx.translate(unit * 0.03, unit * 0.035);
+  traceSilhouette(ctx, kind, unit, flare);
+  ctx.fillStyle = tint ? mixHex(tint, tone.shade, 0.45) : tone.shade;
+  ctx.fill();
+  ctx.restore();
+  traceSilhouette(ctx, kind, unit, flare);
+  const vertical = kind === 'disc' || kind === 'handpan';
+  ctx.fillStyle = faceGradient(ctx, vertical ? -unit : 0, -unit * 0.7, vertical ? unit * 0.3 : 0, unit * 0.8, tone, tint);
+  ctx.save();
+  if (glass || tone.kind === 'glass') ctx.globalAlpha *= 0.74;
+  ctx.fill();
+  ctx.lineWidth = Math.max(1.1, unit * 0.01);
+  ctx.strokeStyle = tone.shade;
+  ctx.stroke();
+  if (!tint) paintSurface(ctx, tone, unit, true, { cx: -unit * 0.18, cy: kind === 'flared' ? -unit * 0.35 : -unit * 0.08, rx: unit * 0.26, ry: unit * 0.12 });
+  ctx.restore();
+  if (kind === 'flared') {
+    ctx.beginPath();
+    ctx.ellipse(0, unit * 0.74, unit * 0.74, unit * 0.1, 0, 0, Math.PI * 2);
+    ctx.fillStyle = tone.shade;
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(0, unit * 0.74, unit * 0.58, unit * 0.06, 0, 0, Math.PI * 2);
+    ctx.fillStyle = mixHex(tone.shade, '#1f1d1a', 0.4);
+    ctx.fill();
+  } else if (kind === 'disc') {
+    ctx.beginPath();
+    ctx.ellipse(0, -unit * 0.02, unit * 0.28, unit * 0.22, 0, 0, Math.PI * 2);
+    ctx.fillStyle = tone.lit;
+    ctx.fill();
+    ctx.strokeStyle = tone.shade;
+    ctx.stroke();
+  } else if (kind === 'handpan') {
+    for (const [x, y] of [[-0.28, -0.08], [0.22, -0.16], [0.02, 0.02], [-0.18, 0.08]]) {
+      ctx.beginPath();
+      ctx.ellipse(x * unit, y * unit, unit * 0.07, unit * 0.035, 0, 0, Math.PI * 2);
+      ctx.fillStyle = tone.shade;
+      ctx.globalAlpha = 0.45;
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+  } else if (kind === 'cowbell') {
+    ctx.beginPath();
+    ctx.ellipse(0, unit * 0.72, unit * 0.5, unit * 0.07, 0, 0, Math.PI * 2);
+    ctx.fillStyle = tone.shade;
+    ctx.fill();
   }
 }
 

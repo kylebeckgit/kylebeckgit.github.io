@@ -4,7 +4,7 @@
 import { SILENT_MODE_HINT, beginAudio, installGestureUnlock, playSilentUnlock, prepareAudioSession, resumeInGesture, audioContextClass } from './audio-session.js';
 import { audiblePartials, defaultControls, heardSeconds, playedFundamental, previewPartials, sanitizeControls } from './engine.js';
 import { combHeights, defaultCamera, hitPartial, paintModalView, sliceFromPartial, spaceByLog } from './modal-view.js';
-import { paintObject } from './object-view.js';
+import { bodySignature, objectCaption, paintObject } from './object-view.js';
 import { describePrompt } from './recipes.js';
 import { renderPreview, scaleToPeak } from './resonator.js';
 import { mountStudio } from './studio.js';
@@ -380,6 +380,26 @@ export function snapshotVariation(variation) {
     size: variation?.size || '',
     voice: controls.voice || '',
     preset: controls.preset,
+    objectName: variation?.objectName || variation?.name || '',
+  };
+}
+
+function restingSnap() {
+  const controls = { ...defaultControls(), preset: 'bar', voice: '' };
+  return {
+    name: 'Bar',
+    objectName: 'Bar',
+    preset: 'bar',
+    shape: 'bar',
+    material: 'metal',
+    size: 'medium',
+    voice: '',
+    controls,
+    partials: previewPartials(controls).slice(0, 8).map((partial) => ({
+      ratio: partial.ratio,
+      gainDb: partial.gainDb,
+      decay: partial.decay,
+    })),
   };
 }
 
@@ -513,13 +533,15 @@ function paintObjectCanvas(canvas, snap, { selected = -1, age = null } = {}) {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   const style = getComputedStyle(document.documentElement);
   const read = (name, fallback) => style.getPropertyValue(name).trim() || fallback;
+  const body = snap || restingSnap();
   paintObject(ctx, {
     width,
     height,
-    body: snap || {},
-    partials: snap?.partials || [],
+    body,
+    partials: body.partials || [],
     selected,
     age,
+    now: performance.now(),
     colors: {
       card: read('--card', '#fbf8f2'),
       accent: read('--accent', '#d4421c'),
@@ -615,9 +637,49 @@ export function mountGenerator(root, { openInDesigner } = {}) {
 
   function paintCurrent(age = null) {
     const snap = audioState.snap;
-    if (!snap) return;
-    if (!canvas?.hidden) paintPreview(canvas, snap.partials, snap);
-    paintObjectCanvas(objectCanvas, snap, { selected: audioState.selected, age });
+    if (snap && !canvas?.hidden) paintPreview(canvas, snap.partials, snap);
+    const shown = snap || restingSnap();
+    const sig = bodySignature(shown, shown.partials);
+    if (audioState.shown && audioState.shown.sig !== sig) {
+      audioState.fade = { from: audioState.shown, t0: performance.now() };
+    }
+    const blend = audioState.fade ? Math.min(1, (performance.now() - audioState.fade.t0) / 250) : 1;
+    paintObjectCanvas(objectCanvas, blend < 1 ? audioState.fade.from.body : shown, { selected: audioState.selected, age });
+    if (blend < 1 && objectCanvas && !objectCanvas.hidden) {
+      if (!audioState.fadeCanvas) audioState.fadeCanvas = document.createElement('canvas');
+      audioState.fadeCanvas.width = objectCanvas.width;
+      audioState.fadeCanvas.height = objectCanvas.height;
+      const fadeCtx = audioState.fadeCanvas.getContext('2d');
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      fadeCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      paintObject(fadeCtx, {
+        width: objectCanvas.clientWidth || 420,
+        height: objectCanvas.clientHeight || 280,
+        body: shown,
+        partials: shown.partials || [],
+        selected: audioState.selected,
+        age,
+        now: performance.now(),
+        colors: {
+          card: '#fbf8f2',
+          accent: '#d4421c',
+          ink: '#1f1d1a',
+        },
+      });
+      const ctx = objectCanvas.getContext('2d');
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.globalAlpha = blend < 0.5 ? 2 * blend * blend : 1 - ((-2 * blend + 2) ** 2) / 2;
+      ctx.drawImage(audioState.fadeCanvas, 0, 0);
+      ctx.restore();
+    } else audioState.fade = null;
+    audioState.shown = { sig, body: shown, partials: shown.partials };
+    const caption = root.querySelector('[data-gen-caption]');
+    if (caption) {
+      caption.hidden = !objectCanvas || objectCanvas.hidden;
+      caption.textContent = objectCaption(shown, { selected: audioState.selected, count: (shown.partials || []).length });
+    }
+    if (blend < 1) requestAnimationFrame(() => paintCurrent(age));
   }
 
   function kickGenObject() {
@@ -633,9 +695,23 @@ export function mountGenerator(root, { openInDesigner } = {}) {
           audioState.strike = 0;
           paintCurrent(null);
         }
+        ensureGenIdle();
       }
     };
     audioState.frame = requestAnimationFrame(frame);
+  }
+
+  function ensureGenIdle() {
+    if (audioState.idle || audioState.frame || !objectCanvas || objectCanvas.hidden) return;
+    const frame = () => {
+      if (!objectCanvas || objectCanvas.hidden || audioState.frame) {
+        audioState.idle = 0;
+        return;
+      }
+      paintCurrent(null);
+      audioState.idle = requestAnimationFrame(frame);
+    };
+    audioState.idle = requestAnimationFrame(frame);
   }
 
   function showSnap(variation, { hear = false } = {}) {
@@ -688,6 +764,11 @@ export function mountGenerator(root, { openInDesigner } = {}) {
       const age = audioState.strike ? (performance.now() - audioState.strike) / 1000 : null;
       paintCurrent(audioState.strike ? age : null);
       if (object && audioState.strike) kickGenObject();
+      else if (object) ensureGenIdle();
+      else if (audioState.idle) {
+        cancelAnimationFrame(audioState.idle);
+        audioState.idle = 0;
+      }
     });
   }
   canvas?.addEventListener('pointerup', (event) => {

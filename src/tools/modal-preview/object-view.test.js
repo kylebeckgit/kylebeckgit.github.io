@@ -11,7 +11,9 @@ import {
   modeEnvelope,
   modeSamples,
   modeShape,
+  objectCaption,
   objectUnit,
+  shellKind,
   shownModes,
 } from './object-view.js';
 
@@ -41,7 +43,11 @@ test('mode shapes follow the family, with the bar counting nodes', () => {
   assert.equal(modeShape('plate', 0).rings, 1);
   assert.equal(modeShape('membrane', 4).rings, 2);
   assert.equal(modeShape('shell', 0).meridians, 2);
-  assert.equal(modeShape('shell', 1).meridians, 3);
+  assert.equal(modeShape('shell', 0).circles, 0);
+  assert.equal(modeShape('shell', 1).meridians, 2);
+  assert.equal(modeShape('shell', 1).circles, 1);
+  assert.equal(modeShape('shell', 2).meridians, 3);
+  assert.equal(modeShape('shell', 2).circles, 1);
   const crossings = (index) => {
     const samples = modeSamples('bar', index, 49);
     let count = 0;
@@ -103,6 +109,16 @@ test('a short partial fades before a long one, and the bar bends between its nod
   assert.ok(Math.abs(modeDisplacement('bar', 0, 0.5)) < 1e-9);
   assert.ok(Math.abs(modeDisplacement('bar', 0, 0.25)) > 0.9);
   assert.ok(Math.abs(modeDisplacement('tube', 1, 0.5)) < 1e-9);
+});
+
+test('bells keep distinct silhouettes and modal families', () => {
+  assert.equal(shellKind({ name: 'Church bell', shape: 'shell' }), 'flared');
+  assert.equal(shellKind({ name: 'Singing bowl', shape: 'bowl' }), 'bowl');
+  assert.equal(shellKind({ name: 'Cowbell', shape: 'shell' }), 'cowbell');
+  assert.equal(shellKind({ name: 'Gong', shape: 'plate', voice: 'gong' }), 'disc');
+  assert.equal(shellKind({ name: 'Handpan', shape: 'shell' }), 'handpan');
+  assert.equal(objectCaption({ name: 'Church bell', material: 'metal', shape: 'shell' }, { selected: 2, count: 16 }), 'Metal shell, mode 3 of 16');
+  assert.equal(objectCaption({ preset: 'bar' }, { selected: -1, count: 4 }), '');
 });
 
 test('a huge shell or tube, with its shadow, stays inside the canvas', () => {
