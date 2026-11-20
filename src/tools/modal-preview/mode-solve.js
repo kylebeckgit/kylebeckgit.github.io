@@ -309,13 +309,35 @@ function nodalLines(mesh, free, vector) {
       const b = tri[(edge + 1) % 3];
       const va = field[a];
       const vb = field[b];
-      if (va * vb >= 0) continue;
-      const t = va / (va - vb);
       const pa = mesh.nodes[a];
       const pb = mesh.nodes[b];
-      hits.push([pa[0] + (pb[0] - pa[0]) * t, pa[1] + (pb[1] - pa[1]) * t]);
+      if (va === 0 && vb === 0) continue;
+      if (va === 0) {
+        hits.push({ point: pa, rim: mesh.boundary.has(a) });
+        continue;
+      }
+      if (vb === 0) {
+        hits.push({ point: pb, rim: mesh.boundary.has(b) });
+        continue;
+      }
+      if (va * vb > 0) continue;
+      const t = va / (va - vb);
+      hits.push({
+        point: [pa[0] + (pb[0] - pa[0]) * t, pa[1] + (pb[1] - pa[1]) * t],
+        rim: false,
+      });
     }
-    if (hits.length >= 2) lines.push([hits[0], hits[1]]);
+    const distinct = [];
+    for (const hit of hits) {
+      if (distinct.some((other) => Math.hypot(other.point[0] - hit.point[0], other.point[1] - hit.point[1]) < 1e-8)) continue;
+      distinct.push(hit);
+    }
+    for (let i = 0; i < distinct.length; i++) {
+      for (let j = i + 1; j < distinct.length; j++) {
+        if (distinct[i].rim && distinct[j].rim) continue;
+        lines.push([distinct[i].point, distinct[j].point]);
+      }
+    }
   }
   return chainLines(lines);
 }
@@ -343,7 +365,7 @@ function chainLines(segments) {
         break;
       }
     }
-    if (path.length > 2) paths.push(path);
+    if (path.length >= 2) paths.push(path);
   }
   return paths;
 }

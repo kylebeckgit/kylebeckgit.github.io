@@ -25,14 +25,16 @@ test('a circular membrane matches the first two Bessel ratios', () => {
   const bessel = (3.8317 / 2.4048) ** 2;
   assert.ok(Math.abs(ratio - bessel) / bessel < 0.08, `ratio ${ratio} vs ${bessel}`);
   assert.equal(solved.modes[0].lines.length, 0);
-  assert.ok(solved.modes[1].lines.some((line) => line.length > 4));
+  const reach = Math.max(...solved.modes[1].lines.flat().map(([x, y]) => Math.hypot(x, y)));
+  assert.ok(reach > 0.97, `diameter stops at radius ${reach}`);
 });
 
 test('a square plate separates the (2,1) mode from the fundamental', () => {
   const solved = solveFlatModes({ shape: 'square', model: 'plate', material: 'metal' });
   const ratio = solved.modes[1].lambda / solved.modes[0].lambda;
   assert.ok(Math.abs(ratio - 2.5) / 2.5 < 0.08, `ratio ${ratio}`);
-  assert.ok(solved.modes[1].lines.some((line) => line.length > 4));
+  const reach = Math.max(...solved.modes[1].lines.flat().map(([x, y]) => Math.max(Math.abs(x), Math.abs(y))));
+  assert.ok(reach > 0.97, `nodal line stops at ${reach}`);
   assert.ok(solved.modes[0].omega > 0);
 });
 
