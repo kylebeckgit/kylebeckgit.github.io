@@ -465,7 +465,9 @@ function drawBody(ctx, family, unit, tone, flare, shift, kind) {
   ctx.lineWidth = Math.max(1.25, unit * 0.02);
   ctx.strokeStyle = tone.shade;
   const glass = tone.kind === 'glass';
-  if (family === 'bar') {
+  if (kind === 'flared' || kind === 'cowbell' || kind === 'handpan' || kind === 'disc' || kind === 'bowl') {
+    drawSilhouette(ctx, kind, unit, flare, tone, null, glass);
+  } else if (family === 'bar') {
     drawBarSlab(ctx, unit, (t) => -shift('bar', t) * unit * 0.16, tone, null, glass);
   } else if (family === 'string') {
     drawBridge(ctx, -unit * 1.02, unit, tone);
@@ -473,7 +475,7 @@ function drawBody(ctx, family, unit, tone, flare, shift, kind) {
     drawStringCord(ctx, unit, (t) => -shift('string', t) * unit * 0.2, tone, null);
   } else if (family === 'membrane' || family === 'plate') {
     drawDisk(ctx, unit, family, (angle) => 1 + shift(family, angle / (Math.PI * 2)) * 0.08, tone, null, glass);
-  } else if (kind === 'flared' || kind === 'cowbell' || kind === 'handpan' || kind === 'disc' || kind === 'bowl' || family === 'shell') {
+  } else if (family === 'shell') {
     drawSilhouette(ctx, kind || 'flared', unit, flare, tone, null, glass);
   } else if (family === 'tube') {
     drawTube(ctx, unit, (t) => tubeBulge(unit, shift, t), tone, null, glass);

@@ -701,10 +701,14 @@ export function mountGenerator(root, { openInDesigner } = {}) {
     audioState.frame = requestAnimationFrame(frame);
   }
 
+  function objectOnScreen() {
+    return Boolean(objectCanvas && !objectCanvas.hidden && !root.hidden);
+  }
+
   function ensureGenIdle() {
-    if (audioState.idle || audioState.frame || !objectCanvas || objectCanvas.hidden) return;
+    if (audioState.idle || audioState.frame || !objectOnScreen()) return;
     const frame = () => {
-      if (!objectCanvas || objectCanvas.hidden || audioState.frame) {
+      if (!objectOnScreen() || audioState.frame) {
         audioState.idle = 0;
         return;
       }
@@ -713,6 +717,14 @@ export function mountGenerator(root, { openInDesigner } = {}) {
     };
     audioState.idle = requestAnimationFrame(frame);
   }
+  new MutationObserver(() => {
+    if (!objectOnScreen()) {
+      if (audioState.idle) cancelAnimationFrame(audioState.idle);
+      audioState.idle = 0;
+      return;
+    }
+    ensureGenIdle();
+  }).observe(root, { attributes: true, attributeFilter: ['hidden'] });
 
   function showSnap(variation, { hear = false } = {}) {
     const snap = snapshotVariation(variation);

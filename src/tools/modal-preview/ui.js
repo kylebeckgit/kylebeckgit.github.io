@@ -301,8 +301,8 @@ export function mount(root) {
       material: state.bodyMeta?.material || '',
       shape: state.bodyMeta?.shape || '',
       size: state.bodyMeta?.size || 'medium',
-      name: state.profileName || '',
-      objectName: state.bodyMeta?.objectName || state.profileName || '',
+      name: state.bodyMeta ? (state.profileName || '') : '',
+      objectName: state.bodyMeta ? (state.bodyMeta.objectName || state.profileName || '') : '',
     };
   }
 
@@ -412,10 +412,14 @@ export function mount(root) {
     }
   }
 
+  function objectOnScreen() {
+    return Boolean(objectCanvas && !objectCanvas.hidden && !root.hidden);
+  }
+
   function ensureObjectIdle() {
-    if (state.idleFrame || state.objectFrame || !objectCanvas || objectCanvas.hidden) return;
+    if (state.idleFrame || state.objectFrame || !objectOnScreen()) return;
     const frame = () => {
-      if (!objectCanvas || objectCanvas.hidden || state.objectFrame) {
+      if (!objectOnScreen() || state.objectFrame) {
         state.idleFrame = 0;
         return;
       }
@@ -424,6 +428,14 @@ export function mount(root) {
     };
     state.idleFrame = requestAnimationFrame(frame);
   }
+  new MutationObserver(() => {
+    if (!objectOnScreen()) {
+      if (state.idleFrame) cancelAnimationFrame(state.idleFrame);
+      state.idleFrame = 0;
+      return;
+    }
+    ensureObjectIdle();
+  }).observe(root, { attributes: true, attributeFilter: ['hidden'] });
   for (const button of root.querySelectorAll('.stage .view-switch [data-view-mode]')) {
     button.addEventListener('click', () => showDesignerView(button.dataset.viewMode));
   }
