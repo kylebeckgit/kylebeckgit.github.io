@@ -644,7 +644,7 @@ import Base from '../layouts/Base.astro';
       tab.setAttribute('aria-selected', String(on));
     }
     for (const [key, panel] of Object.entries(panels)) panel.hidden = key !== name;
-    if (name === 'designer') requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+    if (name === 'designer') requestAnimationFrame(() => panels.designer.dispatchEvent(new Event('toolshown')));
   }
 
   for (const tab of tabs) {
