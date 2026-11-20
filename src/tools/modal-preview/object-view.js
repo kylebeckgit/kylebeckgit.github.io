@@ -403,7 +403,7 @@ export function paintObject(ctx, options) {
     const tint = mode.hot ? accent : accentTint(accent, false, card);
     ctx.save();
     ctx.globalAlpha = 1;
-    drawBend(ctx, family, mode.index, unit, bend, tint, mode.hot, kind);
+    drawBend(ctx, family, mode.index, unit, bend, tint, mode.hot, kind, options.solvedModes);
     ctx.restore();
   }
   if (kind === 'handpan') drawHandpanFace(ctx, unit, tone);
@@ -460,7 +460,9 @@ function clipBody(ctx, family, unit, flare, shift, kind) {
   } else if (family === 'string') {
     ctx.beginPath();
     ctx.rect(-unit * 1.2, -unit * 0.05, unit * 2.4, unit * 0.55);
-  } else if (family === 'membrane' || family === 'plate') {
+  } else if (family === 'plate') {
+    traceSquare(ctx, unit);
+  } else if (family === 'membrane') {
     const [rx, ry] = diskRadii(unit, family);
     ctx.beginPath();
     ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
@@ -492,7 +494,9 @@ function drawBody(ctx, family, unit, tone, flare, shift, kind) {
     drawBridge(ctx, -unit * 1.02, unit, tone);
     drawBridge(ctx, unit * 0.94, unit, tone);
     drawStringCord(ctx, unit, (t) => -shift('string', t) * unit * 0.2, tone, null);
-  } else if (family === 'membrane' || family === 'plate') {
+  } else if (family === 'plate') {
+    drawSquarePlate(ctx, unit, tone, null, glass);
+  } else if (family === 'membrane') {
     drawDisk(ctx, unit, family, (angle) => 1 + shift(family, angle / (Math.PI * 2)) * 0.08, tone, null, glass);
   } else if (family === 'shell') {
     drawSilhouette(ctx, kind || 'flared', unit, flare, tone, null, glass);
@@ -503,12 +507,17 @@ function drawBody(ctx, family, unit, tone, flare, shift, kind) {
   }
 }
 
-function drawBend(ctx, family, index, unit, bend, tint, hot, kind) {
+function drawBend(ctx, family, index, unit, bend, tint, hot, kind, solved) {
   const width = Math.max(1.5, unit * (hot ? BAND * 1.35 : BAND));
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
   ctx.lineWidth = width;
   ctx.strokeStyle = tint;
+  const solvedMode = solved?.[index] || (solved?.length ? solved[index % solved.length] : null);
+  if (solvedMode && (kind === 'disc' || family === 'plate' || family === 'membrane')) {
+    drawSolvedLines(ctx, unit, kind, family, solvedMode.lines, width);
+    return;
+  }
   if (family === 'bar') {
     drawCrest(ctx, unit, (t) => -modeDisplacement('bar', index, t) * unit * 0.1 * bend);
     if (hot) drawBarNodes(ctx, unit, index, width);
@@ -519,7 +528,9 @@ function drawBend(ctx, family, index, unit, bend, tint, hot, kind) {
     ctx.translate(0, unit * 0.08);
     drawDiskRidges(ctx, unit, 'plate', index, width, [unit * 0.9, unit * 0.9]);
     ctx.restore();
-  } else if (family === 'membrane' || family === 'plate') {
+  } else if (family === 'plate') {
+    drawSquareRidges(ctx, unit, index, width);
+  } else if (family === 'membrane') {
     drawDiskRidges(ctx, unit, family, index, width);
   } else if (kind === 'flared' || kind === 'bowl' || kind === 'cowbell' || kind === 'handpan' || family === 'shell') {
     drawShellRibs(ctx, unit, index, width, kind || 'flared');
@@ -695,6 +706,79 @@ function drawDisk(ctx, unit, family, grow, tone, tint, glass) {
   ctx.stroke();
   if (!tint) paintSurface(ctx, tone, unit, true, { cx: -rx * 0.22, cy: -ry * 0.24, rx: rx * 0.42, ry: ry * 0.26 });
   ctx.restore();
+}
+
+function squareHalf(unit) {
+  return unit * 0.88;
+}
+
+function traceSquare(ctx, unit) {
+  const s = squareHalf(unit);
+  ctx.beginPath();
+  ctx.rect(-s, -s, s * 2, s * 2);
+  ctx.closePath();
+}
+
+function drawSquarePlate(ctx, unit, tone, tint, glass) {
+  const s = squareHalf(unit);
+  const dx = unit * 0.03;
+  const dy = unit * 0.035;
+  ctx.beginPath();
+  ctx.rect(-s + dx, -s + dy, s * 2, s * 2);
+  ctx.fillStyle = tint ? mixHex(tint, tone.shade, 0.45) : tone.shade;
+  ctx.fill();
+  traceSquare(ctx, unit);
+  ctx.fillStyle = faceGradient(ctx, -s, -s, s * 0.2, s, tone, tint);
+  ctx.save();
+  if (glass) ctx.globalAlpha *= 0.72;
+  ctx.fill();
+  ctx.lineWidth = Math.max(1.15, unit * 0.012);
+  ctx.strokeStyle = tone.shade;
+  ctx.stroke();
+  if (!tint) paintSurface(ctx, tone, unit, true, { cx: -s * 0.25, cy: -s * 0.28, rx: s * 0.35, ry: s * 0.18 });
+  ctx.restore();
+}
+
+function drawSquareRidges(ctx, unit, index, width) {
+  const s = squareHalf(unit) * 0.92;
+  const lines = 1 + (index % 3);
+  ctx.lineWidth = width;
+  for (let i = 1; i <= lines; i++) {
+    const x = -s + (2 * s * i) / (lines + 1);
+    ctx.beginPath();
+    ctx.moveTo(x, -s);
+    ctx.lineTo(x, s);
+    ctx.stroke();
+  }
+  if (index > 2) {
+    ctx.beginPath();
+    ctx.moveTo(-s, 0);
+    ctx.lineTo(s, 0);
+    ctx.stroke();
+  }
+}
+
+function drawSolvedLines(ctx, unit, kind, family, lines, width) {
+  const place = (x, y) => {
+    if (kind === 'disc') return [x * unit * 0.9, unit * 0.08 + y * unit * 0.9];
+    if (family === 'membrane') {
+      const [rx, ry] = diskRadii(unit, family);
+      return [x * rx, y * ry];
+    }
+    const s = squareHalf(unit);
+    return [x * s, y * s];
+  };
+  ctx.lineWidth = width;
+  for (const segment of lines || []) {
+    if (!segment || segment.length < 2) continue;
+    ctx.beginPath();
+    segment.forEach(([x, y], i) => {
+      const [px, py] = place(x, y);
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    });
+    ctx.stroke();
+  }
 }
 
 function drawDiskRidges(ctx, unit, family, index, width, radii) {
@@ -912,6 +996,24 @@ function traceFlared(ctx, unit, flare) {
   ctx.closePath();
 }
 
+function drawDiscBoss(ctx, unit, tone) {
+  const cy = -unit * 0.02;
+  const rx = unit * 0.16;
+  const ry = unit * 0.12;
+  ctx.beginPath();
+  ctx.ellipse(unit * 0.012, cy + unit * 0.016, rx, ry, 0, 0, Math.PI * 2);
+  ctx.fillStyle = mixHex(tone.mid, tone.shade, 0.45);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(0, cy, rx, ry, 0, 0, Math.PI * 2);
+  const boss = ctx.createRadialGradient(-rx * 0.4, cy - ry * 0.5, unit * 0.015, 0, cy, rx);
+  boss.addColorStop(0, mixHex(tone.lit, tone.mid, 0.28));
+  boss.addColorStop(0.5, tone.mid);
+  boss.addColorStop(1, mixHex(tone.mid, tone.shade, 0.22));
+  ctx.fillStyle = boss;
+  ctx.fill();
+}
+
 function traceSilhouette(ctx, kind, unit, flare) {
   const w = 1 + flare * 0.5;
   if (kind === 'flared') {
@@ -1003,12 +1105,7 @@ function drawSilhouette(ctx, kind, unit, flare, tone, tint, glass) {
     ctx.fillStyle = mixHex(tone.shade, '#12100e', 0.72);
     ctx.fill();
   } else if (kind === 'disc') {
-    ctx.beginPath();
-    ctx.ellipse(0, -unit * 0.02, unit * 0.26, unit * 0.2, 0, 0, Math.PI * 2);
-    ctx.fillStyle = tone.lit;
-    ctx.fill();
-    ctx.strokeStyle = tone.shade;
-    ctx.stroke();
+    drawDiscBoss(ctx, unit, tone);
   } else if (kind === 'handpan') {
     ctx.beginPath();
     const steps = 24;

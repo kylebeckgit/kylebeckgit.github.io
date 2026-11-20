@@ -3,12 +3,14 @@ import { analyzeSamples, decodeRecording, resampleMono, parseRoot, frequencyToNo
 import { renderPreview, scaleToPeak, strikeWeight } from './resonator.js';
 import { aimSlices, createFitMotion, createSliceMotion, defaultCamera, hitPartial, MORPH_MS, paintModalView, sampleSlices, slicesMoving } from './modal-view.js';
 import { bodySignature, objectCaption, paintObject } from './object-view.js';
+import { cachedModes, flatSpec, patternNote, solveMs, trackFlatModes } from './mode-client.js';
 import { densityForProfile, shapePartials } from './shape.js';
 import { createRollHistory, defaultLocks, pushRoll, redoRoll, rollSound, undoRoll } from './randomize.js';
 import { decodeProfile, encodeProfile } from './studio.js';
 import { SILENT_MODE_HINT, audioContextClass, beginAudio, installGestureUnlock, playSilentUnlock, prepareAudioSession, resumeInGesture } from './audio-session.js';
 
 export function mount(root) {
+  const flatTrack = trackFlatModes(() => paintDesignerObject());
   const describeUrl = (root.dataset.describeUrl || '').trim();
   const membershipOn = root.dataset.membership === 'true';
   const state = {
@@ -308,10 +310,12 @@ export function mount(root) {
 
   function writeObjectCaption(body, selected, count) {
     const caption = root.querySelector('[data-object-caption]');
-    if (caption) {
-      caption.hidden = false;
-      caption.textContent = objectCaption(body, { selected, count });
-    }
+    if (!caption) return;
+    const base = objectCaption(body, { selected, count });
+    const note = patternNote(flatSpec(body), cachedModes(body) ? 'ready' : 'pending');
+    const text = [base, note].filter(Boolean).join(' ');
+    caption.hidden = !text;
+    caption.textContent = text;
   }
 
   function easeBlend(t) {
@@ -338,7 +342,13 @@ export function mount(root) {
     }
     const blend = state.objectFade ? easeBlend((performance.now() - state.objectFade.t0) / 250) : 1;
     const colors = canvasColors();
-    const paint = (target, frameBody, framePartials) => paintObject(target, {
+    const solvedModes = flatTrack(body);
+    if (objectCanvas) {
+      objectCanvas.dataset.pattern = !flatSpec(body) ? 'stylized' : solvedModes ? 'solved' : 'solving';
+      const ms = solveMs(body);
+      if (ms != null) objectCanvas.dataset.solveMs = String(Math.round(ms));
+    }
+    const paint = (target, frameBody, framePartials, solved) => paintObject(target, {
       width,
       height,
       body: frameBody,
@@ -347,15 +357,16 @@ export function mount(root) {
       age: state.objectStrike ? age : null,
       now: performance.now(),
       colors,
+      solvedModes: solved,
     });
     if (blend < 1 && state.objectFade?.from) {
-      paint(ctx, state.objectFade.from.body, state.objectFade.from.partials);
+      paint(ctx, state.objectFade.from.body, state.objectFade.from.partials, null);
       if (!state.fadeCanvas) state.fadeCanvas = document.createElement('canvas');
       state.fadeCanvas.width = objectCanvas.width;
       state.fadeCanvas.height = objectCanvas.height;
       const fadeCtx = state.fadeCanvas.getContext('2d');
       fadeCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      paint(fadeCtx, body, partials);
+      paint(fadeCtx, body, partials, solvedModes);
       ctx.save();
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.globalAlpha = blend;
@@ -363,7 +374,7 @@ export function mount(root) {
       ctx.restore();
     } else {
       state.objectFade = null;
-      paint(ctx, body, partials);
+      paint(ctx, body, partials, solvedModes);
     }
     state.objectShown = { sig, body, partials: partials.map((partial) => ({ ...partial })) };
     writeObjectCaption(body, selected, partials.length);
