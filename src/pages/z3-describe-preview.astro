@@ -17,7 +17,14 @@ import Base from '../layouts/Base.astro';
       <h2 id="modal-heading">Modal designer</h2>
       <p class="quiet">Starts from a plain body. Randomize rolls a new one in this tool only.</p>
       <div class="stage">
-      <canvas data-view="zebra" aria-label="Modal partials. Click a mode to highlight it."></canvas>
+      <div class="stage-view">
+        <div class="view-switch" role="group" aria-label="Designer view">
+          <button type="button" class="btn" data-view-mode="partials" aria-pressed="true">Partials</button>
+          <button type="button" class="btn" data-view-mode="object" aria-pressed="false">Object</button>
+        </div>
+        <canvas data-view="zebra" aria-label="Modal partials. Click a mode to highlight it."></canvas>
+        <canvas data-object hidden aria-label="Sounding object. Each partial is a mode of this body."></canvas>
+      </div>
       <div class="stage-play">
       <p class="quiet">Click a line, or a row under More, to highlight it. Hold a key for the bow.</p>
       <p class="status" data-play-error role="status"></p>
@@ -273,7 +280,14 @@ import Base from '../layouts/Base.astro';
         </div>
       </section>
       <div class="gen-preview">
-        <canvas data-gen-view aria-label="Generator preview"></canvas>
+        <div class="stage-view">
+          <div class="view-switch" role="group" aria-label="Generator view">
+            <button type="button" class="btn" data-view-mode="partials" aria-pressed="true">Partials</button>
+            <button type="button" class="btn" data-view-mode="object" aria-pressed="false">Object</button>
+          </div>
+          <canvas data-gen-view aria-label="Generator preview"></canvas>
+          <canvas data-gen-object hidden aria-label="Sounding object. Each partial is a mode of this body."></canvas>
+        </div>
         <div class="gen-actions">
           <button type="button" class="btn" data-gen-hear>Hear</button>
           <button type="button" class="btn solid" data-open-designer disabled>Open in designer</button>
@@ -332,9 +346,14 @@ import Base from '../layouts/Base.astro';
     margin-top: 1.25rem;
   }
   @media (min-width: 800px) {
-    .gen-preview { grid-template-columns: minmax(0, 22rem) auto; }
+    .gen-preview { grid-template-columns: minmax(0, 34rem) auto; }
   }
-  canvas[data-gen-view] { width: min(100%, 22rem); }
+  canvas[data-gen-view], canvas[data-gen-object] { width: min(100%, 34rem); }
+  .stage-view { min-width: 0; }
+  .view-switch { display: flex; gap: .4rem; margin-bottom: .45rem; }
+  .view-switch .btn[aria-pressed="true"] { background: var(--fg); color: var(--bg); }
+  canvas[hidden] { display: none; }
+  canvas[data-object], canvas[data-gen-object] { touch-action: pan-y; cursor: default; }
   .gen-actions { display: flex; flex-wrap: wrap; gap: .6rem; }
   .gen-actions .btn { min-height: 2.75rem; }
   .gen-roll { margin-top: 1.25rem; }
