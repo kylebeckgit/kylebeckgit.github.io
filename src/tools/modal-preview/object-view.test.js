@@ -140,6 +140,7 @@ test('bells keep distinct silhouettes and modal families', () => {
   assert.equal(shellKind({ name: 'Gong', shape: 'plate', voice: 'gong' }), 'disc');
   assert.equal(shellKind({ name: 'Handpan', shape: 'shell' }), 'handpan');
   assert.equal(shellKind({ name: 'Wine glass', shape: 'shell', voice: 'glass' }), 'goblet');
+  assert.equal(objectCaption({ name: 'Wine glass', material: 'glass', shape: 'shell' }, { selected: 0, count: 4 }), 'Glass goblet, mode 1 of 4');
   assert.equal(objectCaption({ name: 'Church bell', material: 'metal', shape: 'shell' }, { selected: 2, count: 16 }), 'Metal shell, mode 3 of 16');
   assert.equal(objectCaption({ preset: 'bar' }, { selected: -1, count: 4 }), '');
 });

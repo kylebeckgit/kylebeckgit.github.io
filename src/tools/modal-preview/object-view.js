@@ -147,7 +147,7 @@ const MATERIAL_LABEL = {
 };
 
 const KIND_LABEL = {
-  flared: 'shell', bowl: 'bowl', cowbell: 'bell', disc: 'disc', handpan: 'handpan',
+  flared: 'shell', bowl: 'bowl', cowbell: 'bell', disc: 'disc', handpan: 'handpan', goblet: 'goblet',
   bar: 'bar', plate: 'plate', membrane: 'membrane', tube: 'tube', string: 'string', box: 'box', shell: 'shell',
 };
 
@@ -361,7 +361,11 @@ export function paintObject(ctx, options) {
   const selected = Number.isInteger(options.selected) ? options.selected : -1;
   const age = options.age;
   const playing = Number.isFinite(age) && age >= 0;
-  const modes = shownModes(partials, { selected, age });
+  const listed = shownModes(partials, { selected: -1, age });
+  const modes = listed.map((mode) => ({ ...mode, hot: mode.index === selected }));
+  if (selected >= 0 && !modes.some((mode) => mode.hot)) {
+    modes.push(...shownModes(partials, { selected, age }));
+  }
   const solo = modes.length === 1 && modes[0].hot;
 
   ctx.fillStyle = card;
@@ -1092,7 +1096,7 @@ export function hitObjectMode(options, x, y) {
   let px = x - width / 2;
   let py = y - height / 2;
   if (kind === 'bowl') py += unit * 0.36;
-  const modes = shownModes(options.partials || [], { selected: options.selected, limit: 8 });
+  const modes = shownModes(options.partials || [], { selected: -1, limit: 8 });
   const solved = options.solvedModes;
   let best = -1;
   let bestDistance = Math.max(10, unit * 0.07);

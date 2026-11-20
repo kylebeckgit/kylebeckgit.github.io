@@ -11,7 +11,11 @@ import { decodeProfile, encodeProfile } from './studio.js';
 import { SILENT_MODE_HINT, audioContextClass, beginAudio, installGestureUnlock, playSilentUnlock, prepareAudioSession, resumeInGesture } from './audio-session.js';
 
 export function mount(root) {
-  const flatTrack = trackFlatModes(() => paintDesignerObject());
+  const flatTrack = trackFlatModes(() => {
+    syncShapeSound();
+    if (objectCanvas && !objectCanvas.hidden) paintDesignerObject();
+    else if (canvas && !canvas.hidden) draw(canvas, state.partials, state);
+  });
   const describeUrl = (root.dataset.describeUrl || '').trim();
   const membershipOn = root.dataset.membership === 'true';
   const state = {
@@ -225,6 +229,22 @@ export function mount(root) {
       state.partials = audiblePartials(copy, heardOptions());
     }
     if (custom != null) state.custom = custom;
+    syncShapeSound();
+  }
+
+  function syncShapeSound() {
+    if (!SHAPE_SOUND) return;
+    const body = objectBody();
+    if (!flatSpec(body)) return;
+    flatTrack(body);
+    const modes = cachedModes(body);
+    const profile = state.profilePartials || state.partials;
+    if (!modes || !profile) return;
+    const shaped = applyShapeSound(profile, modes);
+    if (shaped === profile) return;
+    state.profilePartials = shaped;
+    publishShape(0);
+    pushModes();
   }
 
   function pushHistory() {
@@ -344,14 +364,6 @@ export function mount(root) {
     const blend = state.objectFade ? easeBlend((performance.now() - state.objectFade.t0) / 250) : 1;
     const colors = canvasColors();
     const solvedModes = flatTrack(body);
-    if (SHAPE_SOUND && solvedModes && state.partials) {
-      const shaped = applyShapeSound(state.partials, solvedModes);
-      if (shaped !== state.partials) {
-        state.partials = shaped;
-        render();
-        return;
-      }
-    }
     if (objectCanvas) {
       objectCanvas.dataset.pattern = !flatSpec(body) ? 'stylized' : solvedModes ? 'solved' : 'solving';
       const ms = solveMs(body);
@@ -604,9 +616,9 @@ export function mount(root) {
       );
       if (hit !== state.hoverPartial) {
         state.hoverPartial = hit;
+        draw(canvas, state.partials, state);
         paintDesignerObject();
-        for (const row of tableBody?.querySelectorAll('tr') || []) row.classList.remove('is-selected');
-        if (hit >= 0) tableBody?.querySelector(`[data-index="${hit}"]`)?.closest('tr')?.classList.add('is-selected');
+        markPartialRow(hit >= 0 ? hit : state.selectedPartial);
       }
       return;
     }
@@ -651,7 +663,9 @@ export function mount(root) {
   canvas.addEventListener('pointerleave', () => {
     if (state.hoverPartial >= 0) {
       state.hoverPartial = -1;
+      draw(canvas, state.partials, state);
       paintDesignerObject();
+      markPartialRow(state.selectedPartial);
     }
   });
   const objectPoint = (event) => {
@@ -667,23 +681,25 @@ export function mount(root) {
       body: objectBody(),
       partials: state.partials,
       solvedModes: cachedModes(objectBody()),
-      selected: state.hoverPartial >= 0 ? state.hoverPartial : state.selectedPartial,
-      x: point.x,
-      y: point.y,
     }, point.x, point.y);
     if (stick) state.selectedPartial = hit;
     state.hoverPartial = hit;
+    draw(canvas, state.partials, state);
     paintDesignerObject();
-    for (const row of tableBody?.querySelectorAll('tr') || []) row.classList.remove('is-selected');
-    const shown = state.hoverPartial >= 0 ? state.hoverPartial : state.selectedPartial;
-    if (shown >= 0) tableBody?.querySelector(`[data-index="${shown}"]`)?.closest('tr')?.classList.add('is-selected');
+    markPartialRow(hit >= 0 ? hit : state.selectedPartial);
   };
   objectCanvas?.addEventListener('pointermove', (event) => hoverObject(event, false));
   objectCanvas?.addEventListener('pointerup', (event) => hoverObject(event, true));
   objectCanvas?.addEventListener('pointerleave', () => {
     state.hoverPartial = -1;
+    draw(canvas, state.partials, state);
     paintDesignerObject();
+    markPartialRow(state.selectedPartial);
   });
+  function markPartialRow(index) {
+    for (const row of tableBody?.querySelectorAll('tr') || []) row.classList.remove('is-selected');
+    if (index >= 0) tableBody?.querySelector(`[data-index="${index}"]`)?.closest('tr')?.classList.add('is-selected');
+  }
   const styleSelect = root.querySelector('[data-draw-style]');
   if (styleSelect) {
     state.drawStyle = styleSelect.value || 'fast';
@@ -1516,7 +1532,7 @@ function drawZebra(canvas, partials, state) {
     style: state.drawStyle || 'fast',
     colors,
     invertPanel: canvas.dataset.panel !== 'cream',
-    selected: state.selectedPartial,
+    selected: state.hoverPartial >= 0 ? state.hoverPartial : state.selectedPartial,
     detune: state.detune || 0,
     position: state.position,
     now: performance.now(),

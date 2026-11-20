@@ -646,8 +646,19 @@ export function mountGenerator(root, { openInDesigner } = {}) {
   function paintCurrent(age = null) {
     const snap = audioState.snap;
     if (SHAPE_SOUND && snap) {
-      const shaped = applyShapeSound(snap.partials, cachedModes(snap));
-      if (shaped !== snap.partials) snap.partials = shaped;
+      const modes = cachedModes(snap);
+      const shaped = applyShapeSound(snap.partials, modes);
+      if (shaped !== snap.partials) {
+        snap.partials = shaped;
+        const variation = controller?.current?.();
+        if (variation?.partials) {
+          variation.partials = shaped.map((partial) => ({
+            ratio: partial.ratio,
+            gainDb: partial.gainDb,
+            decay: partial.decay,
+          }));
+        }
+      }
     }
     const hot = hotIndex();
     if (snap && !canvas?.hidden) paintPreview(canvas, snap.partials, { ...snap, selected: hot });
@@ -762,7 +773,8 @@ export function mountGenerator(root, { openInDesigner } = {}) {
     }
   }
 
-  const controller = mountStudio(root, {
+  let controller = null;
+  controller = mountStudio(root, {
     applyRecipe(variation, { hear = false } = {}) {
       showSnap(variation, { hear });
     },
@@ -832,7 +844,7 @@ export function mountGenerator(root, { openInDesigner } = {}) {
       body: snap,
       partials: snap.partials,
       solvedModes: cachedModes(snap),
-      selected: hotIndex(),
+      selected: -1,
     }, event.clientX - rect.left, event.clientY - rect.top);
     if (stick) audioState.selected = hit;
     audioState.hover = hit;
