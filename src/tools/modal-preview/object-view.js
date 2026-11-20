@@ -403,13 +403,18 @@ export function paintObject(ctx, options) {
   ctx.save();
   clipBody(ctx, family, unit, flare, shift, kind);
   const ordered = [...modes].sort((a, b) => a.amp - b.amp);
+  const shellPicture = kind === 'flared' || kind === 'bowl' || kind === 'goblet';
+  const loudest = shellPicture
+    ? [...modes].sort((a, b) => b.amp - a.amp || a.index - b.index)[0]
+    : null;
   for (const mode of ordered) {
     const motion = motionOf(mode);
     const bend = motion * (solo ? 0.85 : 0.4 + mode.amp * 0.35);
-    const tint = mode.hot ? accent : accentTint(accent, false, card);
+    const clear = mode.hot || (shellPicture && selected < 0 && mode.index === loudest.index);
+    const tint = clear ? accent : accentTint(accent, false, card);
     ctx.save();
     ctx.globalAlpha = 1;
-    drawBend(ctx, family, mode.index, unit, bend, tint, mode.hot, kind, options.solvedModes);
+    drawBend(ctx, family, mode.index, unit, bend, tint, clear, kind, options.solvedModes);
     ctx.restore();
   }
   if (kind === 'handpan') drawHandpanFace(ctx, unit, tone);
@@ -520,14 +525,17 @@ function drawBody(ctx, family, unit, tone, flare, shift, kind) {
 }
 
 function drawBend(ctx, family, index, unit, bend, tint, hot, kind, solved) {
-  const width = Math.max(1.5, unit * (hot ? BAND * 1.35 : BAND));
+  const shellPicture = kind === 'flared' || kind === 'bowl' || kind === 'goblet';
+  const width = shellPicture
+    ? Math.max(1.15, unit * (hot ? 0.022 : 0.015))
+    : Math.max(1.5, unit * (hot ? BAND * 1.35 : BAND));
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
   ctx.lineWidth = width;
   ctx.strokeStyle = tint;
   const solvedMode = solved?.[index] || (solved?.length ? solved[index % solved.length] : null);
   if (solvedMode?.shell && (kind === 'flared' || kind === 'bowl' || kind === 'goblet')) {
-    const paint = () => drawSolvedLines(ctx, unit, kind, family, solvedMode.lines, width);
+    const paint = () => drawSolvedLines(ctx, unit, kind, family, visibleShellLines(solvedMode.lines, hot), width);
     if (kind === 'goblet') {
       ctx.save();
       traceGobletBowl(ctx, unit);
@@ -790,6 +798,49 @@ function drawSquareRidges(ctx, unit, index, width) {
     ctx.lineTo(s, 0);
     ctx.stroke();
   }
+}
+
+function trimShellCrown(line, maxAbs) {
+  const floor = maxAbs * 0.5;
+  const kept = line.filter(([x]) => Math.abs(x) >= floor);
+  return kept.length >= 2 ? kept : line;
+}
+
+// One meridian on each side, stopped before the profile pinches, plus the
+// widest nodal circle on a mode that is drawn clearly.
+export function visibleShellLines(lines, withRing = false) {
+  const meridians = [];
+  const rings = [];
+  for (const line of lines || []) {
+    if (!line || line.length < 2) continue;
+    let minY = Infinity;
+    let maxY = -Infinity;
+    let maxAbs = 0;
+    let negative = false;
+    let positive = false;
+    for (const [x, y] of line) {
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+      const ax = Math.abs(x);
+      if (ax > maxAbs) maxAbs = ax;
+      if (x < -1e-4) negative = true;
+      else if (x > 1e-4) positive = true;
+    }
+    if (maxY - minY < 0.12) rings.push({ line, maxAbs });
+    else meridians.push({ line, maxAbs, sign: negative && !positive ? -1 : 1 });
+  }
+  const peak = meridians.reduce((max, row) => Math.max(max, row.maxAbs), 0);
+  const out = [];
+  for (const sign of [-1, 1]) {
+    const side = meridians.filter((row) => row.sign === sign && row.maxAbs > 0);
+    side.sort((a, b) => Math.abs(a.maxAbs / (peak || 1) - 0.65) - Math.abs(b.maxAbs / (peak || 1) - 0.65));
+    if (side[0]) out.push(trimShellCrown(side[0].line, side[0].maxAbs));
+  }
+  if (withRing) {
+    const ring = rings.filter((row) => row.maxAbs >= peak * 0.5).sort((a, b) => b.maxAbs - a.maxAbs)[0];
+    if (ring) out.push(ring.line);
+  }
+  return out;
 }
 
 function placeSolved(x, y, unit, kind, family) {
@@ -1167,11 +1218,15 @@ export function hitObjectMode(options, x, y) {
   let px = x - width / 2;
   let py = y - height / 2;
   if (kind === 'bowl') py += unit * 0.36;
-  const modes = shownModes(options.partials || [], { selected: -1, limit: 8 });
+  const shellPicture = kind === 'flared' || kind === 'bowl' || kind === 'goblet';
+  const modes = shownModes(options.partials || [], { selected: -1, limit: shellPicture ? 3 : 8 });
   const highlighted = options.selected;
   if (Number.isInteger(highlighted) && highlighted >= 0 && !modes.some((mode) => mode.index === highlighted)) {
     modes.push({ index: highlighted, amp: 1, env: 1, weight: 1, hot: true });
   }
+  const loudest = shellPicture
+    ? [...modes].sort((a, b) => b.amp - a.amp || a.index - b.index)[0]
+    : null;
   const solved = options.solvedModes;
   let best = -1;
   let bestDistance = Math.max(12, unit * 0.08);
@@ -1183,8 +1238,10 @@ export function hitObjectMode(options, x, y) {
     }
   };
   for (const mode of modes) {
-    const lines = solved?.[mode.index]?.lines;
-    if (lines && (kind === 'disc' || family === 'plate' || family === 'membrane' || kind === 'flared' || kind === 'bowl' || kind === 'goblet')) {
+    const raw = solved?.[mode.index]?.lines;
+    const clear = mode.hot || (shellPicture && !(highlighted >= 0) && mode.index === loudest?.index);
+    const lines = shellPicture ? visibleShellLines(raw, clear) : raw;
+    if (lines && (kind === 'disc' || family === 'plate' || family === 'membrane' || shellPicture)) {
       for (const line of lines) {
         for (let i = 1; i < line.length; i++) {
           const a = placeSolved(line[i - 1][0], line[i - 1][1], unit, kind, family);
