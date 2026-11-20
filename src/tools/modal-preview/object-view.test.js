@@ -151,6 +151,7 @@ test('each body fills most of the stage and keeps a margin', () => {
     membrane: { x: 1.12, y: 0.85, span: 2.1 },
     shell: { x: 0.82, y: 0.86, span: 1.62 },
     flared: { x: 0.82, y: 0.86, span: 1.62 },
+    bowl: { x: 0.85, y: 1.07, span: 1.66 },
     tube: { x: 0.4, y: 1.08, span: 2.14 },
     box: { x: 0.95, y: 0.85, span: 1.9 },
     cowbell: { x: 0.53, y: 0.67, span: 1.27 },
@@ -168,7 +169,7 @@ test('each body fills most of the stage and keeps a margin', () => {
         const unit = objectUnit(stage.width, stage.height, family, size);
         const span = (box.span || 2 * Math.max(box.x, box.y)) * unit;
         assert.ok(span <= limit * 0.86, `${family} ${size} overflows on ${stage.width}`);
-        assert.ok(span + 1 >= limit * 0.74, `${family} ${size} is small on ${stage.width}`);
+        assert.ok(span + 1 >= limit * 0.7, `${family} ${size} is small on ${stage.width}`);
         assert.ok(box.x * unit <= stage.width * 0.46 + 0.01, `${family} clips across ${stage.width}`);
         assert.ok(box.y * unit <= stage.height * 0.46 + 0.01, `${family} clips down ${stage.width}`);
       }

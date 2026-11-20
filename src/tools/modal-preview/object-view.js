@@ -12,6 +12,7 @@ const REACH = {
   membrane: { x: 1.12, y: 0.85, span: 2.1 },
   shell: { x: 0.82, y: 0.86, span: 1.62 },
   flared: { x: 0.82, y: 0.86, span: 1.62 },
+  bowl: { x: 0.85, y: 1.07, span: 1.66 },
   tube: { x: 0.4, y: 1.08, span: 2.14 },
   box: { x: 0.95, y: 0.85, span: 1.9 },
   cowbell: { x: 0.53, y: 0.67, span: 1.27 },
