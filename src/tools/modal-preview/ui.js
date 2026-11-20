@@ -2,7 +2,7 @@ import { A4_HZ, PRESETS, NOTE_BUTTONS, ZEBRA_PARTIAL_LIMIT_HZ, buildPartials, pr
 import { analyzeSamples, decodeRecording, resampleMono, parseRoot, frequencyToNote } from './analyze.js';
 import { renderPreview, scaleToPeak, strikeWeight } from './resonator.js';
 import { aimSlices, createFitMotion, createSliceMotion, defaultCamera, hitPartial, MORPH_MS, paintModalView, sampleSlices, slicesMoving } from './modal-view.js';
-import { paintObject } from './object-view.js';
+import { bodySignature, objectCaption, paintObject } from './object-view.js';
 import { densityForProfile, shapePartials } from './shape.js';
 import { createRollHistory, defaultLocks, pushRoll, redoRoll, rollSound, undoRoll } from './randomize.js';
 import { decodeProfile, encodeProfile } from './studio.js';
@@ -301,7 +301,22 @@ export function mount(root) {
       material: state.bodyMeta?.material || '',
       shape: state.bodyMeta?.shape || '',
       size: state.bodyMeta?.size || 'medium',
+      name: state.bodyMeta ? (state.profileName || '') : '',
+      objectName: state.bodyMeta ? (state.bodyMeta.objectName || state.profileName || '') : '',
     };
+  }
+
+  function writeObjectCaption(body, selected, count) {
+    const caption = root.querySelector('[data-object-caption]');
+    if (caption) {
+      caption.hidden = false;
+      caption.textContent = objectCaption(body, { selected, count });
+    }
+  }
+
+  function easeBlend(t) {
+    const u = Math.max(0, Math.min(1, t));
+    return u < 0.5 ? 2 * u * u : 1 - ((-2 * u + 2) ** 2) / 2;
   }
 
   function paintDesignerObject() {
@@ -315,15 +330,44 @@ export function mount(root) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     const age = state.objectStrike ? (performance.now() - state.objectStrike) / 1000 : null;
     const selected = state.hoverPartial >= 0 ? state.hoverPartial : state.selectedPartial;
-    paintObject(ctx, {
+    const body = objectBody();
+    const partials = state.partials || [];
+    const sig = bodySignature(body, partials);
+    if (state.objectShown && state.objectShown.sig !== sig) {
+      state.objectFade = { from: state.objectShown, t0: performance.now() };
+    }
+    const blend = state.objectFade ? easeBlend((performance.now() - state.objectFade.t0) / 250) : 1;
+    const colors = canvasColors();
+    const paint = (target, frameBody, framePartials) => paintObject(target, {
       width,
       height,
-      body: objectBody(),
-      partials: state.partials,
+      body: frameBody,
+      partials: framePartials,
       selected,
       age: state.objectStrike ? age : null,
-      colors: canvasColors(),
+      now: performance.now(),
+      colors,
     });
+    if (blend < 1 && state.objectFade?.from) {
+      paint(ctx, state.objectFade.from.body, state.objectFade.from.partials);
+      if (!state.fadeCanvas) state.fadeCanvas = document.createElement('canvas');
+      state.fadeCanvas.width = objectCanvas.width;
+      state.fadeCanvas.height = objectCanvas.height;
+      const fadeCtx = state.fadeCanvas.getContext('2d');
+      fadeCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      paint(fadeCtx, body, partials);
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.globalAlpha = blend;
+      ctx.drawImage(state.fadeCanvas, 0, 0);
+      ctx.restore();
+    } else {
+      state.objectFade = null;
+      paint(ctx, body, partials);
+    }
+    state.objectShown = { sig, body, partials: partials.map((partial) => ({ ...partial })) };
+    writeObjectCaption(body, selected, partials.length);
+    if (blend < 1) requestAnimationFrame(() => paintDesignerObject());
   }
 
   function kickObject() {
@@ -339,6 +383,7 @@ export function mount(root) {
           state.objectStrike = 0;
           paintDesignerObject();
         }
+        ensureObjectIdle();
       }
     };
     state.objectFrame = requestAnimationFrame(frame);
@@ -357,10 +402,40 @@ export function mount(root) {
     if (object) {
       paintDesignerObject();
       if (state.objectStrike) kickObject();
+      else ensureObjectIdle();
     } else {
+      if (state.idleFrame) cancelAnimationFrame(state.idleFrame);
+      state.idleFrame = 0;
+      const caption = root.querySelector('[data-object-caption]');
+      if (caption) caption.hidden = true;
       draw(canvas, state.partials, state);
     }
   }
+
+  function objectOnScreen() {
+    return Boolean(objectCanvas && !objectCanvas.hidden && !root.hidden);
+  }
+
+  function ensureObjectIdle() {
+    if (state.idleFrame || state.objectFrame || !objectOnScreen()) return;
+    const frame = () => {
+      if (!objectOnScreen() || state.objectFrame) {
+        state.idleFrame = 0;
+        return;
+      }
+      paintDesignerObject();
+      state.idleFrame = requestAnimationFrame(frame);
+    };
+    state.idleFrame = requestAnimationFrame(frame);
+  }
+  new MutationObserver(() => {
+    if (!objectOnScreen()) {
+      if (state.idleFrame) cancelAnimationFrame(state.idleFrame);
+      state.idleFrame = 0;
+      return;
+    }
+    ensureObjectIdle();
+  }).observe(root, { attributes: true, attributeFilter: ['hidden'] });
   for (const button of root.querySelectorAll('.stage .view-switch [data-view-mode]')) {
     button.addEventListener('click', () => showDesignerView(button.dataset.viewMode));
   }
@@ -1035,6 +1110,7 @@ export function mount(root) {
       material: payload.material || '',
       shape: payload.shape || '',
       size: payload.size || 'medium',
+      objectName: payload.objectName || payload.name || '',
     };
     state.profileName = payload.name || 'From generator';
     fields.preset.value = controls.preset;

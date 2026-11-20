@@ -4,6 +4,7 @@ import {
   ACCENT,
   accentTint,
   bodyFamily,
+  flaredHalf,
   materialFinish,
   materialKey,
   mixHex,
@@ -11,7 +12,9 @@ import {
   modeEnvelope,
   modeSamples,
   modeShape,
+  objectCaption,
   objectUnit,
+  shellKind,
   shownModes,
 } from './object-view.js';
 
@@ -41,7 +44,11 @@ test('mode shapes follow the family, with the bar counting nodes', () => {
   assert.equal(modeShape('plate', 0).rings, 1);
   assert.equal(modeShape('membrane', 4).rings, 2);
   assert.equal(modeShape('shell', 0).meridians, 2);
-  assert.equal(modeShape('shell', 1).meridians, 3);
+  assert.equal(modeShape('shell', 0).circles, 0);
+  assert.equal(modeShape('shell', 1).meridians, 2);
+  assert.equal(modeShape('shell', 1).circles, 1);
+  assert.equal(modeShape('shell', 2).meridians, 3);
+  assert.equal(modeShape('shell', 2).circles, 1);
   const crossings = (index) => {
     const samples = modeSamples('bar', index, 49);
     let count = 0;
@@ -105,36 +112,73 @@ test('a short partial fades before a long one, and the bar bends between its nod
   assert.ok(Math.abs(modeDisplacement('tube', 1, 0.5)) < 1e-9);
 });
 
-test('a huge shell or tube, with its shadow, stays inside the canvas', () => {
-  const height = 400;
-  const tube = objectUnit(520, height, 'tube', 'huge');
-  const shell = objectUnit(520, height, 'shell', 'huge');
-  assert.ok(tube * 1.2 < height / 2, 'tube shadow is clipped');
-  assert.ok(shell * 1.15 < height / 2, 'shell shadow is clipped');
-  assert.ok(objectUnit(520, height, 'bar', 'medium') > tube);
+test('a church bell widens from the shoulder to the lip without pinching', () => {
+  const shoulderY = -0.06;
+  const lipY = 0.68;
+  const shoulder = flaredHalf(shoulderY);
+  const lip = flaredHalf(lipY);
+  assert.ok(flaredHalf(-0.5) < shoulder * 0.4);
+  assert.ok(flaredHalf(-0.28) > flaredHalf(-0.5));
+  assert.ok(flaredHalf(-0.28) < shoulder);
+  let prev = shoulder;
+  for (let i = 1; i <= 16; i++) {
+    const y = shoulderY + ((lipY - shoulderY) * i) / 16;
+    const width = flaredHalf(y);
+    assert.ok(width + 1e-9 >= prev, `bell narrows at y ${y}`);
+    prev = width;
+  }
+  const mid = flaredHalf((shoulderY + lipY) / 2);
+  assert.ok(mid > shoulder);
+  assert.ok(mid < (shoulder + lip) / 2);
+  assert.ok(lip > shoulder * 1.6);
 });
 
-test('every huge body and its shadow keeps a margin on desktop and phone canvases', () => {
+test('bells keep distinct silhouettes and modal families', () => {
+  assert.equal(shellKind({ name: 'Church bell', shape: 'shell' }), 'flared');
+  assert.equal(shellKind({ name: 'Singing bowl', shape: 'bowl' }), 'bowl');
+  assert.equal(shellKind({ name: 'Cowbell', shape: 'shell' }), 'cowbell');
+  assert.equal(shellKind({ name: 'Gong', shape: 'plate', voice: 'gong' }), 'disc');
+  assert.equal(shellKind({ name: 'Handpan', shape: 'shell' }), 'handpan');
+  assert.equal(objectCaption({ name: 'Church bell', material: 'metal', shape: 'shell' }, { selected: 2, count: 16 }), 'Metal shell, mode 3 of 16');
+  assert.equal(objectCaption({ preset: 'bar' }, { selected: -1, count: 4 }), '');
+});
+
+test('a bowl grows from tiny to huge instead of staying one size', () => {
+  const tiny = objectUnit(350, 282, 'bowl', 'tiny');
+  const huge = objectUnit(350, 282, 'bowl', 'huge');
+  assert.ok(huge > tiny * 1.1);
+});
+
+test('each body fills most of the stage and keeps a margin', () => {
   const reach = {
-    bar: 1.02,
-    string: 1.08,
-    plate: 1.02,
-    membrane: 1.12,
-    shell: 1.15,
-    tube: 1.2,
-    box: 0.98,
+    bar: { x: 1.02, y: 0.36, span: 2.02 },
+    string: { x: 1.12, y: 0.82, span: 2.24 },
+    plate: { x: 1.02, y: 1.06, span: 2.05 },
+    membrane: { x: 1.12, y: 0.85, span: 2.1 },
+    shell: { x: 0.82, y: 0.86, span: 1.62 },
+    flared: { x: 0.82, y: 0.86, span: 1.62 },
+    bowl: { x: 0.85, y: 0.72, span: 1.66 },
+    tube: { x: 0.4, y: 1.08, span: 2.14 },
+    box: { x: 0.95, y: 0.85, span: 1.9 },
+    cowbell: { x: 0.53, y: 0.67, span: 1.27 },
+    handpan: { x: 0.77, y: 0.36, span: 1.53 },
+    disc: { x: 0.93, y: 1.07, span: 1.9 },
   };
   const stages = [
     { width: 640, height: 516 },
     { width: 350, height: 282 },
   ];
   for (const stage of stages) {
-    for (const [family, factor] of Object.entries(reach)) {
-      const unit = objectUnit(stage.width, stage.height, family, 'huge');
-      const vertical = (family === 'bar' || family === 'string' ? 0.55 : factor) * unit;
-      const horizontal = factor * unit;
-      assert.ok(vertical < stage.height * 0.46, `${family} clips vertically on ${stage.width}`);
-      assert.ok(horizontal < stage.width * 0.46, `${family} clips horizontally on ${stage.width}`);
+    const limit = Math.min(stage.width, stage.height);
+    for (const [family, box] of Object.entries(reach)) {
+      for (const size of ['tiny', 'huge']) {
+        const unit = objectUnit(stage.width, stage.height, family, size);
+        const span = (box.span || 2 * Math.max(box.x, box.y)) * unit;
+        assert.ok(span <= limit * 0.86, `${family} ${size} overflows on ${stage.width}`);
+        assert.ok(span + 1 >= limit * 0.74, `${family} ${size} is small on ${stage.width}`);
+        assert.ok(box.x * unit <= stage.width * 0.46 + 0.01, `${family} clips across ${stage.width}`);
+        assert.ok(box.y * unit <= stage.height * 0.46 + 0.01, `${family} clips down ${stage.width}`);
+      }
     }
   }
 });

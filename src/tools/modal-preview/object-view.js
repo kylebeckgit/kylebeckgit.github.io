@@ -4,9 +4,23 @@
 // --accent in src/styles/global.css.
 export const ACCENT = '#d4421c';
 
-const SIZE = { tiny: 0.62, small: 0.74, medium: 0.84, large: 0.9, huge: 0.94 };
-// Tall bodies use a smaller unit so a huge shell or tube, plus its shadow, stays inside the canvas.
-const FIT = { bar: 0.5, string: 0.46, plate: 0.44, membrane: 0.42, shell: 0.4, tube: 0.36, box: 0.42 };
+// How far each body reaches from center, in units, including its shadow.
+const REACH = {
+  bar: { x: 1.02, y: 0.36, span: 2.02 },
+  string: { x: 1.12, y: 0.82, span: 2.24 },
+  plate: { x: 1.02, y: 1.06, span: 2.05 },
+  membrane: { x: 1.12, y: 0.85, span: 2.1 },
+  shell: { x: 0.82, y: 0.86, span: 1.62 },
+  flared: { x: 0.82, y: 0.86, span: 1.62 },
+  bowl: { x: 0.85, y: 0.72, span: 1.66 },
+  tube: { x: 0.4, y: 1.08, span: 2.14 },
+  box: { x: 0.95, y: 0.85, span: 1.9 },
+  cowbell: { x: 0.53, y: 0.67, span: 1.27 },
+  handpan: { x: 0.77, y: 0.36, span: 1.53 },
+  disc: { x: 0.93, y: 1.07, span: 1.9 },
+};
+// Fraction of the stage's shorter side the body should occupy, shadow included.
+const FILL = { tiny: 0.75, small: 0.78, medium: 0.8, large: 0.83, huge: 0.85 };
 const CARD = '#fbf8f2';
 const MODE_LIMIT = 3;
 const BAND = 0.038;
@@ -16,7 +30,7 @@ const TONE = {
   metal: { lit: '#f4f1ea', mid: '#9aa09a', shade: '#2c302c', rim: '#ffffff', kind: 'sheen' },
   glass: { lit: '#f7fbff', mid: '#d7e7ee', shade: '#6d8b96', rim: '#ffffff', kind: 'glass' },
   skin: { lit: '#efe0c4', mid: '#c4a574', shade: '#7a5a32', rim: '#f6ead4', kind: 'matte' },
-  stone: { lit: '#b7b1a6', mid: '#7a746c', shade: '#3a3632', rim: '#d4cec4', kind: 'matte' },
+  stone: { lit: '#b7b1a6', mid: '#7a746c', shade: '#3a3632', rim: '#d4cec4', kind: 'matte', speckle: true },
   ceramic: { lit: '#f0c2a8', mid: '#c46a45', shade: '#6e3424', rim: '#f8dccb', kind: 'gloss' },
   ice: { lit: '#ffffff', mid: '#d5e7ef', shade: '#7aa0b0', rim: '#ffffff', kind: 'glass' },
   water: { lit: '#d5e8f2', mid: '#6f93a8', shade: '#2c4a5c', rim: '#f4fbff', kind: 'glass' },
@@ -70,8 +84,16 @@ export function materialFinish(key) {
 }
 
 export function objectUnit(width, height, family = 'bar', size = 'medium') {
-  const scale = SIZE[String(size || 'medium').toLowerCase()] || SIZE.medium;
-  return Math.min(width, height) * (FIT[family] || 0.42) * scale;
+  const key = REACH[family] ? family : (FIT_ALIAS[family] || 'bar');
+  const reach = REACH[key] || REACH.bar;
+  const name = String(size || 'medium').toLowerCase();
+  const fill = FILL[name] || FILL.medium;
+  const span = reach.span || 2 * Math.max(reach.x, reach.y);
+  const limit = Math.min(width, height);
+  const fitted = (fill * limit) / span;
+  const capW = (width * 0.92) / (2 * reach.x);
+  const capH = (height * 0.92) / (2 * reach.y);
+  return Math.min(fitted, capW, capH);
 }
 
 // Bar: 1, 2, 3 interior nodes. String and tube: 1, 2, 3 loops.
@@ -83,8 +105,60 @@ export function modeShape(family, index = 0) {
   if (family === 'membrane' || family === 'plate') {
     return { family, spokes: n % 4, rings: 1 + Math.floor(n / 4) };
   }
-  if (family === 'shell') return { family: 'shell', meridians: 2 + (n % 6) };
+  if (family === 'shell') {
+    const patterns = [
+      { meridians: 2, circles: 0 },
+      { meridians: 2, circles: 1 },
+      { meridians: 3, circles: 1 },
+      { meridians: 3, circles: 2 },
+      { meridians: 4, circles: 1 },
+    ];
+    return { family: 'shell', ...patterns[n % patterns.length] };
+  }
   return { family: 'box', panels: 1 + (n % 4) };
+}
+
+const FIT_ALIAS = { flared: 'shell', bowl: 'shell', cowbell: 'box', disc: 'plate', handpan: 'shell' };
+
+export function shellKind(body = {}) {
+  const name = `${body.name || ''} ${body.objectName || ''}`.toLowerCase();
+  const shape = String(body.shape || '').toLowerCase();
+  const voice = String(body.voice || body.controls?.voice || '').toLowerCase();
+  const text = `${name} ${shape} ${voice}`;
+  if (/handpan|\bhang\b/.test(text)) return 'handpan';
+  if (/gong|cymbal|tam-tam|tam tam/.test(text) || voice === 'gong') return 'disc';
+  if (/cowbell/.test(text)) return 'cowbell';
+  if (/singing bowl|\bbowl\b/.test(text) || shape === 'bowl') return 'bowl';
+  if (/church|hand bell|prayer|bonsho|carillon|tower|\bbell\b/.test(text) || voice === 'bonsho' || voice === 'cup') return 'flared';
+  if (bodyFamily(body) === 'shell') return 'flared';
+  return '';
+}
+
+export function drawKind(body = {}) {
+  return shellKind(body) || bodyFamily(body);
+}
+
+const MATERIAL_LABEL = {
+  wood: 'Wood', metal: 'Metal', glass: 'Glass', skin: 'Skin', stone: 'Stone',
+  ceramic: 'Ceramic', ice: 'Ice', water: 'Water', void: 'Void', cardboard: 'Cardboard',
+  plastic: 'Plastic', air: 'Air', string: 'String', rubber: 'Rubber',
+};
+
+const KIND_LABEL = {
+  flared: 'shell', bowl: 'bowl', cowbell: 'bell', disc: 'disc', handpan: 'handpan',
+  bar: 'bar', plate: 'plate', membrane: 'membrane', tube: 'tube', string: 'string', box: 'box', shell: 'shell',
+};
+
+export function objectCaption(body = {}, { selected = -1, count = 0 } = {}) {
+  if (!Number.isInteger(selected) || selected < 0 || count < 1) return '';
+  const material = MATERIAL_LABEL[materialKey(body)] || 'Metal';
+  const word = KIND_LABEL[drawKind(body)] || 'body';
+  return `${material} ${word}, mode ${selected + 1} of ${count}`;
+}
+
+export function bodySignature(body = {}, partials = []) {
+  const head = (partials || []).slice(0, 3).map((partial) => Math.round((Number(partial?.ratio) || 0) * 100)).join('.');
+  return `${materialKey(body)}|${drawKind(body)}|${body.size || ''}|${head}`;
 }
 
 export function modeDisplacement(family, index, t) {
@@ -203,7 +277,7 @@ function paintSurface(ctx, tone, unit, across, sheen) {
   ctx.clip();
   if (tone.kind === 'grain') {
     ctx.save();
-    ctx.globalAlpha = 0.18;
+    ctx.globalAlpha = 0.22;
     ctx.strokeStyle = tone.shade;
     ctx.lineWidth = Math.max(1, unit * 0.012);
     const lines = across ? 5 : 4;
@@ -221,10 +295,47 @@ function paintSurface(ctx, tone, unit, across, sheen) {
     }
     ctx.restore();
   }
-  if (sheen && tone.kind !== 'matte' && tone.kind !== 'grain' && tone.kind !== 'void') {
-    const alpha = tone.kind === 'sheen' ? 0.55 : tone.kind === 'glass' ? 0.5 : 0.32;
+  if (tone.speckle) {
     ctx.save();
-    ctx.globalAlpha *= alpha;
+    ctx.globalAlpha = 0.28;
+    ctx.fillStyle = tone.shade;
+    const specks = [[-0.22, 0.08], [0.18, -0.12], [0.05, 0.22], [-0.08, -0.18], [0.28, 0.16], [-0.3, 0.2]];
+    for (const [sx, sy] of specks) {
+      ctx.beginPath();
+      ctx.ellipse(sx * unit, sy * unit, unit * 0.014, unit * 0.01, 0.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+  if (tone.kind === 'sheen' && sheen) {
+    ctx.save();
+    ctx.globalAlpha = 0.22;
+    ctx.fillStyle = tone.rim;
+    for (let i = 0; i < 3; i++) {
+      ctx.beginPath();
+      ctx.ellipse(sheen.cx, sheen.cy + i * sheen.ry * 0.55, sheen.rx * 1.15, Math.max(1.5, sheen.ry * 0.22), -0.15, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  } else if (tone.kind === 'glass' && sheen) {
+    ctx.save();
+    ctx.globalAlpha = 0.35;
+    ctx.fillStyle = '#d7e7ee';
+    ctx.beginPath();
+    ctx.ellipse(sheen.cx + unit * 0.08, sheen.cy + unit * 0.06, sheen.rx * 0.7, sheen.ry * 0.55, 0.3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  } else if (sheen && tone.kind === 'gloss') {
+    ctx.save();
+    ctx.globalAlpha = 0.28;
+    ctx.fillStyle = tone.rim;
+    ctx.beginPath();
+    ctx.ellipse(sheen.cx, sheen.cy, sheen.rx * 1.2, sheen.ry * 0.7, -0.3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  } else if (sheen && tone.kind !== 'matte' && tone.kind !== 'grain' && tone.kind !== 'void') {
+    ctx.save();
+    ctx.globalAlpha = 0.4;
     ctx.fillStyle = tone.rim;
     ctx.beginPath();
     ctx.ellipse(sheen.cx, sheen.cy, Math.max(2, sheen.rx), Math.max(2, sheen.ry), -0.4, 0, Math.PI * 2);
@@ -255,13 +366,20 @@ export function paintObject(ctx, options) {
   ctx.fillRect(0, 0, width, height);
   ctx.save();
   ctx.translate(width / 2, height / 2);
-  const unit = objectUnit(width, height, family, sizeName);
+  const kind = drawKind(options.body || {});
+  const unit = objectUnit(width, height, kind, sizeName);
+  // A bowl hangs below its rim. Shift it up so the picture, not the rim, is centered.
+  if (kind === 'bowl') ctx.translate(0, -unit * 0.36);
+  const now = Number.isFinite(options.now) ? options.now : 0;
   const flare = modes.reduce((sum, mode) => {
     const motion = playing ? Math.sin(phaseOf(mode.index, age)) * mode.env : 1;
     return sum + Math.min(0.08, Math.abs(motion) * mode.amp * 0.05);
   }, 0);
 
-  const motionOf = (mode) => (playing ? Math.sin(phaseOf(mode.index, age)) * mode.env : 1);
+  const motionOf = (mode) => {
+    if (!playing) return 1 + 0.035 * Math.sin(now / 900 + mode.index * 0.7);
+    return Math.sin(phaseOf(mode.index, age)) * mode.env;
+  };
   const shift = (familyName, t) => {
     let y = 0;
     for (const mode of modes) {
@@ -273,23 +391,22 @@ export function paintObject(ctx, options) {
     return y;
   };
 
-  contactShadow(ctx, family, unit, tone.shade);
-  drawBody(ctx, family, unit, tone, flare, shift);
+  contactShadow(ctx, kind, family, unit, tone.shade);
+  drawBody(ctx, family, unit, tone, flare, shift, kind);
 
   ctx.save();
-  clipBody(ctx, family, unit, flare, shift);
+  clipBody(ctx, family, unit, flare, shift, kind);
   const ordered = [...modes].sort((a, b) => a.amp - b.amp);
   for (const mode of ordered) {
     const motion = motionOf(mode);
-    if (playing && Math.abs(motion) < 0.04) continue;
     const bend = motion * (solo ? 0.85 : 0.4 + mode.amp * 0.35);
-    const fade = Math.max(0.08, Math.min(1, Math.abs(motion))) * (mode.hot ? 0.9 : 0.22 + mode.amp * 0.28);
-    const tint = accentTint(accent, mode.hot, card);
+    const tint = mode.hot ? accent : accentTint(accent, false, card);
     ctx.save();
-    ctx.globalAlpha = fade;
-    drawBend(ctx, family, mode.index, unit, bend, tint, mode.hot);
+    ctx.globalAlpha = 1;
+    drawBend(ctx, family, mode.index, unit, bend, tint, mode.hot, kind);
     ctx.restore();
   }
+  if (kind === 'handpan') drawHandpanFace(ctx, unit, tone);
   ctx.restore();
   ctx.restore();
 }
@@ -298,32 +415,46 @@ function phaseOf(index, age) {
   return (1.4 + (index % 5) * 0.45) * age * Math.PI * 2;
 }
 
-function contactShadow(ctx, family, unit, shade) {
+function contactShadow(ctx, kind, family, unit, shade) {
+  // y is just under the lowest painted point of that body, so the shadow sits on the ground.
+  const place = kind === 'handpan'
+    ? [0, unit * 0.32, unit * 0.7, unit * 0.03]
+    : kind === 'flared'
+      ? [0, unit * 0.78, unit * 0.7, unit * 0.035]
+      : kind === 'cowbell'
+        ? [0, unit * 0.64, unit * 0.52, unit * 0.03]
+        : kind === 'disc'
+          ? [0, unit * 1.02, unit * 0.78, unit * 0.04]
+          : kind === 'bowl' || family === 'shell'
+            ? [0, unit * 1.02, unit * 0.64, unit * 0.038]
+            : family === 'tube'
+              ? [0, unit * 1.05, unit * 0.36, unit * 0.032]
+              : family === 'bar'
+                ? [0, unit * 0.28, unit * 0.9, unit * 0.032]
+                : family === 'string'
+                  ? [0, unit * 0.74, unit * 0.95, unit * 0.032]
+                  : family === 'plate'
+                    ? [0, unit * 1.0, unit * 0.8, unit * 0.035]
+                    : family === 'membrane'
+                      ? [0, unit * 0.84, unit * 0.86, unit * 0.035]
+                      : [0, unit * 0.8, unit * 0.68, unit * 0.035];
   ctx.save();
   ctx.fillStyle = shade;
-  ctx.globalAlpha = 0.14;
-  if (family === 'bar' || family === 'string') {
-    ctx.beginPath();
-    ctx.ellipse(unit * 0.05, unit * 0.42, unit * 0.9, unit * 0.07, 0, 0, Math.PI * 2);
-  } else if (family === 'tube') {
-    ctx.beginPath();
-    ctx.ellipse(unit * 0.04, unit * 1.08, unit * 0.28, unit * 0.07, 0, 0, Math.PI * 2);
-  } else if (family === 'shell') {
-    ctx.beginPath();
-    ctx.ellipse(unit * 0.06, unit * 1.02, unit * 0.7, unit * 0.09, 0, 0, Math.PI * 2);
-  } else if (family === 'box') {
-    ctx.beginPath();
-    ctx.ellipse(unit * 0.1, unit * 0.78, unit * 0.72, unit * 0.08, 0, 0, Math.PI * 2);
-  } else {
-    ctx.beginPath();
-    ctx.ellipse(unit * 0.06, unit * 0.78, unit * 0.72, unit * 0.1, 0, 0, Math.PI * 2);
-  }
+  ctx.globalAlpha = 0.22;
+  ctx.beginPath();
+  ctx.ellipse(place[0], place[1], place[2] * 0.62, place[3] * 0.7, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 0.1;
+  ctx.beginPath();
+  ctx.ellipse(place[0], place[1] + place[3] * 0.2, place[2], place[3], 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
 }
 
-function clipBody(ctx, family, unit, flare, shift) {
-  if (family === 'bar') {
+function clipBody(ctx, family, unit, flare, shift, kind) {
+  if (kind === 'flared' || kind === 'cowbell' || kind === 'handpan' || kind === 'disc' || kind === 'bowl') {
+    traceSilhouette(ctx, kind, unit, flare);
+  } else if (family === 'bar') {
     const pts = barPoints(unit, (t) => -shift('bar', t) * unit * 0.16);
     ribbon(ctx, pts, unit * 0.22, 0, 0);
   } else if (family === 'string') {
@@ -348,12 +479,14 @@ function clipBody(ctx, family, unit, flare, shift) {
   ctx.clip();
 }
 
-function drawBody(ctx, family, unit, tone, flare, shift) {
+function drawBody(ctx, family, unit, tone, flare, shift, kind) {
   ctx.lineJoin = 'round';
   ctx.lineWidth = Math.max(1.25, unit * 0.02);
   ctx.strokeStyle = tone.shade;
   const glass = tone.kind === 'glass';
-  if (family === 'bar') {
+  if (kind === 'flared' || kind === 'cowbell' || kind === 'handpan' || kind === 'disc' || kind === 'bowl') {
+    drawSilhouette(ctx, kind, unit, flare, tone, null, glass);
+  } else if (family === 'bar') {
     drawBarSlab(ctx, unit, (t) => -shift('bar', t) * unit * 0.16, tone, null, glass);
   } else if (family === 'string') {
     drawBridge(ctx, -unit * 1.02, unit, tone);
@@ -362,7 +495,7 @@ function drawBody(ctx, family, unit, tone, flare, shift) {
   } else if (family === 'membrane' || family === 'plate') {
     drawDisk(ctx, unit, family, (angle) => 1 + shift(family, angle / (Math.PI * 2)) * 0.08, tone, null, glass);
   } else if (family === 'shell') {
-    drawShell(ctx, unit, flare, tone, null, glass);
+    drawSilhouette(ctx, kind || 'flared', unit, flare, tone, null, glass);
   } else if (family === 'tube') {
     drawTube(ctx, unit, (t) => tubeBulge(unit, shift, t), tone, null, glass);
   } else {
@@ -370,7 +503,7 @@ function drawBody(ctx, family, unit, tone, flare, shift) {
   }
 }
 
-function drawBend(ctx, family, index, unit, bend, tint, hot) {
+function drawBend(ctx, family, index, unit, bend, tint, hot, kind) {
   const width = Math.max(1.5, unit * (hot ? BAND * 1.35 : BAND));
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
@@ -378,17 +511,38 @@ function drawBend(ctx, family, index, unit, bend, tint, hot) {
   ctx.strokeStyle = tint;
   if (family === 'bar') {
     drawCrest(ctx, unit, (t) => -modeDisplacement('bar', index, t) * unit * 0.1 * bend);
+    if (hot) drawBarNodes(ctx, unit, index, width);
   } else if (family === 'string') {
     drawCrest(ctx, unit, (t) => unit * 0.22 - modeDisplacement('string', index, t) * unit * 0.16 * bend);
+  } else if (kind === 'disc') {
+    ctx.save();
+    ctx.translate(0, unit * 0.08);
+    drawDiskRidges(ctx, unit, 'plate', index, width, [unit * 0.9, unit * 0.9]);
+    ctx.restore();
   } else if (family === 'membrane' || family === 'plate') {
     drawDiskRidges(ctx, unit, family, index, width);
-  } else if (family === 'shell') {
-    drawShellRibs(ctx, unit, index, width);
+  } else if (kind === 'flared' || kind === 'bowl' || kind === 'cowbell' || kind === 'handpan' || family === 'shell') {
+    drawShellRibs(ctx, unit, index, width, kind || 'flared');
   } else if (family === 'tube') {
     drawTubeBand(ctx, unit, index, bend);
   } else {
     drawBoxBend(ctx, unit, (t) => modeDisplacement('box', index, t) * unit * 0.05 * bend, tint);
   }
+}
+
+function drawBarNodes(ctx, unit, index, width) {
+  const waves = modeShape('bar', index).nodes + 1;
+  ctx.save();
+  ctx.setLineDash([Math.max(2, width * 1.6), Math.max(3, width * 2.2)]);
+  ctx.lineWidth = Math.max(1, width * 0.7);
+  for (let k = 1; k < waves; k++) {
+    const x = -unit + (k / waves) * unit * 2;
+    ctx.beginPath();
+    ctx.moveTo(x, -unit * 0.1);
+    ctx.lineTo(x, unit * 0.1);
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 
 function drawCrest(ctx, unit, yAt) {
@@ -406,11 +560,12 @@ function drawCrest(ctx, unit, yAt) {
 
 function drawTubeBand(ctx, unit, index, bend) {
   const samples = 28;
+  ctx.lineWidth = Math.max(ctx.lineWidth, unit * 0.055);
   ctx.beginPath();
   for (let i = 0; i < samples; i++) {
     const t = i / (samples - 1);
     const y = -unit * 0.86 + t * unit * 1.72;
-    const x = modeDisplacement('tube', index, t) * bend * unit * 0.07;
+    const x = modeDisplacement('tube', index, t) * bend * unit * 0.15;
     if (i === 0) ctx.moveTo(x, y);
     else ctx.lineTo(x, y);
   }
@@ -542,9 +697,9 @@ function drawDisk(ctx, unit, family, grow, tone, tint, glass) {
   ctx.restore();
 }
 
-function drawDiskRidges(ctx, unit, family, index, width) {
+function drawDiskRidges(ctx, unit, family, index, width, radii) {
   const shape = modeShape(family, index);
-  const [rx, ry] = diskRadii(unit, family);
+  const [rx, ry] = radii || diskRadii(unit, family);
   ctx.lineWidth = width;
   for (let ring = 1; ring <= shape.rings; ring++) {
     const f = ring / (shape.rings + 0.65);
@@ -604,15 +759,342 @@ function drawShell(ctx, unit, flare, tone, tint, glass) {
   ctx.stroke();
 }
 
-function drawShellRibs(ctx, unit, index, width) {
-  const meridians = Math.min(4, modeShape('shell', index).meridians);
-  ctx.lineWidth = width;
+// Half-width of a church bell, mouth down. The crown rounds out to the
+// shoulder. Below the shoulder the side only gets wider: a gently concave
+// waist, then the sound bow and the flared lip.
+export function flaredHalf(n) {
+  const y = Number(n) || 0;
+  const shoulderY = -0.06;
+  const shoulder = 0.4;
+  const lipY = 0.68;
+  const lip = 0.76;
+  if (y <= -0.5) return 0.1;
+  if (y < shoulderY) {
+    const t = (y + 0.5) / (shoulderY + 0.5);
+    const u = Math.max(0, Math.min(1, t));
+    return 0.1 + (shoulder - 0.1) * Math.sin(u * Math.PI / 2);
+  }
+  const t = Math.max(0, Math.min(1, (y - shoulderY) / (lipY - shoulderY)));
+  return shoulder + (lip - shoulder) * Math.pow(t, 1.55);
+}
+
+function handpanHalf(n) {
+  const cy = 0.06;
+  const ry = 0.32;
+  const rx = 0.76;
+  const dy = (n - cy) / ry;
+  if (dy <= -1 || dy >= 0.08) return 0;
+  const clamped = Math.max(-1, Math.min(1, dy));
+  return rx * Math.sqrt(1 - clamped * clamped);
+}
+
+function bellHalf(kind, y, unit) {
+  const n = y / unit;
+  if (kind === 'bowl') return unit * (0.55 + 0.15 * Math.sin(Math.max(0, n) * 1.4));
+  if (kind === 'handpan') return handpanHalf(n) * unit;
+  return flaredHalf(n) * unit;
+}
+
+function drawCowbellRibs(ctx, unit, index, width) {
+  const shape = modeShape('shell', index);
+  const meridians = Math.min(4, shape.meridians);
+  ctx.lineWidth = Math.max(width, unit * 0.05);
+  const topL = -0.32;
+  const topR = 0.16;
+  const botL = -0.46;
+  const botR = 0.32;
+  const topY = -0.46;
+  const faceBot = 0.54;
+  const lineBot = 0.46;
+  const uBot = (lineBot - topY) / (faceBot - topY);
+  const xL = topL + (botL - topL) * uBot;
+  const xR = topR + (botR - topR) * uBot;
   for (let i = 0; i < meridians; i++) {
-    const side = (i / (meridians - 1 || 1) - 0.5) * 2;
-    const x = side * unit * 0.46;
+    const t = (i + 0.5) / meridians;
     ctx.beginPath();
-    ctx.moveTo(x * 0.42, -unit * 0.08);
-    ctx.quadraticCurveTo(x, unit * 0.28, x * 0.18, unit * 0.78);
+    ctx.moveTo((topL + (topR - topL) * t) * unit, topY * unit);
+    ctx.lineTo((xL + (xR - xL) * t) * unit, lineBot * unit);
+    ctx.stroke();
+  }
+  const sideT = 0.55;
+  const edgeTopX = 0.16;
+  const edgeBotX = 0.16 + (0.32 - 0.16) * uBot;
+  const outerTopX = 0.34;
+  const outerBotX = 0.34 + (0.5 - 0.34) * uBot;
+  const outerTopY = -0.38;
+  const outerBotY = -0.38 + (0.46 - -0.38) * uBot;
+  ctx.beginPath();
+  ctx.moveTo((edgeTopX + (outerTopX - edgeTopX) * sideT) * unit, (topY + (outerTopY - topY) * sideT) * unit);
+  ctx.lineTo((edgeBotX + (outerBotX - edgeBotX) * sideT) * unit, (lineBot + (outerBotY - lineBot) * sideT) * unit);
+  ctx.stroke();
+  ctx.save();
+  ctx.setLineDash([Math.max(3, width * 2), Math.max(4, width * 2.4)]);
+  ctx.lineWidth = Math.max(1.4, width * 0.85);
+  for (let circle = 1; circle <= (shape.circles || 0); circle++) {
+    const u = circle / ((shape.circles || 1) + 1);
+    const y = topY + (lineBot - topY) * u;
+    const x0 = topL + (botL - topL) * u;
+    const x1 = topR + (botR - topR) * u;
+    const outerX = 0.34 + (0.5 - 0.34) * u;
+    const outerY = -0.38 + (0.46 - -0.38) * u;
+    ctx.beginPath();
+    ctx.moveTo(x0 * unit, y * unit);
+    ctx.lineTo(x1 * unit, y * unit);
+    ctx.lineTo((x1 + (outerX - x1) * 0.7) * unit, (y + (outerY - y) * 0.7) * unit);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawShellRibs(ctx, unit, index, width, kind) {
+  if (kind === 'cowbell') {
+    drawCowbellRibs(ctx, unit, index, width);
+    return;
+  }
+  const shape = modeShape('shell', index);
+  const meridians = Math.min(4, shape.meridians);
+  const profile = kind === 'bowl' ? 'bowl' : kind === 'handpan' ? 'handpan' : 'flared';
+  const y0 = profile === 'bowl' ? -unit * 0.05 : profile === 'handpan' ? -unit * 0.18 : -unit * 0.28;
+  const y1 = profile === 'bowl' ? unit * 0.7 : profile === 'handpan' ? unit * 0.04 : unit * 0.56;
+  ctx.lineWidth = Math.max(width, unit * 0.034);
+  const steps = 22;
+  for (let i = 0; i < meridians; i++) {
+    const side = meridians === 1 ? 0 : (i / (meridians - 1) - 0.5) * 2;
+    ctx.beginPath();
+    let started = false;
+    for (let s = 0; s <= steps; s++) {
+      const u = s / steps;
+      const y = y0 + (y1 - y0) * u;
+      const half = bellHalf(profile, y, unit);
+      if (half < unit * 0.02) continue;
+      const x = side * half * (profile === 'handpan' ? 0.78 : 0.8);
+      if (!started) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+      started = true;
+    }
+    if (started) ctx.stroke();
+  }
+  ctx.save();
+  ctx.setLineDash([Math.max(3, width * 2), Math.max(4, width * 2.4)]);
+  ctx.lineWidth = Math.max(1.25, width * 0.8);
+  for (let circle = 1; circle <= (shape.circles || 0); circle++) {
+    const y = y0 + (y1 - y0) * (circle / ((shape.circles || 1) + 1));
+    const rx = bellHalf(profile, y, unit) * 0.88;
+    if (rx < unit * 0.04) continue;
+    ctx.beginPath();
+    ctx.ellipse(0, y, rx, unit * (profile === 'handpan' ? 0.04 : 0.05), 0, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function traceFlared(ctx, unit, flare) {
+  const w = 1 + flare * 0.5;
+  const top = -0.42;
+  const bot = 0.68;
+  const steps = 26;
+  const xAt = (n) => flaredHalf(n) * unit * w;
+  ctx.beginPath();
+  ctx.moveTo(-xAt(bot), bot * unit);
+  for (let i = steps; i >= 0; i--) {
+    const n = top + ((bot - top) * i) / steps;
+    ctx.lineTo(-xAt(n), n * unit);
+  }
+  ctx.quadraticCurveTo(-unit * 0.02, -unit * 0.5, -unit * 0.045, -unit * 0.46);
+  ctx.quadraticCurveTo(-unit * 0.07, -unit * 0.64, 0, -unit * 0.66);
+  ctx.quadraticCurveTo(unit * 0.07, -unit * 0.64, unit * 0.045, -unit * 0.46);
+  ctx.quadraticCurveTo(unit * 0.02, -unit * 0.5, xAt(top), top * unit);
+  for (let i = 0; i <= steps; i++) {
+    const n = top + ((bot - top) * i) / steps;
+    ctx.lineTo(xAt(n), n * unit);
+  }
+  ctx.quadraticCurveTo(0, unit * 0.78, -xAt(bot), bot * unit);
+  ctx.closePath();
+}
+
+function traceSilhouette(ctx, kind, unit, flare) {
+  const w = 1 + flare * 0.5;
+  if (kind === 'flared') {
+    traceFlared(ctx, unit, flare);
+    return;
+  }
+  ctx.beginPath();
+  if (kind === 'cowbell') {
+    ctx.moveTo(-unit * 0.32, -unit * 0.46);
+    ctx.lineTo(unit * 0.16, -unit * 0.46);
+    ctx.lineTo(unit * 0.34, -unit * 0.38);
+    ctx.lineTo(unit * 0.5, unit * 0.46);
+    ctx.lineTo(unit * 0.32, unit * 0.54);
+    ctx.lineTo(-unit * 0.46, unit * 0.54);
+  } else if (kind === 'handpan') {
+    const steps = 24;
+    for (let i = 0; i <= steps; i++) {
+      const a = Math.PI * (1 + i / steps);
+      const x = Math.cos(a) * unit * 0.76;
+      const y = unit * 0.06 + Math.sin(a) * unit * 0.32;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    for (let i = steps; i >= 0; i--) {
+      const a = Math.PI * (i / steps);
+      const x = Math.cos(a) * unit * 0.76;
+      const y = unit * 0.06 + Math.sin(a) * unit * 0.22;
+      ctx.lineTo(x, y);
+    }
+  } else if (kind === 'disc') {
+    ctx.ellipse(0, unit * 0.08, unit * 0.9, unit * 0.9, 0, 0, Math.PI * 2);
+  } else {
+    ctx.moveTo(-unit * 0.72 * w, -unit * 0.15);
+    ctx.quadraticCurveTo(-unit * 0.98 * w, unit * 0.82, 0, unit * 0.96);
+    ctx.quadraticCurveTo(unit * 0.98 * w, unit * 0.82, unit * 0.72 * w, -unit * 0.15);
+    ctx.quadraticCurveTo(0, -unit * 0.5, -unit * 0.72 * w, -unit * 0.15);
+  }
+  ctx.closePath();
+}
+
+function drawSilhouette(ctx, kind, unit, flare, tone, tint, glass) {
+  const crisp = kind === 'flared' || kind === 'cowbell' || kind === 'handpan';
+  if (!crisp) {
+    ctx.save();
+    ctx.translate(unit * 0.03, unit * 0.035);
+    traceSilhouette(ctx, kind, unit, flare);
+    ctx.fillStyle = tint ? mixHex(tint, tone.shade, 0.45) : tone.shade;
+    ctx.fill();
+    ctx.restore();
+  }
+  traceSilhouette(ctx, kind, unit, flare);
+  const vertical = kind === 'disc' || kind === 'handpan';
+  ctx.fillStyle = faceGradient(ctx, vertical ? -unit : 0, -unit * 0.7, vertical ? unit * 0.3 : 0, unit * 0.8, tone, tint);
+  ctx.save();
+  if (glass || tone.kind === 'glass') ctx.globalAlpha *= 0.74;
+  ctx.fill();
+  ctx.lineWidth = Math.max(1.1, unit * 0.01);
+  ctx.strokeStyle = tone.shade;
+  ctx.stroke();
+  if (!tint) paintSurface(ctx, tone, unit, true, { cx: -unit * 0.18, cy: kind === 'flared' ? -unit * 0.28 : -unit * 0.08, rx: unit * 0.26, ry: unit * 0.12 });
+  ctx.restore();
+  if (kind === 'flared') {
+    const bow = (sign) => {
+      ctx.beginPath();
+      for (let i = 0; i <= 8; i++) {
+        const n = 0.36 + (0.28 * i) / 8;
+        const x = sign * flaredHalf(n) * unit * (1 + flare * 0.5) * 0.86;
+        if (i === 0) ctx.moveTo(x, n * unit);
+        else ctx.lineTo(x, n * unit);
+      }
+    };
+    ctx.lineWidth = Math.max(3, unit * 0.045);
+    ctx.strokeStyle = tone.shade;
+    ctx.lineCap = 'round';
+    bow(1);
+    ctx.stroke();
+    bow(-1);
+    ctx.stroke();
+    const lip = flaredHalf(0.64) * unit * (1 + flare * 0.5);
+    ctx.beginPath();
+    ctx.ellipse(0, unit * 0.66, lip * 0.86, unit * 0.085, 0, 0, Math.PI * 2);
+    ctx.fillStyle = mixHex(tone.shade, '#141210', 0.5);
+    ctx.fill();
+    ctx.lineWidth = Math.max(2.2, unit * 0.028);
+    ctx.strokeStyle = mixHex(tone.mid, tone.shade, 0.25);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.ellipse(0, unit * 0.67, lip * 0.62, unit * 0.045, 0, 0, Math.PI * 2);
+    ctx.fillStyle = mixHex(tone.shade, '#12100e', 0.72);
+    ctx.fill();
+  } else if (kind === 'disc') {
+    ctx.beginPath();
+    ctx.ellipse(0, -unit * 0.02, unit * 0.26, unit * 0.2, 0, 0, Math.PI * 2);
+    ctx.fillStyle = tone.lit;
+    ctx.fill();
+    ctx.strokeStyle = tone.shade;
+    ctx.stroke();
+  } else if (kind === 'handpan') {
+    ctx.beginPath();
+    const steps = 24;
+    ctx.moveTo(unit * 0.76, unit * 0.06);
+    for (let i = 0; i <= steps; i++) {
+      const a = Math.PI * (i / steps);
+      ctx.lineTo(Math.cos(a) * unit * 0.76, unit * 0.06 + Math.sin(a) * unit * 0.22);
+    }
+    ctx.closePath();
+    ctx.fillStyle = tone.shade;
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(0, unit * 0.06, unit * 0.76, unit * 0.05, 0, 0, Math.PI * 2);
+    ctx.strokeStyle = mixHex(tone.lit, tone.mid, 0.35);
+    ctx.lineWidth = Math.max(1.6, unit * 0.02);
+    ctx.stroke();
+  } else if (kind === 'cowbell') {
+    ctx.beginPath();
+    ctx.moveTo(unit * 0.16, -unit * 0.46);
+    ctx.lineTo(unit * 0.34, -unit * 0.38);
+    ctx.lineTo(unit * 0.5, unit * 0.46);
+    ctx.lineTo(unit * 0.32, unit * 0.54);
+    ctx.closePath();
+    ctx.fillStyle = tone.shade;
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(-unit * 0.32, -unit * 0.46);
+    ctx.lineTo(-unit * 0.18, -unit * 0.58);
+    ctx.lineTo(unit * 0.34, -unit * 0.38);
+    ctx.lineTo(unit * 0.16, -unit * 0.46);
+    ctx.closePath();
+    ctx.fillStyle = mixHex(tone.mid, tone.lit, 0.28);
+    ctx.fill();
+    ctx.strokeStyle = tone.shade;
+    ctx.lineWidth = Math.max(1.4, unit * 0.016);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(-unit * 0.32, -unit * 0.46);
+    ctx.lineTo(unit * 0.16, -unit * 0.46);
+    ctx.lineTo(unit * 0.32, unit * 0.54);
+    ctx.lineTo(-unit * 0.46, unit * 0.54);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(unit * 0.16, -unit * 0.46);
+    ctx.lineTo(unit * 0.32, unit * 0.54);
+    ctx.lineWidth = Math.max(2, unit * 0.022);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.ellipse(-unit * 0.07, unit * 0.54, unit * 0.3, unit * 0.048, 0, 0, Math.PI * 2);
+    ctx.fillStyle = mixHex(tone.shade, '#141210', 0.55);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(-unit * 0.07, unit * 0.548, unit * 0.2, unit * 0.026, 0, 0, Math.PI * 2);
+    ctx.fillStyle = mixHex(tone.shade, '#12100e', 0.7);
+    ctx.fill();
+  }
+}
+
+function drawHandpanFace(ctx, unit, tone) {
+  ctx.beginPath();
+  ctx.ellipse(0, -unit * 0.02, unit * 0.1, unit * 0.055, 0, 0, Math.PI * 2);
+  ctx.fillStyle = mixHex(tone.lit, tone.mid, 0.15);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(-unit * 0.015, -unit * 0.038, unit * 0.045, unit * 0.02, 0, 0, Math.PI * 2);
+  ctx.fillStyle = tone.lit;
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(0, unit * 0.005, unit * 0.07, unit * 0.018, 0, 0.15 * Math.PI, 0.85 * Math.PI);
+  ctx.strokeStyle = mixHex(tone.mid, tone.shade, 0.35);
+  ctx.lineWidth = Math.max(1, unit * 0.01);
+  ctx.stroke();
+  for (let i = 0; i < 8; i++) {
+    const angle = (i / 8) * Math.PI * 2 - Math.PI / 8;
+    const x = Math.cos(angle) * unit * 0.4;
+    const y = -unit * 0.02 + Math.sin(angle) * unit * 0.12;
+    const rot = Math.cos(angle) * 0.4;
+    ctx.beginPath();
+    ctx.ellipse(x, y, unit * 0.08, unit * 0.036, rot, 0, Math.PI * 2);
+    ctx.fillStyle = mixHex(tone.lit, tone.mid, 0.5);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(x, y + unit * 0.01, unit * 0.062, unit * 0.016, rot, 0.1 * Math.PI, 0.9 * Math.PI);
+    ctx.strokeStyle = mixHex(tone.shade, tone.mid, 0.35);
+    ctx.lineWidth = Math.max(1, unit * 0.01);
     ctx.stroke();
   }
 }
@@ -688,7 +1170,7 @@ function drawBoxBend(ctx, unit, bow, tint) {
   ctx.closePath();
   ctx.fillStyle = tint;
   ctx.fill();
-  ctx.strokeStyle = mixHex(tint, '#3c403c', 0.35);
+  ctx.strokeStyle = tint;
   ctx.stroke();
 }
 
