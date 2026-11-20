@@ -644,11 +644,14 @@ import Base from '../layouts/Base.astro';
       tab.setAttribute('aria-selected', String(on));
     }
     for (const [key, panel] of Object.entries(panels)) panel.hidden = key !== name;
+    if (name === 'designer') requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
   }
 
   for (const tab of tabs) {
     tab.addEventListener('click', () => showTool(tab.dataset.toolTab));
   }
+
+  if (/(?:^#|&)p=/.test(location.hash)) showTool('designer');
 
   mountGenerator(panels.generator, {
     openInDesigner(payload) {
