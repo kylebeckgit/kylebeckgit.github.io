@@ -430,7 +430,7 @@ function contactShadow(ctx, kind, family, unit, shade) {
       : kind === 'cowbell'
         ? [0, unit * 0.64, unit * 0.52, unit * 0.03]
         : kind === 'goblet'
-          ? [0, unit * 0.66, unit * 0.42, unit * 0.028]
+          ? [0, unit * 0.6, unit * 0.36, unit * 0.022]
           : kind === 'disc'
           ? [0, unit * 1.02, unit * 0.78, unit * 0.04]
           : kind === 'bowl' || family === 'shell'
@@ -1083,8 +1083,8 @@ function drawGoblet(ctx, unit, tone, glass) {
   ctx.beginPath();
   ctx.moveTo(-unit * 0.028, unit * 0.1);
   ctx.lineTo(unit * 0.028, unit * 0.1);
-  ctx.lineTo(unit * 0.04, unit * 0.48);
-  ctx.lineTo(-unit * 0.04, unit * 0.48);
+  ctx.lineTo(unit * 0.04, unit * 0.52);
+  ctx.lineTo(-unit * 0.04, unit * 0.52);
   ctx.closePath();
   ctx.fillStyle = tone.mid;
   ctx.fill();
