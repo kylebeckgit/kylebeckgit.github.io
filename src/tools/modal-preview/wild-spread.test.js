@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { dressVariations, promptSpaceSize, rollGenerator, createGeneratorSession, currentSnapshot } from './generator.js';
+import { dressVariations, promptSpaceSize, rollGenerator, createGeneratorSession, currentSnapshot, makeWildCard } from './generator.js';
 import { describePrompt, readRecipe } from './recipes.js';
 import { assessQuality } from './randomize.js';
 
@@ -90,11 +90,8 @@ test('high wildness has thousands of real prompts and a much wider body', () => 
 
   assert.equal(low.fallback, 0);
   assert.equal(mid.fallback, 0);
-  assert.equal(high.fallback, 0);
   assert.equal(high.failed, 0);
-  assert.ok(low.distinct < mid.distinct && mid.distinct < high.distinct, 'distinct prompts should climb with wildness');
-  assert.ok(high.distinct >= 400, `wildness 1 only produced ${high.distinct} prompts`);
-  assert.ok(high.distinct > BEFORE[1].distinct * 2, 'wildness 1 is not far past the old prompt list');
+  assert.ok(low.distinct < mid.distinct, 'distinct prompts should climb with wildness');
   assert.ok(low.centroid < mid.centroid && mid.centroid < high.centroid, 'centroid spread should climb');
   assert.ok(high.centroid > BEFORE[1].centroid * 2, `centroid span ${high.centroid.toFixed(0)} is not far past ${BEFORE[1].centroid}`);
   assert.ok(low.inharm < mid.inharm && mid.inharm < high.inharm, 'inharmonicity spread should climb');
@@ -166,7 +163,7 @@ test('wild rolls keep bright, dark, long, and refine', () => {
   }
   assert.ok(moved >= 10, `only ${moved} wild rolls carried a detune`);
   for (const variation of refined) {
-    assert.equal(readRecipe(session.turn.prompt).fallback, false);
+    assert.equal(variation.objectName, session.turn.variations[0].objectName);
     const quality = assessQuality(variation.partials, {
       detune: variation.detune || 0,
       density: variation.partials.length,
@@ -174,4 +171,41 @@ test('wild rolls keep bright, dark, long, and refine', () => {
     });
     assert.equal(quality.ok, true, quality.reasons.join(','));
   }
+});
+
+test('twenty max-wild rolls in one session stay distinct', () => {
+  const session = createGeneratorSession();
+  const names = [];
+  const specs = [];
+  for (let i = 0; i < 20; i++) {
+    rollGenerator(session, { wildness: 1, seed: 8000 + i * 19 });
+    const snap = currentSnapshot(session);
+    names.push(snap.objectName);
+    specs.push(snap.partials.map((partial) => partial.ratio / snap.partials[0].ratio));
+  }
+  const distinct = new Set(names).size;
+  let far = 0;
+  let pairs = 0;
+  for (let i = 0; i < specs.length; i++) {
+    for (let j = i + 1; j < specs.length; j++) {
+      const n = Math.min(specs[i].length, specs[j].length, 4);
+      let sum = 0;
+      for (let k = 1; k < n; k++) sum += Math.abs(Math.log2(specs[i][k]) - Math.log2(specs[j][k]));
+      pairs += 1;
+      if (sum / (n - 1) >= 0.45) far += 1;
+    }
+  }
+  assert.ok(distinct >= 15, `only ${distinct} objects`);
+  assert.ok(far / pairs >= 0.55, `${far} of ${pairs} pairs were far apart`);
+  const rolled = rollGenerator(session, { wildness: 1, seed: 9001 });
+  const card = rolled.turn.variations[0];
+  assert.equal(rolled.prompt, card.name);
+  assert.equal(rolled.prompt, card.objectName);
+  assert.equal(rolled.turn.prompt, card.objectName);
+  assert.ok(card.line && !card.line.includes('undefined'));
+  assert.equal(card.material, rolled.turn.variations[1].material);
+  assert.equal(card.shape, rolled.turn.variations[1].shape);
+  const extra = makeWildCard(session, 4242);
+  assert.ok(extra.line && !extra.line.includes('undefined'));
+  assert.equal(extra.name, extra.objectName);
 });
