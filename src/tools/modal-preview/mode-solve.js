@@ -404,11 +404,7 @@ function cellSegments(corners, pts) {
     14: [[3, 0]],
   };
   let pairs = plain[mask] || [];
-  if (mask === 5 || mask === 10) {
-    const center = (corners[0] + corners[1] + corners[2] + corners[3]) / 4;
-    const followLow = (center > 0) === (corners[0] > 0);
-    pairs = followLow ? [[3, 0], [1, 2]] : [[0, 1], [2, 3]];
-  }
+  if (mask === 5 || mask === 10) pairs = saddlePairs(corners);
   const segments = [];
   for (const [a, b] of pairs) {
     const pa = edgeAt(a);
@@ -418,35 +414,152 @@ function cellSegments(corners, pts) {
   return segments;
 }
 
+// A saddle has two choices. The center of the cell belongs to one diagonal,
+// so the contour wraps the other two corners and that diagonal stays connected.
+export function saddlePairs(corners) {
+  const center = (corners[0] + corners[1] + corners[2] + corners[3]) / 4;
+  const joined = (center > 0) === (corners[0] > 0);
+  return joined ? [[0, 1], [2, 3]] : [[3, 0], [1, 2]];
+}
+
 function chainLines(segments) {
-  const unused = segments.map((segment) => [
-    [segment[0][0], segment[0][1]],
-    [segment[1][0], segment[1][1]],
-  ]);
-  const paths = [];
-  const close = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]) < 1e-4;
-  while (unused.length) {
-    const path = unused.pop();
-    let grew = true;
-    while (grew) {
-      grew = false;
-      for (let i = 0; i < unused.length; i++) {
-        const [a, b] = unused[i];
-        const start = path[0];
-        const end = path[path.length - 1];
-        if (close(end, a)) path.push(b);
-        else if (close(end, b)) path.push(a);
-        else if (close(start, b)) path.unshift(a);
-        else if (close(start, a)) path.unshift(b);
-        else continue;
-        unused.splice(i, 1);
-        grew = true;
-        break;
+  const keyOf = (point) => `${Math.round(point[0] * 1e4)}:${Math.round(point[1] * 1e4)}`;
+  const half = [];
+  const groups = new Map();
+  segments.forEach((segment, index) => {
+    for (const end of [0, 1]) {
+      const point = segment[end];
+      const id = half.length;
+      half.push({ index, end, point, pair: -1 });
+      const key = keyOf(point);
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(id);
+    }
+  });
+  const direction = (id) => {
+    const item = half[id];
+    const other = segments[item.index][1 - item.end];
+    const dx = other[0] - item.point[0];
+    const dy = other[1] - item.point[1];
+    const len = Math.hypot(dx, dy) || 1;
+    return [dx / len, dy / len];
+  };
+  const link = (a, b) => {
+    half[a].pair = b;
+    half[b].pair = a;
+  };
+  for (const ids of groups.values()) {
+    if (ids.length === 2) link(ids[0], ids[1]);
+    else if (ids.length === 4) {
+      const order = ids.slice().sort((a, b) => {
+        const da = direction(a);
+        const db = direction(b);
+        return Math.atan2(da[1], da[0]) - Math.atan2(db[1], db[0]);
+      });
+      link(order[0], order[2]);
+      link(order[1], order[3]);
+    } else if (ids.length === 3) {
+      let best = -2;
+      let pick = [ids[0], ids[1]];
+      for (let a = 0; a < 3; a++) {
+        for (let b = a + 1; b < 3; b++) {
+          const da = direction(ids[a]);
+          const db = direction(ids[b]);
+          const score = -(da[0] * db[0] + da[1] * db[1]);
+          if (score > best) {
+            best = score;
+            pick = [ids[a], ids[b]];
+          }
+        }
       }
+      link(pick[0], pick[1]);
+    }
+  }
+  const farOf = (id) => half.find((item) => item.index === half[id].index && item.end !== half[id].end);
+  const used = new Set();
+  const paths = [];
+  const walk = (start) => {
+    const path = [];
+    let id = start;
+    while (id != null && !used.has(half[id].index)) {
+      const item = half[id];
+      used.add(item.index);
+      if (!path.length) path.push([item.point[0], item.point[1]]);
+      const far = farOf(id);
+      path.push([far.point[0], far.point[1]]);
+      id = far.pair >= 0 ? far.pair : null;
     }
     if (path.length >= 2) paths.push(path);
-  }
+  };
+  half.forEach((item, id) => {
+    if (item.pair < 0) walk(id);
+  });
+  half.forEach((item, id) => {
+    if (!used.has(item.index)) walk(id);
+  });
   return paths;
+}
+
+function fromCenter(arm) {
+  const start = Math.hypot(arm[0][0], arm[0][1]);
+  const end = Math.hypot(arm[arm.length - 1][0], arm[arm.length - 1][1]);
+  const points = start <= end ? arm.map((point) => [point[0], point[1]]) : arm.map((point) => [point[0], point[1]]).reverse();
+  const tip = points[Math.min(4, points.length - 1)];
+  const dx = tip[0] - points[0][0];
+  const dy = tip[1] - points[0][1];
+  const len = Math.hypot(dx, dy) || 1;
+  return { points, dir: [dx / len, dy / len] };
+}
+
+// A numerical cross can be chained into two corners. Split those at the
+// center and join the opposite arms so the lines run straight through.
+function throughCenter(paths) {
+  const pending = [];
+  const kept = [];
+  for (const path of paths) {
+    let at = 0;
+    let dist = Infinity;
+    path.forEach((point, index) => {
+      const next = Math.hypot(point[0], point[1]);
+      if (next < dist) {
+        dist = next;
+        at = index;
+      }
+    });
+    if (dist > 0.1 || at < 2 || at > path.length - 3) {
+      kept.push(path);
+      continue;
+    }
+    const a = fromCenter(path.slice(0, at + 1));
+    const b = fromCenter(path.slice(at));
+    const dot = a.dir[0] * b.dir[0] + a.dir[1] * b.dir[1];
+    if (dot < -0.65) kept.push(path);
+    else pending.push(a, b);
+  }
+  const used = new Set();
+  for (let i = 0; i < pending.length; i++) {
+    if (used.has(i)) continue;
+    let best = -1;
+    let bestDot = -0.35;
+    for (let j = i + 1; j < pending.length; j++) {
+      if (used.has(j)) continue;
+      const dot = pending[i].dir[0] * pending[j].dir[0] + pending[i].dir[1] * pending[j].dir[1];
+      if (dot < bestDot) {
+        bestDot = dot;
+        best = j;
+      }
+    }
+    if (best < 0) {
+      kept.push(pending[i].points);
+      continue;
+    }
+    used.add(i);
+    used.add(best);
+    const arm = pending[i].points;
+    const other = pending[best].points;
+    kept.push([...arm.slice().reverse(), ...other.slice(1)]);
+  }
+  return kept;
 }
 
 function tightRim(point, kind) {
@@ -556,26 +669,45 @@ function nodalLines(mesh, free, vector) {
   const field = new Float64Array(mesh.nodes.length);
   free.forEach((node, i) => { field[node] = vector[i]; });
   const n = 64;
-  const sample = (i, j) => {
-    const x = -1 + (2 * i) / n;
-    const y = -1 + (2 * j) / n;
-    if (mesh.kind === 'disc' ? x * x + y * y >= 1 : Math.abs(x) >= 1 || Math.abs(y) >= 1) return null;
-    return fieldAt(mesh, field, x, y);
-  };
+  const grid = [];
+  for (let j = 0; j <= n; j++) {
+    const row = [];
+    for (let i = 0; i <= n; i++) {
+      const x = -1 + (2 * i) / n;
+      const y = -1 + (2 * j) / n;
+      const outside = mesh.kind === 'disc' ? x * x + y * y >= 1 : Math.abs(x) >= 1 || Math.abs(y) >= 1;
+      row.push(outside ? null : fieldAt(mesh, field, x, y));
+    }
+    grid.push(row);
+  }
+  for (let pass = 0; pass < 2; pass++) {
+    const next = grid.map((row) => row.slice());
+    for (let j = 1; j < n; j++) {
+      for (let i = 1; i < n; i++) {
+        if (grid[j][i] == null) continue;
+        const neighbors = [grid[j][i - 1], grid[j][i + 1], grid[j - 1][i], grid[j + 1][i]].filter((value) => value != null);
+        if (!neighbors.length) continue;
+        const average = neighbors.reduce((sum, value) => sum + value, 0) / neighbors.length;
+        next[j][i] = grid[j][i] * 0.5 + average * 0.5;
+      }
+    }
+    for (let j = 0; j <= n; j++) grid[j] = next[j];
+  }
   const segments = [];
   for (let j = 0; j < n; j++) {
     for (let i = 0; i < n; i++) {
-      const corners = [sample(i, j), sample(i + 1, j), sample(i + 1, j + 1), sample(i, j + 1)];
-      const pts = [i, i + 1, i + 1, i].map((col, index) => {
-        const row = index < 2 ? j : j + 1;
-        const useCol = index === 1 || index === 2 ? i + 1 : i;
-        return [-1 + (2 * useCol) / n, -1 + (2 * row) / n];
-      });
+      const corners = [grid[j][i], grid[j][i + 1], grid[j + 1][i + 1], grid[j + 1][i]];
+      const pts = [
+        [-1 + (2 * i) / n, -1 + (2 * j) / n],
+        [-1 + (2 * (i + 1)) / n, -1 + (2 * j) / n],
+        [-1 + (2 * (i + 1)) / n, -1 + (2 * (j + 1)) / n],
+        [-1 + (2 * i) / n, -1 + (2 * (j + 1)) / n],
+      ];
       segments.push(...cellSegments(corners, pts));
     }
   }
   const kept = segments.filter(([a, b]) => !(tightRim(a, mesh.kind) && tightRim(b, mesh.kind) && alongRim(a, b, mesh.kind)));
-  return chainLines(kept).filter((path) => {
+  return throughCenter(chainLines(kept)).filter((path) => {
     let minX = Infinity;
     let minY = Infinity;
     let maxX = -Infinity;

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { flatSpec, materialFactor, solveFlatModes } from './mode-solve.js';
+import { flatSpec, materialFactor, saddlePairs, solveFlatModes } from './mode-solve.js';
 
 function maxTurn(lines) {
   let worst = 0;
@@ -79,6 +79,32 @@ test('a square plate separates the (2,1) mode from the fundamental', () => {
   assert.ok(lineMeetsRim(solved.modes[1].lines, 'square'), 'nodal line misses the edge or runs along it');
   assert.ok(maxTurn(solved.modes[1].lines) < 0.45, `nodal line kinks by ${maxTurn(solved.modes[1].lines)}`);
   assert.ok(solved.modes[0].omega > 0);
+});
+
+test('a saddle keeps the diagonal that matches the cell center', () => {
+  assert.deepEqual(saddlePairs([1, -0.5, 1, -0.5]), [[0, 1], [2, 3]]);
+  assert.deepEqual(saddlePairs([1, -2, 1, -2]), [[3, 0], [1, 2]]);
+  assert.deepEqual(saddlePairs([-0.5, 1, -0.5, 1]), [[3, 0], [1, 2]]);
+});
+
+test('a square (2,2) mode crosses as a plus', () => {
+  const solved = solveFlatModes({ shape: 'square', model: 'plate', material: 'metal' });
+  const base = solved.modes[0].lambda;
+  const mode = solved.modes.find((row) => Math.abs(row.lambda / base - 4) / 4 < 0.08);
+  assert.ok(mode, `no (2,2) among ${solved.modes.map((row) => (row.lambda / base).toFixed(2)).join(', ')}`);
+  const side = (point) => {
+    if (Math.abs(point[0]) >= Math.abs(point[1]) && Math.abs(point[0]) > 0.98) return point[0] > 0 ? 'right' : 'left';
+    if (Math.abs(point[1]) > 0.98) return point[1] > 0 ? 'top' : 'bottom';
+    return '';
+  };
+  const opposite = { left: 'right', right: 'left', top: 'bottom', bottom: 'top' };
+  const through = mode.lines.filter((line) => Math.min(...line.map(([x, y]) => Math.hypot(x, y))) < 0.2);
+  assert.equal(through.length, 2);
+  for (const line of through) {
+    const a = side(line[0]);
+    const b = side(line[line.length - 1]);
+    assert.equal(opposite[a], b, `ends on ${a} and ${b}`);
+  }
 });
 
 test('a stiffer material raises the plate frequency and not the nodal shape', () => {
