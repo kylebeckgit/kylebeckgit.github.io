@@ -20,6 +20,30 @@ function maxTurn(lines) {
   return worst;
 }
 
+function tipDrift(line) {
+  const n = line.length;
+  if (n < 4) return 0;
+  const dx = line[n - 1][0] - line[n - 2][0];
+  const dy = line[n - 1][1] - line[n - 2][1];
+  const len = Math.hypot(dx, dy);
+  if (len < 1e-6) return 180;
+  const band = [];
+  for (let i = n - 2; i >= 0; i--) {
+    const radius = Math.hypot(line[i][0], line[i][1]);
+    if (radius < 0.62) break;
+    if (radius <= 0.84) band.push(line[i]);
+  }
+  if (band.length < 2) return 0;
+  const inner = band[band.length - 1];
+  const outer = band[0];
+  const bx = outer[0] - inner[0];
+  const by = outer[1] - inner[1];
+  const bl = Math.hypot(bx, by);
+  if (bl < 1e-6) return 0;
+  const dot = (dx * bx + dy * by) / (len * bl);
+  return Math.acos(Math.max(-1, Math.min(1, dot))) * 180 / Math.PI;
+}
+
 function lineMeetsRim(lines, kind) {
   const reachOf = (point) => (kind === 'disc'
     ? Math.hypot(point[0], point[1])
@@ -70,6 +94,7 @@ test('a circular membrane matches the first two Bessel ratios', () => {
   assert.equal(solved.modes[0].lines.length, 0);
   assert.ok(lineMeetsRim(solved.modes[1].lines, 'disc'), 'diameter misses the rim or hooks along it');
   assert.ok(maxTurn(solved.modes[1].lines) < 0.45, `diameter kinks by ${maxTurn(solved.modes[1].lines)}`);
+  for (const line of solved.modes[1].lines) assert.ok(tipDrift(line) < 8, `end curls by ${tipDrift(line)} deg`);
 });
 
 test('a square plate separates the (2,1) mode from the fundamental', () => {

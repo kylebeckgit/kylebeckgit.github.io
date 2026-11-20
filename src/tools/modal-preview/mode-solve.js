@@ -613,8 +613,54 @@ function toBoundary(from, toward, kind) {
     const forward = hits.filter((value) => value > 1e-4);
     if (forward.length) travel = Math.min(...forward);
   }
-  if (travel == null || travel > 0.22) return [toward[0], toward[1]];
+  if (travel == null || travel > 0.5) return [toward[0], toward[1]];
   return [from[0] + ux * travel, from[1] + uy * travel];
+}
+
+function marginOf(point, kind) {
+  if (kind === 'disc') return 1 - Math.hypot(point[0], point[1]);
+  return 1 - Math.max(Math.abs(point[0]), Math.abs(point[1]));
+}
+
+// The solved field bends in the last band inside the rim. Keep the heading
+// from just inside that band and run it straight out to the boundary.
+function meetRim(pts, kind) {
+  const fixTip = (points, tipIsEnd) => {
+    const ordered = tipIsEnd ? points : points.slice().reverse();
+    let anchor = -1;
+    for (let i = ordered.length - 1; i >= 0; i--) {
+      if (marginOf(ordered[i], kind) >= 0.16) {
+        anchor = i;
+        break;
+      }
+    }
+    if (anchor < 2) return tipIsEnd ? ordered : ordered.slice().reverse();
+    let inner = anchor;
+    for (let i = anchor; i >= 0; i--) {
+      if (marginOf(ordered[i], kind) >= 0.3) {
+        inner = i;
+        break;
+      }
+    }
+    if (inner === anchor) inner = Math.max(0, anchor - 5);
+    let dx = ordered[anchor][0] - ordered[inner][0];
+    let dy = ordered[anchor][1] - ordered[inner][1];
+    if (Math.hypot(dx, dy) < 1e-4) return tipIsEnd ? ordered : ordered.slice().reverse();
+    const ahead = [ordered[anchor][0] + dx, ordered[anchor][1] + dy];
+    if (marginOf(ahead, kind) > marginOf(ordered[anchor], kind)) {
+      dx = -dx;
+      dy = -dy;
+    }
+    const hit = toBoundary(
+      ordered[anchor],
+      [ordered[anchor][0] + dx, ordered[anchor][1] + dy],
+      kind,
+    );
+    const next = ordered.slice(0, anchor + 1);
+    next.push(hit);
+    return tipIsEnd ? next : next.slice().reverse();
+  };
+  return fixTip(fixTip(pts, true), false);
 }
 
 function insideShape(point, kind) {
@@ -659,8 +705,8 @@ function finishPath(path, kind) {
     pts.splice(0, pts.length, ...next);
   }
   if (!closed) {
-    pts[0] = toBoundary(pts[1], pts[0], kind);
-    pts[pts.length - 1] = toBoundary(pts[pts.length - 2], pts[pts.length - 1], kind);
+    const straight = meetRim(pts, kind);
+    pts.splice(0, pts.length, ...straight);
   }
   return pts;
 }
