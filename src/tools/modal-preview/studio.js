@@ -1,8 +1,9 @@
 // Describe-first flow. The reading is local on purpose: this preview does not call a model.
 
-import { describePrompt, fileSlug, STARTERS } from './recipes.js';
+import { describePrompt, fileSlug, moreVariations, STARTERS } from './recipes.js';
 
-const ALLOWANCE = 8;
+const ALLOWANCE = 24;
+const VARIATION_CAP = 12;
 const STORAGE_KEY = 'modal-describe-preview-uses';
 
 export function mountStudio(root, api) {
@@ -54,6 +55,8 @@ export function mountStudio(root, api) {
         <button type="button" class="btn" data-hear="${index}">Hear</button>
       </article>`).join('');
     if (backButton) backButton.disabled = turns.length < 2;
+    const moreButton = root.querySelector('[data-more-variations]');
+    if (moreButton) moreButton.hidden = !turn || turn.variations.length >= VARIATION_CAP;
     const forwardButton = root.querySelector('[data-gen-forward]');
     if (forwardButton) forwardButton.disabled = future.length === 0;
     const backRoll = root.querySelector('[data-gen-back]');
@@ -70,6 +73,7 @@ export function mountStudio(root, api) {
     turn.selected = index;
     api.applyRecipe(variation, { hear });
     render();
+    if (hear) root.querySelector('[data-visualizer]')?.scrollIntoView({ block: 'nearest' });
   }
 
   function pushTurn(prompt, current) {
@@ -115,6 +119,20 @@ export function mountStudio(root, api) {
     askText.value = prompt;
     turns.length = 0;
     pushTurn(prompt, null);
+  });
+  root.querySelector('[data-more-variations]')?.addEventListener('click', () => {
+    const turn = turns[turns.length - 1];
+    if (!turn || turn.variations.length >= VARIATION_CAP) return;
+    const base = turn.variations[turn.selected] || turn.variations[0];
+    const prompt = turn.thread[turn.thread.length - 1] || '';
+    const extra = moreVariations(prompt, turn.variations, base);
+    if (!extra.length) {
+      const moreButton = root.querySelector('[data-more-variations]');
+      if (moreButton) moreButton.hidden = true;
+      return;
+    }
+    turn.variations.push(...extra);
+    render();
   });
   askText.addEventListener('keydown', (event) => {
     if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {

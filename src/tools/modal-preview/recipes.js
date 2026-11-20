@@ -393,8 +393,8 @@ function shift(recipe, axis) {
   if (axis.brightness) controls.brightness = clamp(controls.brightness + axis.brightness, -1, 1);
   if (axis.damping) controls.damping = clamp(controls.damping + axis.damping, 0, 1);
   if (axis.stiffness) controls.stiffness = clamp(controls.stiffness + axis.stiffness, 0, 1);
-  // The knob step still moves the panel. The plan is what the voice formulas
-  // cannot do: a gong drops brightness, and a black hole is already at both clamps.
+  if (axis.oddEven) controls.oddEven = clamp((controls.oddEven || 0) + axis.oddEven, -1, 1);
+  if (!axis.key) return sanitizeControls(controls);
   const plan = planVariation(recipe.controls, controls, axis.key);
   return sanitizeControls({ ...controls, ...plan });
 }
@@ -505,6 +505,30 @@ export function describePrompt(prompt, current = null) {
   const text = String(prompt || '').toLowerCase();
   if (current && !familyOf(text)) return graded(core, current, text);
   return axes(text).map((axis) => withPlay(core, shift(core, axis), axis.name(core.objectName), axis.line));
+}
+
+const EXTRA_AXES = [
+  { stiffness: 0.2, name: (object) => `Stiffer ${object.toLowerCase()}`, line: 'A stiffer body, so the partials spread further apart.' },
+  { stiffness: -0.16, name: (object) => `Softer ${object.toLowerCase()}`, line: 'Less stiffness, so the partials sit closer together.' },
+  { oddEven: 0.4, name: (object) => `Hollow ${object.toLowerCase()}`, line: 'The even partials are quieter.' },
+  { key: 'dry', damping: 0.26, name: (object) => `Drier ${object.toLowerCase()}`, line: 'The same object, dying faster.' },
+  { key: 'bright', brightness: 0.42, damping: -0.06, name: (object) => `Brighter still ${object.toLowerCase()}`, line: 'More energy in the top than the bright card.' },
+  { key: 'dark', brightness: -0.42, name: (object) => `Darker still ${object.toLowerCase()}`, line: 'Less top than the dark card.' },
+  { key: 'detune', stiffness: 0.32, name: (object) => `Further detuned ${object.toLowerCase()}`, line: 'The upper partials sit further from the series.' },
+  { key: 'long', damping: -0.34, name: (object) => `Longer still ${object.toLowerCase()}`, line: 'Lower damping, so it hangs on longer.' },
+];
+
+export function moreVariations(prompt, existing = [], current = null) {
+  const names = new Set((existing || []).map((variation) => variation.name));
+  const core = current?.controls ? current : readRecipe(prompt, null);
+  const batch = [];
+  for (const axis of EXTRA_AXES) {
+    const name = axis.name(core.objectName);
+    if (names.has(name)) continue;
+    batch.push(withPlay(core, shift(core, axis), name, axis.line));
+    if (batch.length === 4) break;
+  }
+  return batch;
 }
 
 export function fileSlug(name) {

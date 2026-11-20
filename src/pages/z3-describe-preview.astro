@@ -255,9 +255,9 @@ import Base from '../layouts/Base.astro';
     </section>
 
     <section id="tool-generator" data-tool="generator" role="tabpanel" aria-labelledby="tab-generator">
-      <h2 class="tool-title">Modal generator</h2>
-      <p class="quiet">The sentence is read in this browser. Nothing is sent. Command or Ctrl+Enter describes. Randomize here does not change the designer.</p>
+      <div class="generator-top">
       <section class="describe" aria-labelledby="describe-heading">
+        <h2 class="tool-title">Modal generator</h2>
         <h3 id="describe-heading" class="visually-hidden">Describe</h3>
         <div class="ask-bar">
           <label class="ask">Describe
@@ -273,29 +273,17 @@ import Base from '../layouts/Base.astro';
           <button type="button" data-example="wooden marimba bar">Marimba bar</button>
           <button type="button" data-example="cymbal">Cymbal</button>
         </div>
-        <p class="quiet" data-allowance></p>
         <p class="status" data-studio-status role="status"></p>
-        <div data-results hidden>
-          <h3>Variations</h3>
-          <ol class="thread" data-thread></ol>
-          <div class="var-grid" data-cards></div>
-          <div class="refine">
-            <label>Refine
-              <input data-refine-text type="text" placeholder="Darker, or a shorter tail" enterkeyhint="send">
-            </label>
-            <button type="button" class="btn" data-refine-btn>Refine</button>
-            <button type="button" class="btn" data-step-back disabled>Step back</button>
-          </div>
-        </div>
       </section>
-      <div class="gen-preview">
+      <div class="gen-preview" data-visualizer>
         <div class="stage-view">
-          <div class="view-switch" role="group" aria-label="Generator view">
+          <h2 class="viz-title">Visualizer</h2>
+          <div class="view-switch" role="group" aria-label="Visualizer">
             <button type="button" class="btn" data-view-mode="partials" aria-pressed="true">Partials</button>
             <button type="button" class="btn" data-view-mode="object" aria-pressed="false">Object</button>
           </div>
-          <canvas data-gen-view aria-label="Generator preview"></canvas>
-          <canvas data-gen-object hidden aria-label="Sounding object. Each partial is a mode of this body."></canvas>
+          <canvas data-gen-view aria-label="Partials visualizer"></canvas>
+          <canvas data-gen-object hidden aria-label="Object visualizer. Each partial is a mode of this body."></canvas>
           <p class="object-caption" data-gen-caption hidden></p>
         </div>
         <div class="gen-actions">
@@ -303,6 +291,22 @@ import Base from '../layouts/Base.astro';
           <button type="button" class="btn solid" data-open-designer disabled>Open in designer</button>
           <p class="status" data-gen-audio role="status"></p>
         </div>
+      </div>
+      </div>
+      <p class="quiet" data-allowance></p>
+      <p class="quiet">The sentence is read in this browser. Nothing is sent. Command or Ctrl+Enter describes. Randomize here does not change the designer.</p>
+      <div data-results hidden>
+          <h3>Variations</h3>
+          <ol class="thread" data-thread></ol>
+          <div class="var-grid" data-cards></div>
+          <button type="button" class="btn" data-more-variations>More variations</button>
+          <div class="refine">
+            <label>Refine
+              <input data-refine-text type="text" placeholder="Darker, or a shorter tail" enterkeyhint="send">
+            </label>
+            <button type="button" class="btn" data-refine-btn>Refine</button>
+            <button type="button" class="btn" data-step-back disabled>Step back</button>
+          </div>
       </div>
       <div class="roll gen-roll">
         <label class="knob">Wildness <span data-gen-wild-out>0.30</span>
@@ -348,7 +352,26 @@ import Base from '../layouts/Base.astro';
     color: var(--fg);
     border-bottom-color: var(--accent);
   }
-  .tool-title { margin: 1.25rem 0 .35rem; }
+  .tool-title { margin: .35rem 0 .35rem; }
+  .generator-top {
+    display: grid;
+    gap: 1.25rem;
+    align-items: start;
+  }
+  @media (min-width: 980px) {
+    .generator-top { grid-template-columns: minmax(0, 1fr) minmax(18rem, 34rem); }
+  }
+  .viz-title { font-size: 1.35rem; margin: 0 0 .45rem; }
+  .generator-top .gen-preview { margin-top: 0; }
+  @media (max-width: 720px) {
+    #modal-app { margin-top: .6rem; }
+    .tool-switch { margin-top: .55rem; }
+    .generator-top { gap: .55rem; }
+    .describe textarea { min-height: 4.25rem; }
+    .describe .ask-bar { margin-top: .4rem; gap: .5rem; }
+    .describe .examples { margin-top: .4rem; }
+    .describe .quiet { margin-top: .3rem; }
+  }
   .gen-preview {
     display: grid;
     gap: 1rem;
@@ -357,6 +380,7 @@ import Base from '../layouts/Base.astro';
   }
   @media (min-width: 800px) {
     .gen-preview { grid-template-columns: minmax(0, 34rem) auto; }
+    .generator-top .gen-preview { grid-template-columns: 1fr; }
   }
   canvas[data-gen-view], canvas[data-gen-object] { width: min(100%, 34rem); }
   .stage-view { min-width: 0; }
@@ -433,6 +457,7 @@ import Base from '../layouts/Base.astro';
   .thread li { margin: .15rem 0; }
   .var-grid { display: grid; gap: .75rem; }
   @media (min-width: 860px) { .var-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+  [data-more-variations] { margin-top: .75rem; min-height: 2.75rem; }
   :global(.var-card) {
     background: var(--card);
     border: 1px solid var(--line);
