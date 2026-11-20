@@ -16,6 +16,7 @@ import {
   objectUnit,
   shellKind,
   shownModes,
+  visibleShellLines,
 } from './object-view.js';
 
 test('each body maps to its textbook family', () => {
@@ -183,5 +184,32 @@ test('each body fills most of the stage and keeps a margin', () => {
         assert.ok(box.y * unit <= stage.height * 0.46 + 0.01, `${family} clips down ${stage.width}`);
       }
     }
+  }
+});
+
+test('shell lines keep one meridian on each side and leave the crown', () => {
+  const radius = (y) => 0.18 + (0.76 - 0.18) * (y + 0.42) / 1.1;
+  const meridian = (fraction) => {
+    const line = [];
+    for (let i = 0; i <= 12; i++) {
+      const y = -0.42 + (1.1 * i) / 12;
+      line.push([fraction * radius(y), y]);
+    }
+    return line;
+  };
+  const ring = [];
+  for (let step = 0; step <= 8; step++) {
+    const angle = (Math.PI * 2 * step) / 8;
+    ring.push([Math.cos(angle) * 0.2, -0.3 + Math.sin(angle) * 0.03]);
+  }
+  const lines = visibleShellLines([
+    meridian(0.38), meridian(-0.38), meridian(0.92), meridian(-0.92), ring,
+  ], true);
+  const meridians = lines.filter((line) => Math.max(...line.map((point) => point[1])) - Math.min(...line.map((point) => point[1])) > 0.12);
+  assert.equal(meridians.length, 2);
+  assert.equal(lines.length, 2);
+  for (const line of meridians) {
+    const maxAbs = Math.max(...line.map(([x]) => Math.abs(x)));
+    assert.ok(Math.min(...line.map(([x]) => Math.abs(x))) >= maxAbs * 0.5 - 1e-6);
   }
 });
