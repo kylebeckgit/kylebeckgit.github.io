@@ -844,7 +844,7 @@ export function mountGenerator(root, { openInDesigner } = {}) {
       body: snap,
       partials: snap.partials,
       solvedModes: cachedModes(snap),
-      selected: -1,
+      selected: hotIndex(),
     }, event.clientX - rect.left, event.clientY - rect.top);
     if (stick) audioState.selected = hit;
     audioState.hover = hit;

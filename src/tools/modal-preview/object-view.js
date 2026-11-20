@@ -1097,6 +1097,10 @@ export function hitObjectMode(options, x, y) {
   let py = y - height / 2;
   if (kind === 'bowl') py += unit * 0.36;
   const modes = shownModes(options.partials || [], { selected: -1, limit: 8 });
+  const highlighted = options.selected;
+  if (Number.isInteger(highlighted) && highlighted >= 0 && !modes.some((mode) => mode.index === highlighted)) {
+    modes.push({ index: highlighted, amp: 1, env: 1, weight: 1, hot: true });
+  }
   const solved = options.solvedModes;
   let best = -1;
   let bestDistance = Math.max(10, unit * 0.07);

@@ -245,6 +245,7 @@ export function mount(root) {
     state.profilePartials = shaped;
     publishShape(0);
     pushModes();
+    render();
   }
 
   function pushHistory() {
@@ -681,6 +682,7 @@ export function mount(root) {
       body: objectBody(),
       partials: state.partials,
       solvedModes: cachedModes(objectBody()),
+      selected: state.hoverPartial >= 0 ? state.hoverPartial : state.selectedPartial,
     }, point.x, point.y);
     if (stick) state.selectedPartial = hit;
     state.hoverPartial = hit;
