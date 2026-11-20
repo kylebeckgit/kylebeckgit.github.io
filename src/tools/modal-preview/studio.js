@@ -123,8 +123,9 @@ export function mountStudio(root, api) {
   root.querySelector('[data-more-variations]')?.addEventListener('click', () => {
     const turn = turns[turns.length - 1];
     if (!turn || turn.variations.length >= VARIATION_CAP) return;
-    const prompt = askText.value.trim() || turn.thread[0] || '';
-    const extra = moreVariations(prompt, turn.variations);
+    const base = turn.variations[turn.selected] || turn.variations[0];
+    const prompt = turn.thread[turn.thread.length - 1] || '';
+    const extra = moreVariations(prompt, turn.variations, base);
     if (!extra.length) {
       const moreButton = root.querySelector('[data-more-variations]');
       if (moreButton) moreButton.hidden = true;

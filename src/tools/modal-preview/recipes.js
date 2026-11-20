@@ -512,16 +512,16 @@ const EXTRA_AXES = [
   { stiffness: 0.2, name: (object) => `Stiffer ${object.toLowerCase()}`, line: 'A stiffer body, so the partials spread further apart.' },
   { stiffness: -0.16, name: (object) => `Softer ${object.toLowerCase()}`, line: 'Less stiffness, so the partials sit closer together.' },
   { oddEven: 0.4, name: (object) => `Hollow ${object.toLowerCase()}`, line: 'The even partials are quieter.' },
-  { damping: 0.26, name: (object) => `Drier ${object.toLowerCase()}`, line: 'The same object, dying faster.' },
-  { brightness: 0.42, damping: -0.06, name: (object) => `Brighter still ${object.toLowerCase()}`, line: 'More energy in the top than the bright card.' },
-  { brightness: -0.42, name: (object) => `Darker still ${object.toLowerCase()}`, line: 'Less top than the dark card.' },
-  { stiffness: 0.32, name: (object) => `Further detuned ${object.toLowerCase()}`, line: 'The upper partials sit further from the series.' },
-  { damping: -0.34, name: (object) => `Longer still ${object.toLowerCase()}`, line: 'Lower damping, so it hangs on longer.' },
+  { key: 'dry', damping: 0.26, name: (object) => `Drier ${object.toLowerCase()}`, line: 'The same object, dying faster.' },
+  { key: 'bright', brightness: 0.42, damping: -0.06, name: (object) => `Brighter still ${object.toLowerCase()}`, line: 'More energy in the top than the bright card.' },
+  { key: 'dark', brightness: -0.42, name: (object) => `Darker still ${object.toLowerCase()}`, line: 'Less top than the dark card.' },
+  { key: 'detune', stiffness: 0.32, name: (object) => `Further detuned ${object.toLowerCase()}`, line: 'The upper partials sit further from the series.' },
+  { key: 'long', damping: -0.34, name: (object) => `Longer still ${object.toLowerCase()}`, line: 'Lower damping, so it hangs on longer.' },
 ];
 
-export function moreVariations(prompt, existing = []) {
+export function moreVariations(prompt, existing = [], current = null) {
   const names = new Set((existing || []).map((variation) => variation.name));
-  const core = readRecipe(prompt, null);
+  const core = current?.controls ? current : readRecipe(prompt, null);
   const batch = [];
   for (const axis of EXTRA_AXES) {
     const name = axis.name(core.objectName);

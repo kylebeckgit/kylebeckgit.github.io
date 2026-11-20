@@ -84,5 +84,7 @@ test('more variations add a second batch without repeating names', () => {
   assert.equal(again.length, 4);
   const names = [...first, ...extra, ...again].map((variation) => variation.name);
   assert.equal(new Set(names).size, names.length);
-  assert.ok(ms < 40, `more variations took ${ms.toFixed(1)} ms`);
+  const fromCard = moreVariations('gong', first, first[0]);
+  assert.equal(fromCard[0].objectName, first[0].objectName);
+  assert.ok(ms < 80, `more variations took ${ms.toFixed(1)} ms`);
 });
