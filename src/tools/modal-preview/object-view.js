@@ -495,12 +495,15 @@ function drawBend(ctx, family, index, unit, bend, tint, hot, kind) {
     if (hot) drawBarNodes(ctx, unit, index, width);
   } else if (family === 'string') {
     drawCrest(ctx, unit, (t) => unit * 0.22 - modeDisplacement('string', index, t) * unit * 0.16 * bend);
+  } else if (kind === 'disc') {
+    ctx.save();
+    ctx.translate(0, unit * 0.08);
+    drawDiskRidges(ctx, unit, 'plate', index, width, [unit * 0.9, unit * 0.9]);
+    ctx.restore();
   } else if (family === 'membrane' || family === 'plate') {
     drawDiskRidges(ctx, unit, family, index, width);
   } else if (kind === 'flared' || kind === 'bowl' || kind === 'cowbell' || kind === 'handpan' || family === 'shell') {
     drawShellRibs(ctx, unit, index, width, kind || 'flared');
-  } else if (kind === 'disc') {
-    drawDiskRidges(ctx, unit, 'plate', index, width);
   } else if (family === 'tube') {
     drawTubeBand(ctx, unit, index, bend);
   } else {
@@ -687,9 +690,9 @@ function drawDisk(ctx, unit, family, grow, tone, tint, glass) {
   ctx.restore();
 }
 
-function drawDiskRidges(ctx, unit, family, index, width) {
+function drawDiskRidges(ctx, unit, family, index, width, radii) {
   const shape = modeShape(family, index);
-  const [rx, ry] = diskRadii(unit, family);
+  const [rx, ry] = radii || diskRadii(unit, family);
   ctx.lineWidth = width;
   for (let ring = 1; ring <= shape.rings; ring++) {
     const f = ring / (shape.rings + 0.65);
