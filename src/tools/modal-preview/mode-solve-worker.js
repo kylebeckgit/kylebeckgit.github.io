@@ -1,4 +1,4 @@
-import { solveFlatModes } from './mode-solve.js';
+import { solveFlatModes, solveShellModes } from './mode-solve.js';
 
 let latest = 0;
 
@@ -8,7 +8,7 @@ self.onmessage = (event) => {
   latest = message.id;
   const id = message.id;
   const started = performance.now();
-  const solved = solveFlatModes(message);
+  const solved = message.model === 'shell' ? solveShellModes(message) : solveFlatModes(message);
   if (id !== latest) return;
   self.postMessage({
     id,

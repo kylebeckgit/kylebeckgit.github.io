@@ -2,10 +2,11 @@
 // mass, and subspace iteration. Drums are fixed membranes. Plates and gongs
 // are simply supported, so their nodal lines are the membrane lines and the
 // frequencies scale with bending stiffness. The lines are a marching-squares
-// contour of that field, smoothed, and clipped at the rim. This is a picture
-// of the shape. It does not replace the preview partials.
+// contour of that field, smoothed, and clipped at the rim. Bells, bowls, and
+// wine glasses use a thin shell along the drawn profile. Solved frequency
+// ratios replace the partial ratios when SHAPE_SOUND is on.
 
-import { bodyFamily, drawKind, materialKey } from './object-view.js';
+import { bodyFamily, drawKind, materialKey, shellMeridian } from './object-view.js';
 
 const MATERIALS = {
   metal: { E: 200e9, rho: 7800, nu: 0.3, h: 0.003, tension: 8000 },
@@ -27,7 +28,12 @@ const MATERIALS = {
 export function flatSpec(body = {}) {
   const kind = drawKind(body);
   const family = bodyFamily(body);
-  if (kind === 'flared' || kind === 'bowl' || kind === 'cowbell' || kind === 'handpan') return null;
+  // Bells, bowls, and wine glasses are thin shells of revolution. Cowbells
+  // and handpans stay drawn, because this model does not fit their outline.
+  if (kind === 'flared' || kind === 'bowl' || kind === 'goblet') {
+    return { shape: kind, model: 'shell', material: materialKey(body) };
+  }
+  if (kind === 'cowbell' || kind === 'handpan') return null;
   if (family === 'bar' || family === 'string' || family === 'tube' || family === 'box') return null;
   // A gong or cymbal is a solid disc. The raised center is only shading.
   if (kind === 'disc') return { shape: 'disc', model: 'plate', material: materialKey(body) };
@@ -61,7 +67,7 @@ export function applyShapeSound(partials, modes) {
 
 export function patternNote(spec, phase) {
   if (!spec) return '';
-  if (phase === 'ready') return 'Nodal lines are solved from the shape. The sound is unchanged.';
+  if (phase === 'ready') return 'Nodal lines and partial frequencies are solved from the shape.';
   return 'Solving the nodal pattern.';
 }
 
@@ -784,6 +790,163 @@ function nodalLines(mesh, free, vector) {
     }
     return Math.hypot(maxX - minX, maxY - minY) > 0.12;
   }).map((path) => finishPath(path, mesh.kind));
+}
+
+// Axisymmetric thin shell. One circumferential order at a time, with a
+// straight element along the drawn profile: membrane strains at one point,
+// bending on a Hermite normal displacement. The crown or the base is held,
+// and the lip is free. Frequencies come back as ω; the picture uses the
+// nodal meridians and the zeros of the normal displacement.
+const SHELL_SCALE = 0.15;
+
+function shellStrains(local, t, Le, R, sinp, cosp, order) {
+  const U = (1 - t) * local[0] + t * local[4];
+  const V = (1 - t) * local[1] + t * local[5];
+  const dU = (local[4] - local[0]) / Le;
+  const dV = (local[5] - local[1]) / Le;
+  const t2 = t * t;
+  const t3 = t2 * t;
+  const W = (1 - 3 * t2 + 2 * t3) * local[2]
+    + Le * (t - 2 * t2 + t3) * local[3]
+    + (3 * t2 - 2 * t3) * local[6]
+    + Le * (-t2 + t3) * local[7];
+  const dW = ((-6 * t + 6 * t2) / Le) * local[2]
+    + (1 - 4 * t + 3 * t2) * local[3]
+    + ((6 * t - 6 * t2) / Le) * local[6]
+    + (-2 * t + 3 * t2) * local[7];
+  const ddW = ((-6 + 12 * t) / (Le * Le)) * local[2]
+    + ((-4 + 6 * t) / Le) * local[3]
+    + ((6 - 12 * t) / (Le * Le)) * local[6]
+    + ((-2 + 6 * t) / Le) * local[7];
+  return [
+    dU,
+    (sinp * U + order * V + cosp * W) / R,
+    dV - (sinp * V) / R - (order * U) / R,
+    ddW,
+    -(order * order * W) / (R * R) + (sinp * dW) / R,
+    order * (dW / R - (sinp * W) / (R * R)),
+  ];
+}
+
+function shellHarmonic(meridian, order, C, D, h, nu, count) {
+  const pts = meridian.pts;
+  const last = pts.length - 1;
+  const map = [];
+  let freeCount = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const fixed = (i === 0 && meridian.fixStart) || (i === last && meridian.fixEnd);
+    for (let dof = 0; dof < 4; dof++) map.push(fixed ? -1 : freeCount++);
+  }
+  const K = Array.from({ length: freeCount }, () => new Map());
+  const M = new Float64Array(freeCount);
+  const basis = Array.from({ length: 8 }, (_, index) => {
+    const local = [0, 0, 0, 0, 0, 0, 0, 0];
+    local[index] = 1;
+    return local;
+  });
+  const gauss = [0.5 - Math.sqrt(0.6) / 2, 0.5, 0.5 + Math.sqrt(0.6) / 2];
+  const weight = [5 / 18, 8 / 18, 5 / 18];
+  for (let el = 0; el < last; el++) {
+    const [y0, r0] = pts[el];
+    const [y1, r1] = pts[el + 1];
+    const dy = (y1 - y0) * SHELL_SCALE;
+    const dr = (r1 - r0) * SHELL_SCALE;
+    const Le = Math.hypot(dy, dr);
+    if (Le < 1e-8) continue;
+    const sinp = dr / Le;
+    const cosp = dy / Le;
+    const locals = [0, 1, 2, 3].map((dof) => map[el * 4 + dof]).concat([0, 1, 2, 3].map((dof) => map[(el + 1) * 4 + dof]));
+    const add = (strains, span, part) => {
+      for (let p = 0; p < 8; p++) {
+        if (locals[p] < 0) continue;
+        for (let q = 0; q < 8; q++) {
+          if (locals[q] < 0) continue;
+          const a = strains[p];
+          const b = strains[q];
+          const membrane = part === 'bend' ? 0 : C * (a[0] * b[0] + a[1] * b[1] + nu * (a[0] * b[1] + a[1] * b[0]) + ((1 - nu) / 2) * a[2] * b[2]);
+          const bending = part === 'membrane' ? 0 : D * (a[3] * b[3] + a[4] * b[4] + nu * (a[3] * b[4] + a[4] * b[3]) + 2 * (1 - nu) * a[5] * b[5]);
+          const value = (membrane + bending) * span;
+          K[locals[p]].set(locals[q], (K[locals[p]].get(locals[q]) || 0) + value);
+        }
+      }
+    };
+    const midR = Math.max(((r0 + r1) / 2) * SHELL_SCALE, 0.008);
+    const membraneStrains = basis.map((local) => shellStrains(local, 0.5, Le, midR, sinp, cosp, order));
+    add(membraneStrains, midR * Le, 'membrane');
+    for (let g = 0; g < gauss.length; g++) {
+      const t = gauss[g];
+      const R = Math.max(((1 - t) * r0 + t * r1) * SHELL_SCALE, 0.008);
+      const strains = basis.map((local) => shellStrains(local, t, Le, R, sinp, cosp, order));
+      add(strains, R * weight[g] * Le, 'bend');
+    }
+    const lump = h * midR * Le / 2;
+    for (const node of [0, 1]) {
+      for (const dof of [0, 1, 2]) {
+        const slot = locals[node * 4 + dof];
+        if (slot >= 0) M[slot] += lump;
+      }
+      const spin = locals[node * 4 + 3];
+      if (spin >= 0) M[spin] += lump * Le * Le / 12;
+    }
+  }
+  for (let i = 0; i < freeCount; i++) if (M[i] <= 0) M[i] = h * 1e-6;
+  const solved = subspace(K, M, count, 11 + order);
+  return solved.values.map((lambda, index) => {
+    const vector = solved.vectors[index];
+    const W = pts.map((_, node) => {
+      const slot = map[node * 4 + 2];
+      return slot < 0 ? 0 : vector[slot];
+    });
+    return { lambda, n: order, lines: shellLines(pts, order, W) };
+  });
+}
+
+function shellLines(pts, order, W) {
+  const fractions = [];
+  for (let k = 0; k < order * 2; k++) {
+    const sine = Math.sin((Math.PI * (2 * k + 1)) / (2 * order));
+    const shown = Math.abs(sine) > 0.96 ? Math.sign(sine) * 0.92 : sine;
+    if (!fractions.some((value) => Math.abs(value - shown) < 1e-3)) fractions.push(shown);
+  }
+  const lines = fractions.map((fraction) => pts.map(([y, r]) => [fraction * r, y]));
+  for (let i = 1; i < W.length; i++) {
+    if (!(W[i - 1] * W[i] < 0)) continue;
+    const t = W[i - 1] / (W[i - 1] - W[i]);
+    const y = pts[i - 1][0] + (pts[i][0] - pts[i - 1][0]) * t;
+    const r = pts[i - 1][1] + (pts[i][1] - pts[i - 1][1]) * t;
+    const ry = Math.min(0.045, r * 0.18);
+    const ring = [];
+    for (let step = 0; step <= 16; step++) {
+      const angle = (Math.PI * 2 * step) / 16;
+      ring.push([Math.cos(angle) * r * 0.94, y + Math.sin(angle) * ry]);
+    }
+    lines.push(ring);
+  }
+  return lines;
+}
+
+export function solveShellModes(spec, { count = 6 } = {}) {
+  const started = performance.now();
+  const meridian = shellMeridian(spec.shape);
+  if (!meridian) return { modes: [], nodes: 0, ms: 0 };
+  const mat = materialOf(spec.material);
+  const C = mat.h / (1 - mat.nu ** 2);
+  const D = (mat.h ** 3) / (12 * (1 - mat.nu ** 2));
+  const found = [];
+  for (const order of [2, 3, 4]) {
+    if (performance.now() - started > 700) break;
+    for (const mode of shellHarmonic(meridian, order, C, D, mat.h, mat.nu, 2)) found.push(mode);
+  }
+  found.sort((a, b) => a.lambda - b.lambda);
+  const speed = Math.sqrt(mat.E / mat.rho);
+  const modes = found.slice(0, count).map((mode) => ({
+    lambda: mode.lambda,
+    omega: Math.sqrt(Math.max(mode.lambda, 0)) * speed,
+    n: mode.n,
+    lines: mode.lines,
+    shell: true,
+  }));
+  return { modes, nodes: meridian.pts.length, ms: performance.now() - started };
 }
 
 export function solveFlatModes(spec, { count = 6 } = {}) {

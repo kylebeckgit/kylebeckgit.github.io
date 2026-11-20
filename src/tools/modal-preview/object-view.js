@@ -526,6 +526,19 @@ function drawBend(ctx, family, index, unit, bend, tint, hot, kind, solved) {
   ctx.lineWidth = width;
   ctx.strokeStyle = tint;
   const solvedMode = solved?.[index] || (solved?.length ? solved[index % solved.length] : null);
+  if (solvedMode?.shell && (kind === 'flared' || kind === 'bowl' || kind === 'goblet')) {
+    const paint = () => drawSolvedLines(ctx, unit, kind, family, solvedMode.lines, width);
+    if (kind === 'goblet') {
+      ctx.save();
+      traceGobletBowl(ctx, unit);
+      ctx.clip();
+      paint();
+      ctx.restore();
+      return;
+    }
+    paint();
+    return;
+  }
   if (kind === 'goblet') {
     ctx.save();
     traceGobletBowl(ctx, unit);
@@ -780,6 +793,7 @@ function drawSquareRidges(ctx, unit, index, width) {
 }
 
 function placeSolved(x, y, unit, kind, family) {
+  if (kind === 'flared' || kind === 'bowl' || kind === 'goblet') return [x * unit, y * unit];
   if (kind === 'disc') return [x * unit * 0.9, unit * 0.08 + y * unit * 0.9];
   if (family === 'membrane') {
     const [rx, ry] = diskRadii(unit, family);
@@ -869,6 +883,40 @@ function drawShell(ctx, unit, flare, tone, tint, glass) {
 // Half-width of a church bell, mouth down. The crown rounds out to the
 // shoulder. Below the shoulder the side only gets wider: a gently concave
 // waist, then the sound bow and the flared lip.
+function sampleMeridian(y0, y1, radius, fixStart, fixEnd) {
+  const steps = 16;
+  const pts = [];
+  for (let i = 0; i <= steps; i++) {
+    const y = y0 + ((y1 - y0) * i) / steps;
+    pts.push([y, radius(y)]);
+  }
+  return { pts, fixStart, fixEnd };
+}
+
+// The drawn profile, in the same units as the canvas before it is scaled.
+// fixStart and fixEnd hold that end of the meridian (crown or base).
+export function shellMeridian(kind) {
+  if (kind === 'flared') return sampleMeridian(-0.42, 0.68, flaredHalf, true, false);
+  if (kind === 'goblet') return sampleMeridian(-0.52, 0.12, gobletBowlHalf, false, true);
+  if (kind === 'bowl') {
+    const pts = [];
+    const steps = 24;
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      const omt = 1 - t;
+      const y = omt * omt * -0.15 + 2 * omt * t * 0.82 + t * t * 0.96;
+      const r = omt * omt * 0.72 + 2 * omt * t * 0.98;
+      if (r < 0.06 && pts.length) {
+        pts.push([y, 0.06]);
+        break;
+      }
+      pts.push([y, r]);
+    }
+    return { pts, fixStart: false, fixEnd: true };
+  }
+  return null;
+}
+
 export function flaredHalf(n) {
   const y = Number(n) || 0;
   const shoulderY = -0.06;
@@ -1136,7 +1184,7 @@ export function hitObjectMode(options, x, y) {
   };
   for (const mode of modes) {
     const lines = solved?.[mode.index]?.lines;
-    if (lines && (kind === 'disc' || family === 'plate' || family === 'membrane')) {
+    if (lines && (kind === 'disc' || family === 'plate' || family === 'membrane' || kind === 'flared' || kind === 'bowl' || kind === 'goblet')) {
       for (const line of lines) {
         for (let i = 1; i < line.length; i++) {
           const a = placeSolved(line[i - 1][0], line[i - 1][1], unit, kind, family);

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { applyShapeSound, flatSpec, materialFactor, saddlePairs, solveFlatModes } from './mode-solve.js';
+import { shellMeridian } from './object-view.js';
+import { applyShapeSound, flatSpec, materialFactor, saddlePairs, solveFlatModes, solveShellModes } from './mode-solve.js';
 
 function maxTurn(lines) {
   let worst = 0;
@@ -69,9 +70,16 @@ function lineMeetsRim(lines, kind) {
   });
 }
 
-test('curved shells stay stylized and flat shapes get a solve', () => {
-  assert.equal(flatSpec({ name: 'Church bell', shape: 'shell', material: 'metal' }), null);
-  assert.equal(flatSpec({ name: 'Singing bowl', shape: 'bowl', material: 'metal' }), null);
+test('bells, bowls, and wine glasses get a shell solve', () => {
+  assert.deepEqual(flatSpec({ name: 'Church bell', shape: 'shell', material: 'metal' }), {
+    shape: 'flared', model: 'shell', material: 'metal',
+  });
+  assert.deepEqual(flatSpec({ name: 'Singing bowl', shape: 'bowl', material: 'metal' }), {
+    shape: 'bowl', model: 'shell', material: 'metal',
+  });
+  assert.deepEqual(flatSpec({ name: 'Wine glass', shape: 'shell', material: 'glass', voice: 'glass' }), {
+    shape: 'goblet', model: 'shell', material: 'glass',
+  });
   assert.equal(flatSpec({ name: 'Cowbell', shape: 'shell', material: 'metal' }), null);
   assert.equal(flatSpec({ name: 'Handpan', shape: 'shell', material: 'metal' }), null);
   assert.equal(flatSpec({ name: 'Glass tube', shape: 'tube', material: 'glass' }), null);
@@ -130,6 +138,51 @@ test('a square (2,2) mode crosses as a plus', () => {
     const b = side(line[line.length - 1]);
     assert.equal(opposite[a], b, `ends on ${a} and ${b}`);
   }
+});
+
+function insideMeridian(lines, meridian) {
+  const pts = meridian.pts;
+  return lines.every((line) => line.every(([x, y]) => {
+    let radius = pts[0][1];
+    for (let i = 1; i < pts.length; i++) {
+      const span = pts[i][0] - pts[i - 1][0];
+      if (y <= pts[i][0] || i === pts.length - 1) {
+        const t = span === 0 ? 0 : Math.max(0, Math.min(1, (y - pts[i - 1][0]) / span));
+        radius = pts[i - 1][1] + (pts[i][1] - pts[i - 1][1]) * t;
+        break;
+      }
+    }
+    return Math.abs(x) <= radius * 1.05 + 0.04;
+  }));
+}
+
+test('a shell solve returns ordered modes on the drawn profile', () => {
+  for (const shape of ['flared', 'bowl', 'goblet']) {
+    const solved = solveShellModes({ shape, model: 'shell', material: shape === 'goblet' ? 'glass' : 'metal' });
+    assert.equal(solved.modes.length, 6, shape);
+    assert.equal(solved.modes[0].n, 2, shape);
+    assert.ok(solved.modes[0].omega > 50 && solved.modes[0].omega < 1e6, `${shape} ω ${solved.modes[0].omega}`);
+    assert.ok(solved.ms < 500, `${shape} took ${solved.ms} ms`);
+    const ratio = solved.modes[1].omega / solved.modes[0].omega;
+    assert.ok(ratio > 1.05 && ratio < 8, `${shape} ratio ${ratio}`);
+    for (let i = 1; i < solved.modes.length; i++) {
+      assert.ok(solved.modes[i].omega > solved.modes[i - 1].omega * 0.999, shape);
+    }
+    assert.ok(solved.modes.some((mode) => mode.n !== 2), shape);
+    assert.ok(insideMeridian(solved.modes[0].lines, shellMeridian(shape)), `${shape} lines leave the profile`);
+  }
+  const metal = solveShellModes({ shape: 'flared', model: 'shell', material: 'metal' });
+  const glass = solveShellModes({ shape: 'flared', model: 'shell', material: 'glass' });
+  assert.ok(Math.abs(metal.modes[0].omega - glass.modes[0].omega) / metal.modes[0].omega > 0.05);
+  const partials = [
+    { ratio: 1, gainDb: 0, decay: 1.2 },
+    { ratio: 2, gainDb: -6, decay: 0.4 },
+  ];
+  const next = applyShapeSound(partials, metal.modes);
+  assert.equal(next[0].ratio, 1);
+  assert.equal(next[1].gainDb, -6);
+  assert.equal(next[1].decay, 0.4);
+  assert.ok(Math.abs(next[1].ratio - metal.modes[1].omega / metal.modes[0].omega) < 1e-9);
 });
 
 test('shape sound replaces ratios and keeps level, decay, and the fundamental', () => {
