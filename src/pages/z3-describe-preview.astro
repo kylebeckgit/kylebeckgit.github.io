@@ -3,16 +3,16 @@ import Base from '../layouts/Base.astro';
 ---
 <Base title="Modal preview" path="/z3-describe-preview.html" description="Unlisted preview. Design a modal body by hand, or generate variations from a sentence." robots="noindex, nofollow">
   <p class="eyebrow"><a href="/tools/">Tools</a></p>
-  <h1>Modal preview</h1>
-  <p class="lede">Two tools. The designer edits a body by hand. The generator reads a sentence into a few variations.</p>
+  <h1>Describe a sound</h1>
+  <p class="lede">Hear it, see its partials, and tweak it in the designer.</p>
 
   <div id="modal-app">
     <div class="tool-switch" role="tablist" aria-label="Tools">
-      <button type="button" class="tool-tab" role="tab" id="tab-designer" data-tool-tab="designer" aria-controls="tool-designer" aria-selected="true">Modal designer</button>
-      <button type="button" class="tool-tab" role="tab" id="tab-generator" data-tool-tab="generator" aria-controls="tool-generator" aria-selected="false">Modal generator</button>
+      <button type="button" class="tool-tab" role="tab" id="tab-designer" data-tool-tab="designer" aria-controls="tool-designer" aria-selected="false">Modal designer</button>
+      <button type="button" class="tool-tab" role="tab" id="tab-generator" data-tool-tab="generator" aria-controls="tool-generator" aria-selected="true">Modal generator</button>
     </div>
 
-    <section id="tool-designer" data-tool="designer" role="tabpanel" aria-labelledby="tab-designer">
+    <section id="tool-designer" data-tool="designer" role="tabpanel" aria-labelledby="tab-designer" hidden>
     <section class="panel" aria-labelledby="modal-heading">
       <h2 id="modal-heading">Modal designer</h2>
       <p class="quiet">Starts from a plain body. Randomize rolls a new one in this tool only.</p>
@@ -254,7 +254,7 @@ import Base from '../layouts/Base.astro';
     </details>
     </section>
 
-    <section id="tool-generator" data-tool="generator" role="tabpanel" aria-labelledby="tab-generator" hidden>
+    <section id="tool-generator" data-tool="generator" role="tabpanel" aria-labelledby="tab-generator">
       <h2 class="tool-title">Modal generator</h2>
       <p class="quiet">The sentence is read in this browser. Nothing is sent. Command or Ctrl+Enter describes. Randomize here does not change the designer.</p>
       <section class="describe" aria-labelledby="describe-heading">
@@ -264,6 +264,14 @@ import Base from '../layouts/Base.astro';
             <textarea data-ask rows="3" placeholder="Glass bowl struck softly, slightly detuned, long shimmer"></textarea>
           </label>
           <button type="button" class="btn solid" data-ask-btn>Describe</button>
+        </div>
+        <div class="examples" data-examples role="group" aria-label="Example sounds">
+          <button type="button" data-example="church bell">Church bell</button>
+          <button type="button" data-example="singing bowl">Singing bowl</button>
+          <button type="button" data-example="wine glass">Wine glass</button>
+          <button type="button" data-example="gong">Gong</button>
+          <button type="button" data-example="wooden marimba bar">Marimba bar</button>
+          <button type="button" data-example="cymbal">Cymbal</button>
         </div>
         <p class="quiet" data-allowance></p>
         <p class="status" data-studio-status role="status"></p>
@@ -400,6 +408,27 @@ import Base from '../layouts/Base.astro';
   }
   textarea { width: 100%; min-height: 6.5rem; resize: vertical; }
   .ask-bar .btn { min-height: 2.75rem; }
+  .examples {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .45rem;
+    margin-top: .75rem;
+  }
+  .examples button {
+    font: inherit;
+    color: var(--fg);
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: .35rem .75rem;
+    min-height: 2.4rem;
+    cursor: pointer;
+  }
+  .examples button:hover,
+  .examples button:focus-visible {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
   .thread { margin: .35rem 0 1rem; padding-left: 1.2rem; color: var(--muted); }
   .thread li { margin: .15rem 0; }
   .var-grid { display: grid; gap: .75rem; }
