@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { buildPartials } from './engine.js';
 import { renderPreview, peakStats, scaleToPeak } from './resonator.js';
-import { describePrompt, fileSlug, readRecipe } from './recipes.js';
+import { describePrompt, fileSlug, moreVariations, readRecipe } from './recipes.js';
 import { rememberedIndex } from './studio.js';
 
 test('a glass bowl becomes four longer bowl variations', () => {
@@ -72,4 +72,17 @@ test('the same sentence always gives the same recipe', () => {
   assert.deepEqual(first, second);
   assert.equal(first.controls.preset, 'bell');
   assert.equal(fileSlug(first.objectName), 'prayer-bell.csv');
+});
+
+test('more variations add a second batch without repeating names', () => {
+  const first = describePrompt('church bell');
+  const started = performance.now();
+  const extra = moreVariations('church bell', first);
+  const again = moreVariations('church bell', [...first, ...extra]);
+  const ms = performance.now() - started;
+  assert.equal(extra.length, 4);
+  assert.equal(again.length, 4);
+  const names = [...first, ...extra, ...again].map((variation) => variation.name);
+  assert.equal(new Set(names).size, names.length);
+  assert.ok(ms < 40, `more variations took ${ms.toFixed(1)} ms`);
 });

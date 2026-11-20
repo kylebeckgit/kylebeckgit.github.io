@@ -874,6 +874,7 @@ export function mountGenerator(root, { openInDesigner } = {}) {
     const age = audioState.strike ? (performance.now() - audioState.strike) / 1000 : null;
     paintCurrent(audioState.strike ? age : null);
   });
+  requestAnimationFrame(() => paintCurrent(null));
   return controller;
 }
 
