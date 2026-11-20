@@ -368,7 +368,7 @@ export function paintObject(ctx, options) {
     return y;
   };
 
-  contactShadow(ctx, family, unit, tone.shade);
+  contactShadow(ctx, kind, family, unit, tone.shade);
   drawBody(ctx, family, unit, tone, flare, shift, kind);
 
   ctx.save();
@@ -376,15 +376,18 @@ export function paintObject(ctx, options) {
   const ordered = [...modes].sort((a, b) => a.amp - b.amp);
   for (const mode of ordered) {
     const motion = motionOf(mode);
-    if (playing && Math.abs(motion) < 0.04) continue;
     const bend = motion * (solo ? 0.85 : 0.4 + mode.amp * 0.35);
-    const fade = Math.max(0.08, Math.min(1, Math.abs(motion))) * (mode.hot ? 0.9 : 0.22 + mode.amp * 0.28);
-    const tint = accentTint(accent, mode.hot, card);
+    const glass = tone.kind === 'glass';
+    const paleFace = glass || kind === 'cowbell' || kind === 'handpan' || kind === 'flared' || kind === 'disc';
+    const tint = mode.hot || paleFace ? accent : accentTint(accent, false, card);
+    const presence = Math.max(0.62, Math.min(1, Math.abs(motion)));
+    const fade = presence * (mode.hot ? 0.96 : paleFace ? 0.92 : 0.7 + mode.amp * 0.2);
     ctx.save();
     ctx.globalAlpha = fade;
     drawBend(ctx, family, mode.index, unit, bend, tint, mode.hot, kind);
     ctx.restore();
   }
+  if (kind === 'handpan') drawHandpanFace(ctx, unit, tone);
   ctx.restore();
   ctx.restore();
 }
@@ -393,25 +396,38 @@ function phaseOf(index, age) {
   return (1.4 + (index % 5) * 0.45) * age * Math.PI * 2;
 }
 
-function contactShadow(ctx, family, unit, shade) {
-  const place = family === 'bar' || family === 'string'
-    ? [unit * 0.04, unit * 0.4, unit * 0.86, unit * 0.06]
-    : family === 'tube'
-      ? [unit * 0.04, unit * 1.06, unit * 0.32, unit * 0.06]
-      : family === 'shell'
-        ? [unit * 0.04, unit * 0.92, unit * 0.62, unit * 0.07]
-        : family === 'box'
-          ? [unit * 0.08, unit * 0.78, unit * 0.7, unit * 0.06]
-          : [unit * 0.04, unit * 0.72, unit * 0.7, unit * 0.08];
+function contactShadow(ctx, kind, family, unit, shade) {
+  // y is just under the lowest painted point of that body, so the shadow sits on the ground.
+  const place = kind === 'handpan'
+    ? [0, unit * 0.32, unit * 0.7, unit * 0.03]
+    : kind === 'flared'
+      ? [0, unit * 0.78, unit * 0.7, unit * 0.035]
+      : kind === 'cowbell'
+        ? [0, unit * 0.64, unit * 0.52, unit * 0.03]
+        : kind === 'disc'
+          ? [0, unit * 1.02, unit * 0.78, unit * 0.04]
+          : kind === 'bowl' || family === 'shell'
+            ? [0, unit * 1.02, unit * 0.64, unit * 0.038]
+            : family === 'tube'
+              ? [0, unit * 1.05, unit * 0.36, unit * 0.032]
+              : family === 'bar'
+                ? [0, unit * 0.28, unit * 0.9, unit * 0.032]
+                : family === 'string'
+                  ? [0, unit * 0.74, unit * 0.95, unit * 0.032]
+                  : family === 'plate'
+                    ? [0, unit * 1.0, unit * 0.8, unit * 0.035]
+                    : family === 'membrane'
+                      ? [0, unit * 0.84, unit * 0.86, unit * 0.035]
+                      : [0, unit * 0.8, unit * 0.68, unit * 0.035];
   ctx.save();
   ctx.fillStyle = shade;
-  ctx.globalAlpha = 0.2;
+  ctx.globalAlpha = 0.22;
   ctx.beginPath();
-  ctx.ellipse(place[0], place[1], place[2] * 0.55, place[3] * 0.65, 0, 0, Math.PI * 2);
+  ctx.ellipse(place[0], place[1], place[2] * 0.62, place[3] * 0.7, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.globalAlpha = 0.1;
   ctx.beginPath();
-  ctx.ellipse(place[0], place[1] + place[3] * 0.35, place[2], place[3], 0, 0, Math.PI * 2);
+  ctx.ellipse(place[0], place[1] + place[3] * 0.2, place[2], place[3], 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
 }
@@ -520,14 +536,27 @@ function drawCrest(ctx, unit, yAt) {
 
 function drawTubeBand(ctx, unit, index, bend) {
   const samples = 28;
-  ctx.beginPath();
-  for (let i = 0; i < samples; i++) {
-    const t = i / (samples - 1);
-    const y = -unit * 0.86 + t * unit * 1.72;
-    const x = modeDisplacement('tube', index, t) * bend * unit * 0.07;
-    if (i === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
-  }
+  const color = ctx.strokeStyle;
+  const width = Math.max(ctx.lineWidth, unit * 0.055);
+  const trace = () => {
+    ctx.beginPath();
+    for (let i = 0; i < samples; i++) {
+      const t = i / (samples - 1);
+      const y = -unit * 0.86 + t * unit * 1.72;
+      const x = modeDisplacement('tube', index, t) * bend * unit * 0.15;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+  };
+  ctx.save();
+  ctx.strokeStyle = mixHex(String(color), '#3a2014', 0.55);
+  ctx.lineWidth = width + 2.4;
+  trace();
+  ctx.stroke();
+  ctx.restore();
+  ctx.lineWidth = width;
+  ctx.strokeStyle = color;
+  trace();
   ctx.stroke();
 }
 
@@ -718,57 +747,187 @@ function drawShell(ctx, unit, flare, tone, tint, glass) {
   ctx.stroke();
 }
 
-function drawShellRibs(ctx, unit, index, width, kind) {
+// Half-width of a church bell, mouth down. Narrow under the canon, rounded
+// shoulder, concave waist, then a flare out to the lip.
+export function flaredHalf(n) {
+  const y = Number(n) || 0;
+  if (y <= -0.42) return 0.12;
+  if (y < -0.02) {
+    const t = (y + 0.42) / 0.4;
+    return 0.12 + 0.36 * Math.sin(t * Math.PI / 2);
+  }
+  if (y < 0.34) {
+    const t = (y + 0.02) / 0.36;
+    return 0.48 - 0.07 * Math.sin(t * Math.PI);
+  }
+  const t = Math.max(0, Math.min(1, (y - 0.34) / 0.34));
+  const s = t * t * (3 - 2 * t);
+  return 0.48 + 0.24 * s;
+}
+
+function handpanHalf(n) {
+  const cy = 0.06;
+  const ry = 0.32;
+  const rx = 0.76;
+  const dy = (n - cy) / ry;
+  if (dy <= -1 || dy >= 0.08) return 0;
+  const clamped = Math.max(-1, Math.min(1, dy));
+  return rx * Math.sqrt(1 - clamped * clamped);
+}
+
+function bellHalf(kind, y, unit) {
+  const n = y / unit;
+  if (kind === 'bowl') return unit * (0.55 + 0.15 * Math.sin(Math.max(0, n) * 1.4));
+  if (kind === 'handpan') return handpanHalf(n) * unit;
+  return flaredHalf(n) * unit;
+}
+
+function drawCowbellRibs(ctx, unit, index, width) {
   const shape = modeShape('shell', index);
   const meridians = Math.min(4, shape.meridians);
-  ctx.lineWidth = width;
-  const mouthDown = kind !== 'bowl';
+  ctx.lineWidth = Math.max(width, unit * 0.05);
+  const topL = -0.32;
+  const topR = 0.16;
+  const botL = -0.46;
+  const botR = 0.32;
+  const topY = -0.46;
+  const faceBot = 0.54;
+  const lineBot = 0.46;
+  const uBot = (lineBot - topY) / (faceBot - topY);
+  const xL = topL + (botL - topL) * uBot;
+  const xR = topR + (botR - topR) * uBot;
   for (let i = 0; i < meridians; i++) {
-    const side = (i / (meridians - 1 || 1) - 0.5) * 2;
-    const x = side * unit * (kind === 'cowbell' ? 0.32 : 0.42);
+    const t = (i + 0.5) / meridians;
     ctx.beginPath();
-    if (mouthDown) {
-      ctx.moveTo(x * 0.35, -unit * 0.45);
-      ctx.quadraticCurveTo(x * 0.7, unit * 0.05, x, unit * 0.62);
-    } else {
-      ctx.moveTo(x * 0.42, -unit * 0.05);
-      ctx.quadraticCurveTo(x, unit * 0.28, x * 0.18, unit * 0.72);
-    }
+    ctx.moveTo((topL + (topR - topL) * t) * unit, topY * unit);
+    ctx.lineTo((xL + (xR - xL) * t) * unit, lineBot * unit);
     ctx.stroke();
   }
+  const sideT = 0.55;
+  const edgeTopX = 0.16;
+  const edgeBotX = 0.16 + (0.32 - 0.16) * uBot;
+  const outerTopX = 0.34;
+  const outerBotX = 0.34 + (0.5 - 0.34) * uBot;
+  const outerTopY = -0.38;
+  const outerBotY = -0.38 + (0.46 - -0.38) * uBot;
+  ctx.beginPath();
+  ctx.moveTo((edgeTopX + (outerTopX - edgeTopX) * sideT) * unit, (topY + (outerTopY - topY) * sideT) * unit);
+  ctx.lineTo((edgeBotX + (outerBotX - edgeBotX) * sideT) * unit, (lineBot + (outerBotY - lineBot) * sideT) * unit);
+  ctx.stroke();
   ctx.save();
-  ctx.setLineDash([Math.max(3, width * 2), Math.max(4, width * 2.6)]);
-  ctx.lineWidth = Math.max(1, width * 0.75);
+  ctx.setLineDash([Math.max(3, width * 2), Math.max(4, width * 2.4)]);
+  ctx.lineWidth = Math.max(1.4, width * 0.85);
   for (let circle = 1; circle <= (shape.circles || 0); circle++) {
-    const y = mouthDown ? -unit * 0.2 + circle * unit * 0.28 : -unit * 0.02 + circle * unit * 0.22;
-    const rx = unit * (0.28 + circle * 0.12);
+    const u = circle / ((shape.circles || 1) + 1);
+    const y = topY + (lineBot - topY) * u;
+    const x0 = topL + (botL - topL) * u;
+    const x1 = topR + (botR - topR) * u;
+    const outerX = 0.34 + (0.5 - 0.34) * u;
+    const outerY = -0.38 + (0.46 - -0.38) * u;
     ctx.beginPath();
-    ctx.ellipse(0, y, rx, unit * 0.07, 0, 0, Math.PI * 2);
+    ctx.moveTo(x0 * unit, y * unit);
+    ctx.lineTo(x1 * unit, y * unit);
+    ctx.lineTo((x1 + (outerX - x1) * 0.7) * unit, (y + (outerY - y) * 0.7) * unit);
     ctx.stroke();
   }
   ctx.restore();
 }
 
+function drawShellRibs(ctx, unit, index, width, kind) {
+  if (kind === 'cowbell') {
+    drawCowbellRibs(ctx, unit, index, width);
+    return;
+  }
+  const shape = modeShape('shell', index);
+  const meridians = Math.min(4, shape.meridians);
+  const profile = kind === 'bowl' ? 'bowl' : kind === 'handpan' ? 'handpan' : 'flared';
+  const y0 = profile === 'bowl' ? -unit * 0.05 : profile === 'handpan' ? -unit * 0.18 : -unit * 0.28;
+  const y1 = profile === 'bowl' ? unit * 0.7 : profile === 'handpan' ? unit * 0.04 : unit * 0.56;
+  ctx.lineWidth = Math.max(width, unit * 0.034);
+  const steps = 22;
+  for (let i = 0; i < meridians; i++) {
+    const side = meridians === 1 ? 0 : (i / (meridians - 1) - 0.5) * 2;
+    ctx.beginPath();
+    let started = false;
+    for (let s = 0; s <= steps; s++) {
+      const u = s / steps;
+      const y = y0 + (y1 - y0) * u;
+      const half = bellHalf(profile, y, unit);
+      if (half < unit * 0.02) continue;
+      const x = side * half * (profile === 'handpan' ? 0.78 : 0.8);
+      if (!started) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+      started = true;
+    }
+    if (started) ctx.stroke();
+  }
+  ctx.save();
+  ctx.setLineDash([Math.max(3, width * 2), Math.max(4, width * 2.4)]);
+  ctx.lineWidth = Math.max(1.25, width * 0.8);
+  for (let circle = 1; circle <= (shape.circles || 0); circle++) {
+    const y = y0 + (y1 - y0) * (circle / ((shape.circles || 1) + 1));
+    const rx = bellHalf(profile, y, unit) * 0.88;
+    if (rx < unit * 0.04) continue;
+    ctx.beginPath();
+    ctx.ellipse(0, y, rx, unit * (profile === 'handpan' ? 0.04 : 0.05), 0, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function traceFlared(ctx, unit, flare) {
+  const w = 1 + flare * 0.5;
+  const top = -0.42;
+  const bot = 0.68;
+  const steps = 26;
+  const xAt = (n) => flaredHalf(n) * unit * w;
+  ctx.beginPath();
+  ctx.moveTo(-xAt(bot), bot * unit);
+  for (let i = steps; i >= 0; i--) {
+    const n = top + ((bot - top) * i) / steps;
+    ctx.lineTo(-xAt(n), n * unit);
+  }
+  ctx.quadraticCurveTo(-unit * 0.02, -unit * 0.5, -unit * 0.045, -unit * 0.46);
+  ctx.quadraticCurveTo(-unit * 0.07, -unit * 0.64, 0, -unit * 0.66);
+  ctx.quadraticCurveTo(unit * 0.07, -unit * 0.64, unit * 0.045, -unit * 0.46);
+  ctx.quadraticCurveTo(unit * 0.02, -unit * 0.5, xAt(top), top * unit);
+  for (let i = 0; i <= steps; i++) {
+    const n = top + ((bot - top) * i) / steps;
+    ctx.lineTo(xAt(n), n * unit);
+  }
+  ctx.quadraticCurveTo(0, unit * 0.78, -xAt(bot), bot * unit);
+  ctx.closePath();
+}
+
 function traceSilhouette(ctx, kind, unit, flare) {
   const w = 1 + flare * 0.5;
-  ctx.beginPath();
   if (kind === 'flared') {
-    ctx.moveTo(-unit * 0.2 * w, -unit * 0.78);
-    ctx.quadraticCurveTo(-unit * 0.16 * w, -unit * 0.35, -unit * 0.26 * w, unit * 0.02);
-    ctx.quadraticCurveTo(-unit * 0.62 * w, unit * 0.48, -unit * 0.74 * w, unit * 0.74);
-    ctx.quadraticCurveTo(0, unit * 0.9, unit * 0.74 * w, unit * 0.74);
-    ctx.quadraticCurveTo(unit * 0.62 * w, unit * 0.48, unit * 0.26 * w, unit * 0.02);
-    ctx.quadraticCurveTo(unit * 0.16 * w, -unit * 0.35, unit * 0.2 * w, -unit * 0.78);
-    ctx.quadraticCurveTo(0, -unit * 0.92, -unit * 0.2 * w, -unit * 0.78);
-  } else if (kind === 'cowbell') {
-    ctx.moveTo(-unit * 0.22, -unit * 0.62);
-    ctx.lineTo(unit * 0.22, -unit * 0.62);
-    ctx.lineTo(unit * 0.5 * w, unit * 0.72);
-    ctx.lineTo(-unit * 0.5 * w, unit * 0.72);
+    traceFlared(ctx, unit, flare);
+    return;
+  }
+  ctx.beginPath();
+  if (kind === 'cowbell') {
+    ctx.moveTo(-unit * 0.32, -unit * 0.46);
+    ctx.lineTo(unit * 0.16, -unit * 0.46);
+    ctx.lineTo(unit * 0.34, -unit * 0.38);
+    ctx.lineTo(unit * 0.5, unit * 0.46);
+    ctx.lineTo(unit * 0.32, unit * 0.54);
+    ctx.lineTo(-unit * 0.46, unit * 0.54);
   } else if (kind === 'handpan') {
-    ctx.moveTo(-unit * 0.86, unit * 0.05);
-    ctx.quadraticCurveTo(-unit * 0.2, -unit * 0.62, unit * 0.86, unit * 0.05);
-    ctx.quadraticCurveTo(unit * 0.2, unit * 0.38, -unit * 0.86, unit * 0.05);
+    const steps = 24;
+    for (let i = 0; i <= steps; i++) {
+      const a = Math.PI * (1 + i / steps);
+      const x = Math.cos(a) * unit * 0.76;
+      const y = unit * 0.06 + Math.sin(a) * unit * 0.32;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    for (let i = steps; i >= 0; i--) {
+      const a = Math.PI * (i / steps);
+      const x = Math.cos(a) * unit * 0.76;
+      const y = unit * 0.06 + Math.sin(a) * unit * 0.22;
+      ctx.lineTo(x, y);
+    }
   } else if (kind === 'disc') {
     ctx.ellipse(0, unit * 0.08, unit * 0.9, unit * 0.9, 0, 0, Math.PI * 2);
   } else {
@@ -781,12 +940,15 @@ function traceSilhouette(ctx, kind, unit, flare) {
 }
 
 function drawSilhouette(ctx, kind, unit, flare, tone, tint, glass) {
-  ctx.save();
-  ctx.translate(unit * 0.03, unit * 0.035);
-  traceSilhouette(ctx, kind, unit, flare);
-  ctx.fillStyle = tint ? mixHex(tint, tone.shade, 0.45) : tone.shade;
-  ctx.fill();
-  ctx.restore();
+  const crisp = kind === 'flared' || kind === 'cowbell' || kind === 'handpan';
+  if (!crisp) {
+    ctx.save();
+    ctx.translate(unit * 0.03, unit * 0.035);
+    traceSilhouette(ctx, kind, unit, flare);
+    ctx.fillStyle = tint ? mixHex(tint, tone.shade, 0.45) : tone.shade;
+    ctx.fill();
+    ctx.restore();
+  }
   traceSilhouette(ctx, kind, unit, flare);
   const vertical = kind === 'disc' || kind === 'handpan';
   ctx.fillStyle = faceGradient(ctx, vertical ? -unit : 0, -unit * 0.7, vertical ? unit * 0.3 : 0, unit * 0.8, tone, tint);
@@ -796,38 +958,115 @@ function drawSilhouette(ctx, kind, unit, flare, tone, tint, glass) {
   ctx.lineWidth = Math.max(1.1, unit * 0.01);
   ctx.strokeStyle = tone.shade;
   ctx.stroke();
-  if (!tint) paintSurface(ctx, tone, unit, true, { cx: -unit * 0.18, cy: kind === 'flared' ? -unit * 0.35 : -unit * 0.08, rx: unit * 0.26, ry: unit * 0.12 });
+  if (!tint) paintSurface(ctx, tone, unit, true, { cx: -unit * 0.18, cy: kind === 'flared' ? -unit * 0.28 : -unit * 0.08, rx: unit * 0.26, ry: unit * 0.12 });
   ctx.restore();
   if (kind === 'flared') {
+    const lip = flaredHalf(0.64) * unit * (1 + flare * 0.5);
     ctx.beginPath();
-    ctx.ellipse(0, unit * 0.74, unit * 0.74, unit * 0.1, 0, 0, Math.PI * 2);
-    ctx.fillStyle = tone.shade;
+    ctx.ellipse(0, unit * 0.66, lip * 0.86, unit * 0.085, 0, 0, Math.PI * 2);
+    ctx.fillStyle = mixHex(tone.shade, '#141210', 0.5);
     ctx.fill();
+    ctx.lineWidth = Math.max(2.2, unit * 0.028);
+    ctx.strokeStyle = mixHex(tone.mid, tone.shade, 0.25);
+    ctx.stroke();
     ctx.beginPath();
-    ctx.ellipse(0, unit * 0.74, unit * 0.58, unit * 0.06, 0, 0, Math.PI * 2);
-    ctx.fillStyle = mixHex(tone.shade, '#1f1d1a', 0.4);
+    ctx.ellipse(0, unit * 0.67, lip * 0.62, unit * 0.045, 0, 0, Math.PI * 2);
+    ctx.fillStyle = mixHex(tone.shade, '#12100e', 0.72);
     ctx.fill();
   } else if (kind === 'disc') {
     ctx.beginPath();
-    ctx.ellipse(0, -unit * 0.02, unit * 0.28, unit * 0.22, 0, 0, Math.PI * 2);
+    ctx.ellipse(0, -unit * 0.02, unit * 0.26, unit * 0.2, 0, 0, Math.PI * 2);
     ctx.fillStyle = tone.lit;
     ctx.fill();
     ctx.strokeStyle = tone.shade;
     ctx.stroke();
   } else if (kind === 'handpan') {
-    for (const [x, y] of [[-0.28, -0.08], [0.22, -0.16], [0.02, 0.02], [-0.18, 0.08]]) {
-      ctx.beginPath();
-      ctx.ellipse(x * unit, y * unit, unit * 0.07, unit * 0.035, 0, 0, Math.PI * 2);
-      ctx.fillStyle = tone.shade;
-      ctx.globalAlpha = 0.45;
-      ctx.fill();
-      ctx.globalAlpha = 1;
-    }
-  } else if (kind === 'cowbell') {
     ctx.beginPath();
-    ctx.ellipse(0, unit * 0.72, unit * 0.5, unit * 0.07, 0, 0, Math.PI * 2);
+    const steps = 24;
+    ctx.moveTo(unit * 0.76, unit * 0.06);
+    for (let i = 0; i <= steps; i++) {
+      const a = Math.PI * (i / steps);
+      ctx.lineTo(Math.cos(a) * unit * 0.76, unit * 0.06 + Math.sin(a) * unit * 0.22);
+    }
+    ctx.closePath();
     ctx.fillStyle = tone.shade;
     ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(0, unit * 0.06, unit * 0.76, unit * 0.05, 0, 0, Math.PI * 2);
+    ctx.strokeStyle = mixHex(tone.lit, tone.mid, 0.35);
+    ctx.lineWidth = Math.max(1.6, unit * 0.02);
+    ctx.stroke();
+  } else if (kind === 'cowbell') {
+    ctx.beginPath();
+    ctx.moveTo(unit * 0.16, -unit * 0.46);
+    ctx.lineTo(unit * 0.34, -unit * 0.38);
+    ctx.lineTo(unit * 0.5, unit * 0.46);
+    ctx.lineTo(unit * 0.32, unit * 0.54);
+    ctx.closePath();
+    ctx.fillStyle = tone.shade;
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(-unit * 0.32, -unit * 0.46);
+    ctx.lineTo(-unit * 0.18, -unit * 0.58);
+    ctx.lineTo(unit * 0.34, -unit * 0.38);
+    ctx.lineTo(unit * 0.16, -unit * 0.46);
+    ctx.closePath();
+    ctx.fillStyle = mixHex(tone.mid, tone.lit, 0.28);
+    ctx.fill();
+    ctx.strokeStyle = tone.shade;
+    ctx.lineWidth = Math.max(1.4, unit * 0.016);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(-unit * 0.32, -unit * 0.46);
+    ctx.lineTo(unit * 0.16, -unit * 0.46);
+    ctx.lineTo(unit * 0.32, unit * 0.54);
+    ctx.lineTo(-unit * 0.46, unit * 0.54);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(unit * 0.16, -unit * 0.46);
+    ctx.lineTo(unit * 0.32, unit * 0.54);
+    ctx.lineWidth = Math.max(2, unit * 0.022);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.ellipse(-unit * 0.07, unit * 0.54, unit * 0.3, unit * 0.048, 0, 0, Math.PI * 2);
+    ctx.fillStyle = mixHex(tone.shade, '#141210', 0.55);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(-unit * 0.07, unit * 0.548, unit * 0.2, unit * 0.026, 0, 0, Math.PI * 2);
+    ctx.fillStyle = mixHex(tone.shade, '#12100e', 0.7);
+    ctx.fill();
+  }
+}
+
+function drawHandpanFace(ctx, unit, tone) {
+  ctx.beginPath();
+  ctx.ellipse(0, -unit * 0.02, unit * 0.1, unit * 0.055, 0, 0, Math.PI * 2);
+  ctx.fillStyle = mixHex(tone.lit, tone.mid, 0.15);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(-unit * 0.015, -unit * 0.038, unit * 0.045, unit * 0.02, 0, 0, Math.PI * 2);
+  ctx.fillStyle = tone.lit;
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(0, unit * 0.005, unit * 0.07, unit * 0.018, 0, 0.15 * Math.PI, 0.85 * Math.PI);
+  ctx.strokeStyle = mixHex(tone.mid, tone.shade, 0.35);
+  ctx.lineWidth = Math.max(1, unit * 0.01);
+  ctx.stroke();
+  for (let i = 0; i < 8; i++) {
+    const angle = (i / 8) * Math.PI * 2 - Math.PI / 8;
+    const x = Math.cos(angle) * unit * 0.4;
+    const y = -unit * 0.02 + Math.sin(angle) * unit * 0.12;
+    const rot = Math.cos(angle) * 0.4;
+    ctx.beginPath();
+    ctx.ellipse(x, y, unit * 0.08, unit * 0.036, rot, 0, Math.PI * 2);
+    ctx.fillStyle = mixHex(tone.lit, tone.mid, 0.5);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(x, y + unit * 0.01, unit * 0.062, unit * 0.016, rot, 0.1 * Math.PI, 0.9 * Math.PI);
+    ctx.strokeStyle = mixHex(tone.shade, tone.mid, 0.35);
+    ctx.lineWidth = Math.max(1, unit * 0.01);
+    ctx.stroke();
   }
 }
 

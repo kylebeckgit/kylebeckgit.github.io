@@ -4,6 +4,7 @@ import {
   ACCENT,
   accentTint,
   bodyFamily,
+  flaredHalf,
   materialFinish,
   materialKey,
   mixHex,
@@ -109,6 +110,19 @@ test('a short partial fades before a long one, and the bar bends between its nod
   assert.ok(Math.abs(modeDisplacement('bar', 0, 0.5)) < 1e-9);
   assert.ok(Math.abs(modeDisplacement('bar', 0, 0.25)) > 0.9);
   assert.ok(Math.abs(modeDisplacement('tube', 1, 0.5)) < 1e-9);
+});
+
+test('a church bell rounds at the crown, tucks at the waist, and flares at the lip', () => {
+  const neck = flaredHalf(-0.42);
+  const shoulder = flaredHalf(-0.02);
+  const waist = flaredHalf(0.16);
+  const lip = flaredHalf(0.68);
+  assert.ok(neck < shoulder * 0.45);
+  assert.ok(waist < shoulder);
+  assert.ok(waist > shoulder * 0.8);
+  assert.ok(lip > shoulder * 1.25);
+  assert.ok(flaredHalf(-0.22) > neck);
+  assert.ok(flaredHalf(-0.22) < shoulder);
 });
 
 test('bells keep distinct silhouettes and modal families', () => {
