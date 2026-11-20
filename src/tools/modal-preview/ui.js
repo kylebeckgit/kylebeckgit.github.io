@@ -233,6 +233,7 @@ export function mount(root) {
   }
 
   function syncShapeSound() {
+    root.dataset.shapeSound = SHAPE_SOUND ? 'on' : 'off';
     if (!SHAPE_SOUND) return;
     const body = objectBody();
     if (!flatSpec(body)) return;

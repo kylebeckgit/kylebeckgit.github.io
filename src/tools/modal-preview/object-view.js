@@ -1103,7 +1103,7 @@ export function hitObjectMode(options, x, y) {
   }
   const solved = options.solvedModes;
   let best = -1;
-  let bestDistance = Math.max(10, unit * 0.07);
+  let bestDistance = Math.max(12, unit * 0.08);
   const consider = (index, ax, ay, bx, by) => {
     const distance = pointSegmentDistance(px, py, ax, ay, bx, by);
     if (distance < bestDistance) {
