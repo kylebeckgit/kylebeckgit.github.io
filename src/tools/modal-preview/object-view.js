@@ -996,6 +996,24 @@ function traceFlared(ctx, unit, flare) {
   ctx.closePath();
 }
 
+function drawDiscBoss(ctx, unit, tone) {
+  const cy = -unit * 0.02;
+  const rx = unit * 0.16;
+  const ry = unit * 0.12;
+  ctx.beginPath();
+  ctx.ellipse(unit * 0.012, cy + unit * 0.016, rx, ry, 0, 0, Math.PI * 2);
+  ctx.fillStyle = mixHex(tone.mid, tone.shade, 0.45);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(0, cy, rx, ry, 0, 0, Math.PI * 2);
+  const boss = ctx.createRadialGradient(-rx * 0.4, cy - ry * 0.5, unit * 0.015, 0, cy, rx);
+  boss.addColorStop(0, mixHex(tone.lit, tone.mid, 0.28));
+  boss.addColorStop(0.5, tone.mid);
+  boss.addColorStop(1, mixHex(tone.mid, tone.shade, 0.22));
+  ctx.fillStyle = boss;
+  ctx.fill();
+}
+
 function traceSilhouette(ctx, kind, unit, flare) {
   const w = 1 + flare * 0.5;
   if (kind === 'flared') {
@@ -1087,12 +1105,7 @@ function drawSilhouette(ctx, kind, unit, flare, tone, tint, glass) {
     ctx.fillStyle = mixHex(tone.shade, '#12100e', 0.72);
     ctx.fill();
   } else if (kind === 'disc') {
-    ctx.beginPath();
-    ctx.ellipse(0, -unit * 0.02, unit * 0.26, unit * 0.2, 0, 0, Math.PI * 2);
-    ctx.fillStyle = tone.lit;
-    ctx.fill();
-    ctx.strokeStyle = tone.shade;
-    ctx.stroke();
+    drawDiscBoss(ctx, unit, tone);
   } else if (kind === 'handpan') {
     ctx.beginPath();
     const steps = 24;
