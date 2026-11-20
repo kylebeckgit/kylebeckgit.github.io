@@ -113,3 +113,28 @@ test('a huge shell or tube, with its shadow, stays inside the canvas', () => {
   assert.ok(shell * 1.15 < height / 2, 'shell shadow is clipped');
   assert.ok(objectUnit(520, height, 'bar', 'medium') > tube);
 });
+
+test('every huge body and its shadow keeps a margin on desktop and phone canvases', () => {
+  const reach = {
+    bar: 1.02,
+    string: 1.08,
+    plate: 1.02,
+    membrane: 1.12,
+    shell: 1.15,
+    tube: 1.2,
+    box: 0.98,
+  };
+  const stages = [
+    { width: 640, height: 516 },
+    { width: 350, height: 282 },
+  ];
+  for (const stage of stages) {
+    for (const [family, factor] of Object.entries(reach)) {
+      const unit = objectUnit(stage.width, stage.height, family, 'huge');
+      const vertical = (family === 'bar' || family === 'string' ? 0.55 : factor) * unit;
+      const horizontal = factor * unit;
+      assert.ok(vertical < stage.height * 0.46, `${family} clips vertically on ${stage.width}`);
+      assert.ok(horizontal < stage.width * 0.46, `${family} clips horizontally on ${stage.width}`);
+    }
+  }
+});

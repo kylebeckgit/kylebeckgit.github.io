@@ -325,7 +325,7 @@ function contactShadow(ctx, family, unit, shade) {
 function clipBody(ctx, family, unit, flare, shift) {
   if (family === 'bar') {
     const pts = barPoints(unit, (t) => -shift('bar', t) * unit * 0.16);
-    ribbon(ctx, pts, unit * 0.24, 0, 0);
+    ribbon(ctx, pts, unit * 0.22, 0, 0);
   } else if (family === 'string') {
     ctx.beginPath();
     ctx.rect(-unit * 1.2, -unit * 0.05, unit * 2.4, unit * 0.55);
@@ -354,7 +354,7 @@ function drawBody(ctx, family, unit, tone, flare, shift) {
   ctx.strokeStyle = tone.shade;
   const glass = tone.kind === 'glass';
   if (family === 'bar') {
-    drawBarSlab(ctx, unit, (t) => -shift('bar', t) * unit * 0.2, tone, null, glass);
+    drawBarSlab(ctx, unit, (t) => -shift('bar', t) * unit * 0.16, tone, null, glass);
   } else if (family === 'string') {
     drawBridge(ctx, -unit * 1.02, unit, tone);
     drawBridge(ctx, unit * 0.94, unit, tone);
@@ -435,25 +435,46 @@ function ribbon(ctx, pts, half, ox, oy) {
 }
 
 function drawBarSlab(ctx, unit, yAt, tone, tint, glass) {
-  const half = unit * 0.24;
+  const half = unit * 0.22;
+  const dx = unit * 0.016;
+  const dy = unit * 0.02;
   const pts = barPoints(unit, yAt);
-  ctx.save();
-  ctx.translate(unit * 0.04, unit * 0.045);
-  ribbon(ctx, pts, half, 0, 0);
-  ctx.fillStyle = tint ? mixHex(tint, tone.shade, 0.45) : tone.shade;
+  const shade = tint ? mixHex(tint, tone.shade, 0.4) : tone.shade;
+
+  ctx.beginPath();
+  pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y + half) : ctx.moveTo(x, y + half)));
+  for (let i = pts.length - 1; i >= 0; i--) ctx.lineTo(pts[i][0] + dx, pts[i][1] + half + dy);
+  ctx.closePath();
+  ctx.fillStyle = shade;
   ctx.fill();
-  ctx.restore();
+
+  const end = pts[pts.length - 1];
+  ctx.beginPath();
+  ctx.moveTo(end[0], end[1] - half);
+  ctx.lineTo(end[0] + dx, end[1] - half + dy * 0.3);
+  ctx.lineTo(end[0] + dx, end[1] + half + dy);
+  ctx.lineTo(end[0], end[1] + half);
+  ctx.closePath();
+  ctx.fill();
 
   ribbon(ctx, pts, half, 0, 0);
   ctx.fillStyle = faceGradient(ctx, -unit, -half, unit * 0.2, half, tone, tint);
   ctx.save();
   if (glass) ctx.globalAlpha *= 0.72;
   ctx.fill();
-  ctx.lineWidth = Math.max(1.15, unit * 0.012);
-  ctx.strokeStyle = tint ? mixHex(tint, tone.shade, 0.35) : tone.shade;
-  ctx.stroke();
   if (!tint) paintSurface(ctx, tone, unit, false, { cx: -unit * 0.28, cy: -half * 0.35, rx: unit * 0.42, ry: half * 0.28 });
   ctx.restore();
+
+  ctx.beginPath();
+  pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y - half) : ctx.moveTo(x, y - half)));
+  ctx.lineTo(end[0], end[1] + half);
+  ctx.lineTo(end[0] + dx, end[1] + half + dy);
+  for (let i = pts.length - 2; i >= 0; i--) ctx.lineTo(pts[i][0] + dx, pts[i][1] + half + dy);
+  ctx.closePath();
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = Math.max(1.1, unit * 0.009);
+  ctx.strokeStyle = shade;
+  ctx.stroke();
 }
 
 function drawBridge(ctx, x, unit, tone) {
@@ -672,6 +693,32 @@ function drawBoxBend(ctx, unit, bow, tint) {
 }
 
 function drawBox(ctx, unit, bow, tone, tint) {
+  const depth = unit * 0.045;
+  const steps = 16;
+  ctx.beginPath();
+  ctx.moveTo(unit * 0.9, -unit * 0.15);
+  ctx.lineTo(unit * 0.9 + depth, -unit * 0.15 + depth);
+  ctx.lineTo(unit * 0.9 + depth, unit * 0.7 + bow(1) + depth);
+  ctx.lineTo(unit * 0.9, unit * 0.7 + bow(1));
+  ctx.closePath();
+  ctx.fillStyle = tone.shade;
+  ctx.fill();
+
+  ctx.beginPath();
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const x = -unit * 0.7 + t * unit * 1.6;
+    const y = unit * 0.7 + bow(t);
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  for (let i = steps; i >= 0; i--) {
+    const t = i / steps;
+    ctx.lineTo(-unit * 0.7 + t * unit * 1.6 + depth, unit * 0.7 + bow(t) + depth);
+  }
+  ctx.closePath();
+  ctx.fill();
+
   ctx.beginPath();
   ctx.moveTo(-unit * 0.7, -unit * 0.15 + bow(0));
   ctx.lineTo(-unit * 0.12, -unit * 0.55);
@@ -680,22 +727,9 @@ function drawBox(ctx, unit, bow, tone, tint) {
   ctx.closePath();
   ctx.fillStyle = tint ? mixHex(tint, tone.lit, 0.35) : tone.lit;
   ctx.fill();
-  ctx.strokeStyle = tone.shade;
-  ctx.stroke();
-
-  ctx.beginPath();
-  ctx.moveTo(unit * 0.18, -unit * 0.55);
-  ctx.lineTo(unit * 0.9, -unit * 0.15);
-  ctx.lineTo(unit * 0.9, unit * 0.7);
-  ctx.lineTo(unit * 0.18, unit * 0.35);
-  ctx.closePath();
-  ctx.fillStyle = tone.shade;
-  ctx.fill();
-  ctx.stroke();
 
   ctx.beginPath();
   ctx.moveTo(-unit * 0.7, -unit * 0.15);
-  const steps = 16;
   for (let i = 0; i <= steps; i++) {
     const t = i / steps;
     ctx.lineTo(-unit * 0.7 + t * unit * 1.6, -unit * 0.15 + bow(t) * 0.25);
@@ -707,6 +741,22 @@ function drawBox(ctx, unit, bow, tone, tint) {
   ctx.closePath();
   ctx.fillStyle = faceGradient(ctx, -unit * 0.7, -unit * 0.15, unit * 0.9, unit * 0.7, tone, tint);
   ctx.fill();
-  ctx.stroke();
   if (!tint) paintSurface(ctx, tone, unit, true, { cx: -unit * 0.2, cy: unit * 0.05, rx: unit * 0.28, ry: unit * 0.16 });
+
+  ctx.beginPath();
+  ctx.moveTo(-unit * 0.7, -unit * 0.15);
+  ctx.lineTo(-unit * 0.12, -unit * 0.55);
+  ctx.lineTo(unit * 0.18, -unit * 0.55);
+  ctx.lineTo(unit * 0.9, -unit * 0.15);
+  ctx.lineTo(unit * 0.9 + depth, -unit * 0.15 + depth);
+  ctx.lineTo(unit * 0.9 + depth, unit * 0.7 + bow(1) + depth);
+  for (let i = steps; i >= 0; i--) {
+    const t = i / steps;
+    ctx.lineTo(-unit * 0.7 + t * unit * 1.6 + depth, unit * 0.7 + bow(t) + depth);
+  }
+  ctx.closePath();
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = Math.max(1.1, unit * 0.009);
+  ctx.strokeStyle = tone.shade;
+  ctx.stroke();
 }
