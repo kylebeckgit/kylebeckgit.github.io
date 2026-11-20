@@ -1274,6 +1274,10 @@ export function mount(root) {
     draw(canvas, state.partials, state);
     paintDesignerObject();
   });
+  root.addEventListener('toolshown', () => {
+    draw(canvas, state.partials, state);
+    paintDesignerObject();
+  });
   const scheme = window.matchMedia('(prefers-color-scheme: dark)');
   const onScheme = () => {
     draw(canvas, state.partials, state);

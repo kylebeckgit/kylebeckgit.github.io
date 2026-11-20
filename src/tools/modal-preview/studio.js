@@ -107,6 +107,15 @@ export function mountStudio(root, api) {
     turns.length = 0;
     pushTurn(prompt, null);
   });
+  root.querySelector('[data-examples]')?.addEventListener('click', (event) => {
+    const chip = event.target.closest('[data-example]');
+    if (!chip) return;
+    const prompt = chip.dataset.example.trim();
+    if (!prompt) return;
+    askText.value = prompt;
+    turns.length = 0;
+    pushTurn(prompt, null);
+  });
   askText.addEventListener('keydown', (event) => {
     if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
       event.preventDefault();
