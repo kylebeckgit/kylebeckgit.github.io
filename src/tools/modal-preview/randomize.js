@@ -7,6 +7,9 @@ import { barsStayDistinct } from './modal-view.js';
 
 export const MATERIALS = ['metal', 'wood', 'glass', 'skin', 'bell', 'any', 'wild'];
 
+// One step past wildness 1. The designer slider ends here.
+export const EXTREME_WILDNESS = 1.35;
+
 export const KNOB_KEYS = ['tune', 'detune', 'decay', 'decayKf', 'position', 'density', 'absorb', 'disperse', 'normalize'];
 
 const DENSITIES = [8, 16, 32, 64, 128, 256];
@@ -146,21 +149,23 @@ function sampleMaterialKnobs(rng, material) {
 
 function expandedRange(material, wildness) {
   const base = RANGES[material] || RANGES.any;
-  const w = clamp(Number(wildness) || 0, 0, 1);
+  const w = clamp(Number(wildness) || 0, 0, EXTREME_WILDNESS);
+  const t = Math.min(1, w);
+  const extra = Math.max(0, w - 1) / (EXTREME_WILDNESS - 1);
   const range = {
-    density: w > 0.45 ? [8, 16, 32] : base.density.slice(),
+    density: t > 0.45 ? [8, 16, 32] : base.density.slice(),
   };
   for (const key of ['tune', 'detune', 'decay', 'decayKf', 'position', 'absorb', 'disperse', 'normalize']) {
-    range[key] = [
-      lerp(base[key][0], LIMITS[key][0], w),
-      lerp(base[key][1], LIMITS[key][1], w),
-    ];
+    const lo = lerp(base[key][0], LIMITS[key][0], t);
+    const hi = lerp(base[key][1], LIMITS[key][1], t);
+    const span = (LIMITS[key][1] - LIMITS[key][0]) * 0.18 * extra;
+    range[key] = [lo - span, hi + span];
   }
   return range;
 }
 
 function sampleTarget(rng, material, wildness, family) {
-  const w = clamp(Number(wildness) || 0, 0, 1);
+  const w = clamp(Number(wildness) || 0, 0, EXTREME_WILDNESS);
   const source = family || material;
   const knobs = sampleFromRange(rng, expandedRange(source, w));
   if (w > 0 && rng() < w * 0.9) {

@@ -175,6 +175,14 @@ function applyAdjectives(recipe, text) {
     if (adjective.decayScale) recipe.controls.decayScale = (recipe.controls.decayScale || 1) * adjective.decayScale;
     if (adjective.pitchScale) recipe.controls.pitchScale = (recipe.controls.pitchScale || 1) * adjective.pitchScale;
     if (adjective.seed) recipe.controls.seed = hashString(text);
+    const rustOnSoft = adjective.label === 'rusty' && !/metal|steel|iron|brass|bronze|copper/.test(recipe.material || '');
+    if (rustOnSoft) {
+      recipe.controls.stiffness = clamp((recipe.controls.stiffness || 0) - (adjective.stiffness || 0), 0, 1);
+      recipe.controls.damping = clamp(recipe.controls.damping - (adjective.damping || 0) + 0.12, 0, 1);
+      recipe.controls.brightness = clamp(recipe.controls.brightness - (adjective.brightness || 0) - 0.12, -1, 1);
+      recipe.traits = [...(recipe.traits || []), 'rough'];
+      continue;
+    }
     recipe.traits = [...(recipe.traits || []), adjective.label];
   }
 }

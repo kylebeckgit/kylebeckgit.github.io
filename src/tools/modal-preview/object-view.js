@@ -18,6 +18,7 @@ const REACH = {
   cowbell: { x: 0.53, y: 0.67, span: 1.27 },
   handpan: { x: 0.77, y: 0.36, span: 1.53 },
   disc: { x: 0.93, y: 1.07, span: 1.9 },
+  goblet: { x: 0.52, y: 0.6, span: 1.2 },
 };
 // Fraction of the stage's shorter side the body should occupy, shadow included.
 const FILL = { tiny: 0.75, small: 0.78, medium: 0.8, large: 0.83, huge: 0.85 };
@@ -125,6 +126,7 @@ export function shellKind(body = {}) {
   const shape = String(body.shape || '').toLowerCase();
   const voice = String(body.voice || body.controls?.voice || '').toLowerCase();
   const text = `${name} ${shape} ${voice}`;
+  if (/wine\s*glass|wineglass|\bgoblet\b/.test(text)) return 'goblet';
   if (/handpan|\bhang\b/.test(text)) return 'handpan';
   if (/gong|cymbal|tam-tam|tam tam/.test(text) || voice === 'gong') return 'disc';
   if (/cowbell/.test(text)) return 'cowbell';
@@ -423,7 +425,9 @@ function contactShadow(ctx, kind, family, unit, shade) {
       ? [0, unit * 0.78, unit * 0.7, unit * 0.035]
       : kind === 'cowbell'
         ? [0, unit * 0.64, unit * 0.52, unit * 0.03]
-        : kind === 'disc'
+        : kind === 'goblet'
+          ? [0, unit * 0.66, unit * 0.42, unit * 0.028]
+          : kind === 'disc'
           ? [0, unit * 1.02, unit * 0.78, unit * 0.04]
           : kind === 'bowl' || family === 'shell'
             ? [0, unit * 1.02, unit * 0.64, unit * 0.038]
@@ -452,7 +456,9 @@ function contactShadow(ctx, kind, family, unit, shade) {
 }
 
 function clipBody(ctx, family, unit, flare, shift, kind) {
-  if (kind === 'flared' || kind === 'cowbell' || kind === 'handpan' || kind === 'disc' || kind === 'bowl') {
+  if (kind === 'goblet') {
+    traceGobletBowl(ctx, unit);
+  } else if (kind === 'flared' || kind === 'cowbell' || kind === 'handpan' || kind === 'disc' || kind === 'bowl') {
     traceSilhouette(ctx, kind, unit, flare);
   } else if (family === 'bar') {
     const pts = barPoints(unit, (t) => -shift('bar', t) * unit * 0.16);
@@ -486,7 +492,9 @@ function drawBody(ctx, family, unit, tone, flare, shift, kind) {
   ctx.lineWidth = Math.max(1.25, unit * 0.02);
   ctx.strokeStyle = tone.shade;
   const glass = tone.kind === 'glass';
-  if (kind === 'flared' || kind === 'cowbell' || kind === 'handpan' || kind === 'disc' || kind === 'bowl') {
+  if (kind === 'goblet') {
+    drawGoblet(ctx, unit, tone, glass);
+  } else if (kind === 'flared' || kind === 'cowbell' || kind === 'handpan' || kind === 'disc' || kind === 'bowl') {
     drawSilhouette(ctx, kind, unit, flare, tone, null, glass);
   } else if (family === 'bar') {
     drawBarSlab(ctx, unit, (t) => -shift('bar', t) * unit * 0.16, tone, null, glass);
@@ -514,6 +522,16 @@ function drawBend(ctx, family, index, unit, bend, tint, hot, kind, solved) {
   ctx.lineWidth = width;
   ctx.strokeStyle = tint;
   const solvedMode = solved?.[index] || (solved?.length ? solved[index % solved.length] : null);
+  if (kind === 'goblet') {
+    ctx.save();
+    ctx.translate(0, -unit * 0.16);
+    ctx.beginPath();
+    ctx.ellipse(0, 0, unit * 0.46, unit * 0.34, 0, 0, Math.PI * 2);
+    ctx.clip();
+    drawDiskRidges(ctx, unit, 'plate', index, width, [unit * 0.46, unit * 0.34]);
+    ctx.restore();
+    return;
+  }
   if (solvedMode && (kind === 'disc' || family === 'plate' || family === 'membrane')) {
     drawSolvedLines(ctx, unit, kind, family, solvedMode.lines, width);
     return;
@@ -758,16 +776,18 @@ function drawSquareRidges(ctx, unit, index, width) {
   }
 }
 
+function placeSolved(x, y, unit, kind, family) {
+  if (kind === 'disc') return [x * unit * 0.9, unit * 0.08 + y * unit * 0.9];
+  if (family === 'membrane') {
+    const [rx, ry] = diskRadii(unit, family);
+    return [x * rx, y * ry];
+  }
+  const s = squareHalf(unit);
+  return [x * s, y * s];
+}
+
 function drawSolvedLines(ctx, unit, kind, family, lines, width) {
-  const place = (x, y) => {
-    if (kind === 'disc') return [x * unit * 0.9, unit * 0.08 + y * unit * 0.9];
-    if (family === 'membrane') {
-      const [rx, ry] = diskRadii(unit, family);
-      return [x * rx, y * ry];
-    }
-    const s = squareHalf(unit);
-    return [x * s, y * s];
-  };
+  const place = (x, y) => placeSolved(x, y, unit, kind, family);
   ctx.lineWidth = width;
   for (const segment of lines || []) {
     if (!segment || segment.length < 2) continue;
@@ -1012,6 +1032,98 @@ function drawDiscBoss(ctx, unit, tone) {
   boss.addColorStop(1, mixHex(tone.mid, tone.shade, 0.22));
   ctx.fillStyle = boss;
   ctx.fill();
+}
+
+function traceGobletBowl(ctx, unit) {
+  ctx.beginPath();
+  ctx.moveTo(-unit * 0.48, -unit * 0.42);
+  ctx.bezierCurveTo(-unit * 0.5, -unit * 0.05, -unit * 0.22, unit * 0.16, 0, unit * 0.18);
+  ctx.bezierCurveTo(unit * 0.22, unit * 0.16, unit * 0.5, -unit * 0.05, unit * 0.48, -unit * 0.42);
+  ctx.quadraticCurveTo(0, -unit * 0.5, -unit * 0.48, -unit * 0.42);
+  ctx.closePath();
+}
+
+function drawGoblet(ctx, unit, tone, glass) {
+  ctx.beginPath();
+  ctx.ellipse(0, unit * 0.58, unit * 0.42, unit * 0.07, 0, 0, Math.PI * 2);
+  ctx.fillStyle = tone.mid;
+  ctx.fill();
+  ctx.strokeStyle = tone.shade;
+  ctx.lineWidth = Math.max(1.1, unit * 0.012);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(-unit * 0.035, unit * 0.16);
+  ctx.lineTo(unit * 0.035, unit * 0.16);
+  ctx.lineTo(unit * 0.05, unit * 0.52);
+  ctx.lineTo(-unit * 0.05, unit * 0.52);
+  ctx.closePath();
+  ctx.fillStyle = tone.mid;
+  ctx.fill();
+  ctx.stroke();
+  traceGobletBowl(ctx, unit);
+  ctx.fillStyle = faceGradient(ctx, -unit * 0.2, -unit * 0.4, unit * 0.1, unit * 0.2, tone, null);
+  ctx.save();
+  if (glass) ctx.globalAlpha *= 0.72;
+  ctx.fill();
+  ctx.strokeStyle = tone.shade;
+  ctx.stroke();
+  ctx.restore();
+  ctx.beginPath();
+  ctx.ellipse(0, -unit * 0.4, unit * 0.46, unit * 0.07, 0, 0, Math.PI * 2);
+  ctx.strokeStyle = tone.shade;
+  ctx.stroke();
+  if (!glass) return;
+  ctx.save();
+  ctx.globalAlpha = 0.35;
+  ctx.fillStyle = tone.rim;
+  ctx.beginPath();
+  ctx.ellipse(-unit * 0.12, -unit * 0.22, unit * 0.12, unit * 0.16, -0.4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+export function hitObjectMode(options, x, y) {
+  const body = options.body || {};
+  const kind = drawKind(body);
+  const family = bodyFamily(body);
+  const width = options.width;
+  const height = options.height;
+  const unit = objectUnit(width, height, kind, body.size);
+  let px = x - width / 2;
+  let py = y - height / 2;
+  if (kind === 'bowl') py += unit * 0.36;
+  const modes = shownModes(options.partials || [], { selected: options.selected, limit: 8 });
+  const solved = options.solvedModes;
+  let best = -1;
+  let bestDistance = Math.max(10, unit * 0.07);
+  const consider = (index, ax, ay, bx, by) => {
+    const distance = pointSegmentDistance(px, py, ax, ay, bx, by);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = index;
+    }
+  };
+  for (const mode of modes) {
+    const lines = solved?.[mode.index]?.lines;
+    if (lines && (kind === 'disc' || family === 'plate' || family === 'membrane')) {
+      for (const line of lines) {
+        for (let i = 1; i < line.length; i++) {
+          const a = placeSolved(line[i - 1][0], line[i - 1][1], unit, kind, family);
+          const b = placeSolved(line[i][0], line[i][1], unit, kind, family);
+          consider(mode.index, a[0], a[1], b[0], b[1]);
+        }
+      }
+    }
+  }
+  return best;
+}
+
+function pointSegmentDistance(px, py, ax, ay, bx, by) {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const len = dx * dx + dy * dy;
+  const t = len < 1e-8 ? 0 : Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / len));
+  return Math.hypot(px - (ax + dx * t), py - (ay + dy * t));
 }
 
 function traceSilhouette(ctx, kind, unit, flare) {

@@ -1,8 +1,9 @@
 import { A4_HZ, PRESETS, NOTE_BUTTONS, ZEBRA_PARTIAL_LIMIT_HZ, buildPartials, previewPartials, zebraExport, audiblePartials, fromCsv, noteFrequency, playedFundamental, heardSeconds, defaultControls, sanitizeControls, alignReference, carryControls, controlsFromKnobs } from './engine.js';
+import { applyShapeSound, SHAPE_SOUND } from './mode-solve.js';
 import { analyzeSamples, decodeRecording, resampleMono, parseRoot, frequencyToNote } from './analyze.js';
 import { renderPreview, scaleToPeak, strikeWeight } from './resonator.js';
 import { aimSlices, createFitMotion, createSliceMotion, defaultCamera, hitPartial, MORPH_MS, paintModalView, sampleSlices, slicesMoving } from './modal-view.js';
-import { bodySignature, objectCaption, paintObject } from './object-view.js';
+import { bodySignature, hitObjectMode, objectCaption, paintObject } from './object-view.js';
 import { cachedModes, flatSpec, patternNote, solveMs, trackFlatModes } from './mode-client.js';
 import { densityForProfile, shapePartials } from './shape.js';
 import { createRollHistory, defaultLocks, pushRoll, redoRoll, rollSound, undoRoll } from './randomize.js';
@@ -343,6 +344,14 @@ export function mount(root) {
     const blend = state.objectFade ? easeBlend((performance.now() - state.objectFade.t0) / 250) : 1;
     const colors = canvasColors();
     const solvedModes = flatTrack(body);
+    if (SHAPE_SOUND && solvedModes && state.partials) {
+      const shaped = applyShapeSound(state.partials, solvedModes);
+      if (shaped !== state.partials) {
+        state.partials = shaped;
+        render();
+        return;
+      }
+    }
     if (objectCanvas) {
       objectCanvas.dataset.pattern = !flatSpec(body) ? 'stylized' : solvedModes ? 'solved' : 'solving';
       const ms = solveMs(body);
@@ -581,6 +590,26 @@ export function mount(root) {
     };
   });
   canvas.addEventListener('pointermove', (event) => {
+    if (!state.gesture && canvas.dataset.view === 'zebra' && !canvas.hidden) {
+      const point = canvasPoint(canvas, event);
+      const hit = hitPartial(
+        sampleSlices(state.slices, performance.now()),
+        defaultCamera(),
+        canvas.clientWidth,
+        canvas.clientHeight,
+        point.x,
+        point.y,
+        state.detune || 0,
+        state.fit.shown,
+      );
+      if (hit !== state.hoverPartial) {
+        state.hoverPartial = hit;
+        paintDesignerObject();
+        for (const row of tableBody?.querySelectorAll('tr') || []) row.classList.remove('is-selected');
+        if (hit >= 0) tableBody?.querySelector(`[data-index="${hit}"]`)?.closest('tr')?.classList.add('is-selected');
+      }
+      return;
+    }
     if (!state.gesture) return;
     const point = canvasPoint(canvas, event);
     if (state.gesture.select) return;
@@ -619,6 +648,42 @@ export function mount(root) {
     state.gesture = null;
   });
   canvas.addEventListener('pointercancel', () => { state.gesture = null; });
+  canvas.addEventListener('pointerleave', () => {
+    if (state.hoverPartial >= 0) {
+      state.hoverPartial = -1;
+      paintDesignerObject();
+    }
+  });
+  const objectPoint = (event) => {
+    const rect = objectCanvas.getBoundingClientRect();
+    return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+  };
+  const hoverObject = (event, stick) => {
+    if (!objectCanvas || objectCanvas.hidden) return;
+    const point = objectPoint(event);
+    const hit = hitObjectMode({
+      width: objectCanvas.clientWidth,
+      height: objectCanvas.clientHeight,
+      body: objectBody(),
+      partials: state.partials,
+      solvedModes: cachedModes(objectBody()),
+      selected: state.hoverPartial >= 0 ? state.hoverPartial : state.selectedPartial,
+      x: point.x,
+      y: point.y,
+    }, point.x, point.y);
+    if (stick) state.selectedPartial = hit;
+    state.hoverPartial = hit;
+    paintDesignerObject();
+    for (const row of tableBody?.querySelectorAll('tr') || []) row.classList.remove('is-selected');
+    const shown = state.hoverPartial >= 0 ? state.hoverPartial : state.selectedPartial;
+    if (shown >= 0) tableBody?.querySelector(`[data-index="${shown}"]`)?.closest('tr')?.classList.add('is-selected');
+  };
+  objectCanvas?.addEventListener('pointermove', (event) => hoverObject(event, false));
+  objectCanvas?.addEventListener('pointerup', (event) => hoverObject(event, true));
+  objectCanvas?.addEventListener('pointerleave', () => {
+    state.hoverPartial = -1;
+    paintDesignerObject();
+  });
   const styleSelect = root.querySelector('[data-draw-style]');
   if (styleSelect) {
     state.drawStyle = styleSelect.value || 'fast';
@@ -684,7 +749,10 @@ export function mount(root) {
   const wildnessSlider = root.querySelector('[data-roll-wildness]');
   wildnessSlider?.addEventListener('input', () => {
     const out = root.querySelector('[data-roll-wildness-out]');
-    if (out) out.textContent = Number(wildnessSlider.value).toFixed(2);
+    if (out) {
+      const amount = Number(wildnessSlider.value);
+      out.textContent = amount >= 1.2 ? 'extreme' : amount.toFixed(2);
+    }
   });
   const readRollKnobs = () => ({
     tune: Number(root.querySelector('[data-tune]')?.value || 0),

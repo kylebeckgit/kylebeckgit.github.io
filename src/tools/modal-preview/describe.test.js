@@ -306,6 +306,18 @@ test('rebuilding from fresh ratios does not walk the pitch', () => {
   assert.ok(Math.abs(playedFundamental(controls.pitchScale, 261.63) / 261.63 - 1.9) < 1e-9);
 });
 
+test('rusty plastic stays plastic and treats rust as a rough surface', () => {
+  const row = describePrompt('rusty plastic')[0];
+  assert.equal(row.material, 'plastic');
+  assert.match(row.reading, /plastic/i);
+  assert.ok(!row.traits.includes('rusty'));
+  assert.ok(row.traits.includes('rough'));
+  assert.ok(row.controls.stiffness < 0.25, `stiffness ${row.controls.stiffness}`);
+  const made = describePrompt('gong made of plastic')[0];
+  assert.equal(made.material, 'plastic');
+  assert.equal(playedFundamental(made.controls.pitchScale), playedFundamental(1));
+});
+
 test('a follow-up still understands the first object', () => {
   const bowl = describePrompt('glass bowl struck softly, long shimmer')[0];
   assert.equal(bowl.material, 'glass');
