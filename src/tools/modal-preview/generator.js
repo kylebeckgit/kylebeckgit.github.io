@@ -5,6 +5,7 @@ import { SILENT_MODE_HINT, beginAudio, installGestureUnlock, playSilentUnlock, p
 import { audiblePartials, defaultControls, heardSeconds, playedFundamental, previewPartials, sanitizeControls } from './engine.js';
 import { combHeights, defaultCamera, hitPartial, paintModalView, sliceFromPartial, spaceByLog } from './modal-view.js';
 import { bodySignature, objectCaption, paintObject } from './object-view.js';
+import { cachedModes, flatSpec, patternNote, solveMs, trackFlatModes } from './mode-client.js';
 import { describePrompt } from './recipes.js';
 import { renderPreview, scaleToPeak } from './resonator.js';
 import { mountStudio } from './studio.js';
@@ -522,7 +523,7 @@ export function handoffPayload(session) {
   };
 }
 
-function paintObjectCanvas(canvas, snap, { selected = -1, age = null } = {}) {
+function paintObjectCanvas(canvas, snap, { selected = -1, age = null, solvedModes = null } = {}) {
   if (!canvas || canvas.hidden) return;
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   const width = canvas.clientWidth || 420;
@@ -542,6 +543,7 @@ function paintObjectCanvas(canvas, snap, { selected = -1, age = null } = {}) {
     selected,
     age,
     now: performance.now(),
+    solvedModes,
     colors: {
       card: read('--card', '#fbf8f2'),
       accent: read('--accent', '#d4421c'),
@@ -629,6 +631,7 @@ function playSnapshot(audioState, snap) {
 }
 
 export function mountGenerator(root, { openInDesigner } = {}) {
+  const flatTrack = trackFlatModes(() => paintCurrent(null));
   if (!root || typeof document === 'undefined') return null;
   const canvas = root.querySelector('[data-gen-view]');
   const objectCanvas = root.querySelector('[data-gen-object]');
@@ -644,7 +647,13 @@ export function mountGenerator(root, { openInDesigner } = {}) {
       audioState.fade = { from: audioState.shown, t0: performance.now() };
     }
     const blend = audioState.fade ? Math.min(1, (performance.now() - audioState.fade.t0) / 250) : 1;
-    paintObjectCanvas(objectCanvas, blend < 1 ? audioState.fade.from.body : shown, { selected: audioState.selected, age });
+    const solvedModes = flatTrack(shown);
+    if (objectCanvas) {
+      objectCanvas.dataset.pattern = !flatSpec(shown) ? 'stylized' : solvedModes ? 'solved' : 'solving';
+      const ms = solveMs(shown);
+      if (ms != null) objectCanvas.dataset.solveMs = String(Math.round(ms));
+    }
+    paintObjectCanvas(objectCanvas, blend < 1 ? audioState.fade.from.body : shown, { selected: audioState.selected, age, solvedModes: blend < 1 ? null : solvedModes });
     if (blend < 1 && objectCanvas && !objectCanvas.hidden) {
       if (!audioState.fadeCanvas) audioState.fadeCanvas = document.createElement('canvas');
       audioState.fadeCanvas.width = objectCanvas.width;
@@ -660,6 +669,7 @@ export function mountGenerator(root, { openInDesigner } = {}) {
         selected: audioState.selected,
         age,
         now: performance.now(),
+        solvedModes,
         colors: {
           card: '#fbf8f2',
           accent: '#d4421c',
@@ -677,7 +687,9 @@ export function mountGenerator(root, { openInDesigner } = {}) {
     const caption = root.querySelector('[data-gen-caption]');
     if (caption) {
       caption.hidden = !objectCanvas || objectCanvas.hidden;
-      caption.textContent = objectCaption(shown, { selected: audioState.selected, count: (shown.partials || []).length });
+      const base = objectCaption(shown, { selected: audioState.selected, count: (shown.partials || []).length });
+      const note = patternNote(flatSpec(shown), cachedModes(shown) ? 'ready' : 'pending');
+      caption.textContent = [base, note].filter(Boolean).join(' ');
     }
     if (blend < 1) requestAnimationFrame(() => paintCurrent(age));
   }
