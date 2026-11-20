@@ -528,11 +528,10 @@ function drawBend(ctx, family, index, unit, bend, tint, hot, kind, solved) {
   const solvedMode = solved?.[index] || (solved?.length ? solved[index % solved.length] : null);
   if (kind === 'goblet') {
     ctx.save();
-    ctx.translate(0, -unit * 0.16);
-    ctx.beginPath();
-    ctx.ellipse(0, 0, unit * 0.46, unit * 0.34, 0, 0, Math.PI * 2);
+    traceGobletBowl(ctx, unit);
     ctx.clip();
-    drawDiskRidges(ctx, unit, 'plate', index, width, [unit * 0.46, unit * 0.34]);
+    ctx.translate(0, -unit * 0.2);
+    drawDiskRidges(ctx, unit, 'plate', index, width, [unit * 0.26, unit * 0.3]);
     ctx.restore();
     return;
   }
@@ -1038,50 +1037,74 @@ function drawDiscBoss(ctx, unit, tone) {
   ctx.fill();
 }
 
+// Half-width of a tulip bowl. The belly sits below the middle, and the rim
+// draws back in so the opening is narrower than the widest point.
+function gobletBowlHalf(n) {
+  const rim = -0.52;
+  const belly = -0.08;
+  const base = 0.12;
+  const y = Number(n) || 0;
+  if (y <= rim) return 0.18;
+  if (y >= base) return 0.035;
+  if (y < belly) {
+    const t = (y - rim) / (belly - rim);
+    return 0.18 + 0.1 * Math.sin(t * Math.PI / 2);
+  }
+  const t = (y - belly) / (base - belly);
+  return 0.28 - 0.245 * t * t;
+}
+
 function traceGobletBowl(ctx, unit) {
+  const steps = 28;
+  const top = -0.52;
+  const bot = 0.12;
   ctx.beginPath();
-  ctx.moveTo(-unit * 0.48, -unit * 0.42);
-  ctx.bezierCurveTo(-unit * 0.5, -unit * 0.05, -unit * 0.22, unit * 0.16, 0, unit * 0.18);
-  ctx.bezierCurveTo(unit * 0.22, unit * 0.16, unit * 0.5, -unit * 0.05, unit * 0.48, -unit * 0.42);
-  ctx.quadraticCurveTo(0, -unit * 0.5, -unit * 0.48, -unit * 0.42);
+  for (let i = 0; i <= steps; i++) {
+    const y = top + ((bot - top) * i) / steps;
+    const x = gobletBowlHalf(y) * unit;
+    if (i === 0) ctx.moveTo(x, y * unit);
+    else ctx.lineTo(x, y * unit);
+  }
+  for (let i = steps; i >= 0; i--) {
+    const y = top + ((bot - top) * i) / steps;
+    ctx.lineTo(-gobletBowlHalf(y) * unit, y * unit);
+  }
   ctx.closePath();
 }
 
 function drawGoblet(ctx, unit, tone, glass) {
+  ctx.lineWidth = Math.max(1.1, unit * 0.012);
+  ctx.strokeStyle = tone.shade;
   ctx.beginPath();
-  ctx.ellipse(0, unit * 0.58, unit * 0.42, unit * 0.07, 0, 0, Math.PI * 2);
+  ctx.ellipse(0, unit * 0.54, unit * 0.34, unit * 0.05, 0, 0, Math.PI * 2);
   ctx.fillStyle = tone.mid;
   ctx.fill();
-  ctx.strokeStyle = tone.shade;
-  ctx.lineWidth = Math.max(1.1, unit * 0.012);
   ctx.stroke();
   ctx.beginPath();
-  ctx.moveTo(-unit * 0.035, unit * 0.16);
-  ctx.lineTo(unit * 0.035, unit * 0.16);
-  ctx.lineTo(unit * 0.05, unit * 0.52);
-  ctx.lineTo(-unit * 0.05, unit * 0.52);
+  ctx.moveTo(-unit * 0.028, unit * 0.1);
+  ctx.lineTo(unit * 0.028, unit * 0.1);
+  ctx.lineTo(unit * 0.04, unit * 0.48);
+  ctx.lineTo(-unit * 0.04, unit * 0.48);
   ctx.closePath();
   ctx.fillStyle = tone.mid;
   ctx.fill();
   ctx.stroke();
   traceGobletBowl(ctx, unit);
-  ctx.fillStyle = faceGradient(ctx, -unit * 0.2, -unit * 0.4, unit * 0.1, unit * 0.2, tone, null);
+  ctx.fillStyle = faceGradient(ctx, -unit * 0.08, -unit * 0.42, unit * 0.06, -unit * 0.05, tone, null);
   ctx.save();
   if (glass) ctx.globalAlpha *= 0.72;
   ctx.fill();
-  ctx.strokeStyle = tone.shade;
   ctx.stroke();
   ctx.restore();
   ctx.beginPath();
-  ctx.ellipse(0, -unit * 0.4, unit * 0.46, unit * 0.07, 0, 0, Math.PI * 2);
-  ctx.strokeStyle = tone.shade;
+  ctx.ellipse(0, -unit * 0.5, unit * 0.17, unit * 0.035, 0, 0, Math.PI * 2);
   ctx.stroke();
   if (!glass) return;
   ctx.save();
   ctx.globalAlpha = 0.35;
   ctx.fillStyle = tone.rim;
   ctx.beginPath();
-  ctx.ellipse(-unit * 0.12, -unit * 0.22, unit * 0.12, unit * 0.16, -0.4, 0, Math.PI * 2);
+  ctx.ellipse(-unit * 0.06, -unit * 0.28, unit * 0.05, unit * 0.12, -0.2, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
 }
