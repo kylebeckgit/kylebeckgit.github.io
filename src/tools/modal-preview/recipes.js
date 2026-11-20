@@ -394,8 +394,7 @@ function shift(recipe, axis) {
   if (axis.damping) controls.damping = clamp(controls.damping + axis.damping, 0, 1);
   if (axis.stiffness) controls.stiffness = clamp(controls.stiffness + axis.stiffness, 0, 1);
   if (axis.oddEven) controls.oddEven = clamp((controls.oddEven || 0) + axis.oddEven, -1, 1);
-  // The knob step still moves the panel. The plan is what the voice formulas
-  // cannot do: a gong drops brightness, and a black hole is already at both clamps.
+  if (!axis.key) return sanitizeControls(controls);
   const plan = planVariation(recipe.controls, controls, axis.key);
   return sanitizeControls({ ...controls, ...plan });
 }
