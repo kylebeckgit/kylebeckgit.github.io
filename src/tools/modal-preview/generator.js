@@ -8,6 +8,7 @@ import { bodySignature, hitObjectMode, objectCaption, paintObject } from './obje
 import { applyShapeSound, SHAPE_SOUND } from './mode-solve.js';
 import { cachedModes, flatSpec, patternNote, solveMs, trackFlatModes } from './mode-client.js';
 import { describePrompt } from './recipes.js';
+import { presentShare, shareUrl } from './share.js';
 import { renderPreview, scaleToPeak } from './resonator.js';
 import { mountStudio } from './studio.js';
 import { assessQuality, createRollHistory, defaultLocks, identityKnobs, pushRoll, redoRoll, rollSound, undoRoll } from './randomize.js';
@@ -960,6 +961,32 @@ export function mountGenerator(root, { openInDesigner } = {}) {
     const variation = controller?.current();
     if (!variation) return;
     showSnap(variation, { hear: true });
+  });
+  root.querySelector('[data-gen-share]')?.addEventListener('click', async () => {
+    const variation = controller?.current();
+    const status = root.querySelector('[data-gen-share-status]');
+    if (!variation) {
+      if (status) status.textContent = 'Describe a sound first.';
+      return;
+    }
+    const snap = snapshotVariation(variation);
+    const url = shareUrl({
+      name: snap.name,
+      description: variation.line || variation.reading || snap.name,
+      objectName: snap.objectName,
+      material: snap.material,
+      shape: snap.shape,
+      size: snap.size,
+      controls: snap.controls,
+      partials: snap.partials,
+      exciter: snap.exciter,
+      hardness: snap.hardness,
+      position: snap.position,
+      detune: snap.detune,
+      velocity: snap.velocity,
+    }, location.href);
+    history.replaceState(null, '', url.slice(url.indexOf('#')));
+    await presentShare(url, { status, field: root.querySelector('[data-gen-share-fallback]') });
   });
   for (const button of root.querySelectorAll('.gen-preview [data-view-mode]')) {
     button.addEventListener('click', () => {

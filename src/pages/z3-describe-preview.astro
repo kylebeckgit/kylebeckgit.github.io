@@ -181,10 +181,11 @@ import Base from '../layouts/Base.astro';
       <div class="more-block">
         <h3>File</h3>
         <div class="play-tools">
-          <button type="button" class="btn" data-share>Copy link</button>
+          <button type="button" class="btn" data-share>Share this sound</button>
           <label class="btn">Import profile<input data-import type="file" accept=".csv,text/csv" hidden></label>
         </div>
         <p class="status" data-share-status role="status"></p>
+        <input class="share-fallback" data-share-fallback hidden readonly aria-label="Shared link">
       </div>
 
       <div class="more-block">
@@ -288,7 +289,10 @@ import Base from '../layouts/Base.astro';
         </div>
         <div class="gen-actions">
           <button type="button" class="btn" data-gen-hear>Hear</button>
+          <button type="button" class="btn" data-gen-share>Share this sound</button>
           <button type="button" class="btn solid" data-open-designer disabled>Open in designer</button>
+          <p class="status" data-gen-share-status role="status"></p>
+          <input class="share-fallback" data-gen-share-fallback hidden readonly aria-label="Shared link">
           <p class="status" data-gen-audio role="status"></p>
         </div>
       </div>
@@ -643,7 +647,7 @@ import Base from '../layouts/Base.astro';
     border-radius: 4px;
   }
   .drop.is-over { border-color: var(--fg); }
-  .btn:disabled { opacity: .4; }
+  .share-fallback { width: min(100%, 28rem); margin-top: .4rem; }
   @media (max-width: 700px) {
     .panel { padding: .9rem .8rem 1rem; }
     table.partials input { width: 4.6rem; }
@@ -676,7 +680,7 @@ import Base from '../layouts/Base.astro';
     tab.addEventListener('click', () => showTool(tab.dataset.toolTab));
   }
 
-  if (/(?:^#|&)p=/.test(location.hash)) showTool('designer');
+  if (/(?:^#|&)(?:p|s)=/.test(location.hash)) showTool('designer');
 
   mountGenerator(panels.generator, {
     openInDesigner(payload) {

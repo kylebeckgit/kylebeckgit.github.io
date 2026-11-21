@@ -7,7 +7,8 @@ import { bodySignature, hitObjectMode, objectCaption, paintObject } from './obje
 import { cachedModes, flatSpec, patternNote, solveMs, trackFlatModes } from './mode-client.js';
 import { densityForProfile, shapePartials } from './shape.js';
 import { createRollHistory, defaultLocks, pushRoll, redoRoll, rollSound, undoRoll } from './randomize.js';
-import { decodeProfile, encodeProfile } from './studio.js';
+import { decodeProfile } from './studio.js';
+import { decodeShare, presentShare, shareUrl } from './share.js';
 import { SILENT_MODE_HINT, audioContextClass, beginAudio, installGestureUnlock, playSilentUnlock, prepareAudioSession, resumeInGesture } from './audio-session.js';
 
 export function mount(root) {
@@ -1160,22 +1161,25 @@ export function mount(root) {
   function profileFromState() {
     readControls();
     readPlayControls();
-    const profile = {
+    return {
       name: state.profileName || 'Modal profile',
+      description: state.shareDescription || '',
+      objectName: state.bodyMeta?.objectName || state.profileName || '',
+      material: state.bodyMeta?.material || '',
+      shape: state.bodyMeta?.shape || '',
+      size: state.bodyMeta?.size || 'medium',
       controls: state.controls,
+      partials: (state.partials || []).map((partial) => ({
+        ratio: partial.ratio,
+        gainDb: partial.gainDb,
+        decay: partial.decay,
+      })),
       exciter: state.exciter,
       hardness: state.hardness,
       velocity: state.velocity,
       position: state.position,
+      detune: state.detune,
     };
-    if (state.custom) {
-      profile.partials = state.partials.map((partial) => ({
-        ratio: Number(partial.ratio.toFixed(4)),
-        gainDb: Number(partial.gainDb.toFixed(2)),
-        decay: Number(partial.decay.toFixed(3)),
-      }));
-    }
-    return profile;
   }
 
   function setShapeNumber(selector, readout, value, digits) {
@@ -1211,6 +1215,7 @@ export function mount(root) {
       objectName: payload.objectName || payload.name || '',
     };
     state.profileName = payload.name || 'From generator';
+    state.shareDescription = payload.description || '';
     fields.preset.value = controls.preset;
     fields.stiffness.value = String(controls.stiffness);
     fields.brightness.value = String(controls.brightness);
@@ -1293,28 +1298,28 @@ export function mount(root) {
 
   root.querySelector('[data-share]')?.addEventListener('click', async () => {
     const profile = profileFromState();
-    const encoded = encodeProfile(profile);
-    const url = `${location.origin}${location.pathname}${location.search}#p=${encoded}`;
-    history.replaceState(null, '', `#p=${encoded}`);
+    const url = shareUrl(profile, location.href);
+    history.replaceState(null, '', url.slice(url.indexOf('#')));
     if (url.length > 12000) {
-      setShareStatus('This profile is too long for a link. Export the CSV instead.');
+      setShareStatus('This sound is too long for a link.');
       return;
     }
-    try {
-      await navigator.clipboard.writeText(url);
-      setShareStatus('Link copied. It stores the recipe, and any partial edits.');
-    } catch {
-      setShareStatus('The link is in the address bar.');
-    }
+    await presentShare(url, {
+      status: root.querySelector('[data-share-status]'),
+      field: root.querySelector('[data-share-fallback]'),
+    });
   });
 
-  const shared = decodeProfile(location.hash);
-  if (shared?.partials?.length) {
+  const sharedSound = decodeShare(location.hash);
+  const shared = sharedSound || decodeProfile(location.hash);
+  if (/(?:^|#|&)s=/.test(location.hash || '') && !sharedSound) {
+    setShareStatus('This link could not be read.');
+  } else if (shared?.partials?.length) {
     receiveHandoff(shared);
-    setShareStatus('Opened a shared profile.');
+    setShareStatus('Opened a shared sound.');
   } else if (shared?.controls) {
     applyRecipe(shared, { hear: false, history: false });
-    setShareStatus('Opened a shared profile.');
+    setShareStatus('Opened a shared sound.');
   }
 
   return { receiveHandoff };
