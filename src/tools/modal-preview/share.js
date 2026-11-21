@@ -31,18 +31,16 @@ function plain(value, max) {
     .slice(0, max);
 }
 
-function encodeBytes(text) {
-  const bytes = new TextEncoder().encode(text);
+function bytesToBase64Url(bytes) {
   let binary = '';
   for (const byte of bytes) binary += String.fromCharCode(byte);
   return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/g, '');
 }
 
-function decodeBytes(token) {
+function base64UrlToBytes(token) {
   const padded = token.replaceAll('-', '+').replaceAll('_', '/') + '==='.slice((token.length + 3) % 4);
   const binary = atob(padded);
-  const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
-  return new TextDecoder().decode(bytes);
+  return Uint8Array.from(binary, (char) => char.charCodeAt(0));
 }
 
 const MAX_PARTIALS = 256;
@@ -56,7 +54,7 @@ function quantizePartials(partials) {
   ]).filter((row) => row[0] != null);
 }
 
-function packPartials(rows) {
+function packPartialBytes(rows) {
   const bytes = new Uint8Array(rows.length * 8);
   const view = new DataView(bytes.buffer);
   rows.forEach((row, index) => {
@@ -65,16 +63,12 @@ function packPartials(rows) {
     view.setInt16(offset + 4, Math.round(row[1] * 100), true);
     view.setUint16(offset + 6, Math.round(row[2] * 1000), true);
   });
-  let binary = '';
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return encodeBytes(binary);
+  return bytes;
 }
 
-function unpackPartials(token) {
-  const binary = decodeBytes(token);
-  const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
-  if (bytes.length % 8) return [];
-  const view = new DataView(bytes.buffer);
+function unpackPartialBytes(bytes) {
+  if (bytes.length % 8) return null;
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const partials = [];
   for (let offset = 0; offset + 8 <= bytes.length && partials.length < MAX_PARTIALS; offset += 8) {
     const ratio = clamp(view.getUint32(offset, true) / 10000, 0.05, 80, 4, null);
@@ -88,7 +82,7 @@ function unpackPartials(token) {
   return partials;
 }
 
-function packed(profile, rows) {
+function metadata(profile) {
   const controls = sanitizeControls(profile.controls || {});
   return {
     v: VERSION,
@@ -119,24 +113,35 @@ function packed(profile, rows) {
       variationDecay: round(controls.variationDecay, 3),
       variationLift: round(controls.variationLift, 3),
     },
-    q: packPartials(rows),
   };
+}
+
+// One base64url blob: version byte, JSON length, UTF-8 metadata, then raw partial bytes.
+function encodeToken(profile, rows) {
+  const json = new TextEncoder().encode(JSON.stringify(metadata(profile)));
+  const partials = packPartialBytes(rows);
+  const out = new Uint8Array(3 + json.length + partials.length);
+  out[0] = VERSION;
+  out[1] = json.length & 0xff;
+  out[2] = (json.length >> 8) & 0xff;
+  out.set(json, 3);
+  out.set(partials, 3 + json.length);
+  return bytesToBase64Url(out);
 }
 
 export function buildShare(profile = {}, { maxToken = MAX_TOKEN } = {}) {
   const source = Array.isArray(profile.partials) ? profile.partials : [];
   let rows = quantizePartials(source);
   let shortened = source.length > rows.length;
-  let token = encodeBytes(JSON.stringify(packed(profile, rows)));
+  let token = encodeToken(profile, rows);
   while (token.length > maxToken && rows.length > 1) {
     let quiet = 0;
     for (let index = 1; index < rows.length; index++) {
       if (rows[index][1] < rows[quiet][1]) quiet = index;
     }
-    if (quiet === 0) quiet = rows.length - 1;
     rows = rows.filter((_, index) => index !== quiet);
     shortened = true;
-    token = encodeBytes(JSON.stringify(packed(profile, rows)));
+    token = encodeToken(profile, rows);
   }
   return { token, shortened };
 }
@@ -168,25 +173,26 @@ export async function presentShare(url, { status, field, message = 'Link copied'
   }
 }
 
+function readShare(bytes) {
+  if (bytes.length < 3 || bytes[0] !== VERSION) return null;
+  const jsonLength = bytes[1] | (bytes[2] << 8);
+  if (jsonLength < 2 || 3 + jsonLength > bytes.length) return null;
+  const parsed = JSON.parse(new TextDecoder().decode(bytes.subarray(3, 3 + jsonLength)));
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || parsed.v !== VERSION) return null;
+  const partials = unpackPartialBytes(bytes.subarray(3 + jsonLength));
+  if (!partials) return null;
+  return { ...parsed, partials };
+}
+
 export function decodeShare(hash) {
   try {
     const match = /(?:^|#|&)s=([A-Za-z0-9_-]+)/.exec(String(hash || ''));
     if (!match) return null;
-    const parsed = JSON.parse(decodeBytes(match[1]));
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || parsed.v !== VERSION) return null;
+    const bytes = base64UrlToBytes(match[1]);
+    const parsed = readShare(bytes);
+    if (!parsed) return null;
     const controls = sanitizeControls(parsed.c || {});
-    const partials = typeof parsed.q === 'string'
-      ? unpackPartials(parsed.q)
-      : (Array.isArray(parsed.p) ? parsed.p : []).slice(0, MAX_PARTIALS).map((row) => {
-        if (!Array.isArray(row)) return null;
-        const ratio = clamp(row[0], 0.05, 80, 4, null);
-        if (ratio == null) return null;
-        return {
-          ratio,
-          gainDb: clamp(row[1], -96, 0, 2, -12),
-          decay: clamp(row[2], 0.05, 30, 3, 1),
-        };
-      }).filter(Boolean);
+    const partials = parsed.partials;
     return {
       name: plain(parsed.n, 80) || 'Shared sound',
       description: plain(parsed.d, 160),

@@ -125,14 +125,56 @@ test('a link that cannot fit drops quiet partials', () => {
   assert.ok(decoded.partials.some((partial) => partial.gainDb === 0));
 });
 
+test('shortening drops the quietest partial even when it is first', () => {
+  const partials = [
+    { ratio: 1, gainDb: -96, decay: 1 },
+    { ratio: 2, gainDb: -12, decay: 1 },
+    { ratio: 3, gainDb: 0, decay: 1 },
+    { ratio: 4, gainDb: -3, decay: 1 },
+  ];
+  const full = buildShare({ ...sample, partials });
+  const built = buildShare({ ...sample, partials }, { maxToken: full.token.length - 1 });
+  assert.equal(built.shortened, true);
+  const decoded = decodeShare(`#s=${built.token}`);
+  assert.equal(decoded.partials.length, 3);
+  assert.ok(decoded.partials.every((partial) => partial.gainDb !== -96));
+  assert.ok(decoded.partials.some((partial) => partial.gainDb === 0));
+});
+
+test('a 256-partial link is one base64 of the packed bytes', () => {
+  const partials = Array.from({ length: 256 }, (_, index) => ({
+    ratio: 1 + index * 0.05,
+    gainDb: Math.max(-96, -index * 0.25),
+    decay: 1,
+  }));
+  const built = buildShare({ ...sample, partials });
+  assert.equal(built.shortened, false);
+  const padded = built.token.replaceAll('-', '+').replaceAll('_', '/') + '==='.slice((built.token.length + 3) % 4);
+  const bytes = Buffer.from(padded, 'base64');
+  const jsonLength = bytes[1] | (bytes[2] << 8);
+  assert.equal(bytes.length, 3 + jsonLength + 256 * 8);
+  const expected = Math.ceil(bytes.length / 3) * 4 - [0, 2, 1][bytes.length % 3];
+  assert.equal(built.token.length, expected);
+  assert.ok(built.token.length < 3800);
+});
+
 test('a bad share hash is ignored', () => {
   assert.equal(decodeShare(''), null);
   assert.equal(decodeShare('#p=abc'), null);
   assert.equal(decodeShare('#s=not-json'), null);
   assert.equal(decodeShare('#s='), null);
   assert.equal(decodeShare('#s=' + encodeShare(sample).slice(0, 8)), null);
-  const tagged = JSON.parse(Buffer.from(encodeShare({ ...sample, name: 'Ok' }).replaceAll('-', '+').replaceAll('_', '/'), 'base64').toString());
+  const token = encodeShare({ ...sample, name: 'Ok' });
+  const padded = token.replaceAll('-', '+').replaceAll('_', '/') + '==='.slice((token.length + 3) % 4);
+  const bytes = Buffer.from(padded, 'base64');
+  const jsonLength = bytes[1] | (bytes[2] << 8);
+  const tagged = JSON.parse(bytes.subarray(3, 3 + jsonLength).toString());
   tagged.v = 99;
-  const bad = Buffer.from(JSON.stringify(tagged)).toString('base64url');
-  assert.equal(decodeShare(`#s=${bad}`), null);
+  const json = Buffer.from(JSON.stringify(tagged));
+  const rebuilt = Buffer.concat([
+    Buffer.from([1, json.length & 0xff, (json.length >> 8) & 0xff]),
+    json,
+    bytes.subarray(3 + jsonLength),
+  ]);
+  assert.equal(decodeShare(`#s=${rebuilt.toString('base64url')}`), null);
 });
