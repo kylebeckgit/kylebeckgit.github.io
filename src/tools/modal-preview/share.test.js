@@ -92,6 +92,10 @@ test('share values are clamped and text is not markup', () => {
   assert.equal(decoded.partials[0].gainDb, 0);
   assert.equal(decoded.partials[0].decay, 0.05);
   assert.equal(decoded.partials[1].ratio, 0.05);
+  const many = Array.from({ length: 64 }, (_, index) => ({ ratio: 1 + index, gainDb: -90, decay: 1 }));
+  const kept = decodeShare(`#s=${encodeShare({ ...sample, partials: many })}`);
+  assert.equal(kept.partials.length, 64);
+  assert.equal(kept.partials[10].gainDb, -90);
 });
 
 test('a bad share hash is ignored', () => {

@@ -76,9 +76,9 @@ export function encodeShare(profile = {}) {
       variationDecay: round(controls.variationDecay, 3),
       variationLift: round(controls.variationLift, 3),
     },
-    p: (Array.isArray(profile.partials) ? profile.partials : []).slice(0, 32).map((partial) => [
+    p: (Array.isArray(profile.partials) ? profile.partials : []).slice(0, 256).map((partial) => [
       clamp(partial?.ratio, 0.05, 80, 4, null),
-      clamp(partial?.gainDb, -60, 0, 2, -12),
+      clamp(partial?.gainDb, -96, 0, 2, -12),
       clamp(partial?.decay, 0.05, 30, 3, 1),
     ]).filter((row) => row[0] != null),
   };
@@ -90,11 +90,15 @@ export function shareUrl(profile, href = '') {
   return `${base}#s=${encodeShare(profile)}`;
 }
 
-export async function presentShare(url, { status, field } = {}) {
+export function shareTrimmed(profile) {
+  return Array.isArray(profile?.partials) && profile.partials.length > 256;
+}
+
+export async function presentShare(url, { status, field, message = 'Link copied' } = {}) {
   try {
     if (!navigator.clipboard?.writeText) throw new Error('no clipboard');
     await navigator.clipboard.writeText(url);
-    if (status) status.textContent = 'Link copied';
+    if (status) status.textContent = message;
     if (field) field.hidden = true;
   } catch {
     if (field) {
@@ -114,13 +118,13 @@ export function decodeShare(hash) {
     const parsed = JSON.parse(decodeBytes(match[1]));
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || parsed.v !== VERSION) return null;
     const controls = sanitizeControls(parsed.c || {});
-    const partials = (Array.isArray(parsed.p) ? parsed.p : []).slice(0, 32).map((row) => {
+    const partials = (Array.isArray(parsed.p) ? parsed.p : []).slice(0, 256).map((row) => {
       if (!Array.isArray(row)) return null;
       const ratio = clamp(row[0], 0.05, 80, 4, null);
       if (ratio == null) return null;
       return {
         ratio,
-        gainDb: clamp(row[1], -60, 0, 2, -12),
+        gainDb: clamp(row[1], -96, 0, 2, -12),
         decay: clamp(row[2], 0.05, 30, 3, 1),
       };
     }).filter(Boolean);

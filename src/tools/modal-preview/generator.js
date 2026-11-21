@@ -8,7 +8,7 @@ import { bodySignature, hitObjectMode, objectCaption, paintObject } from './obje
 import { applyShapeSound, SHAPE_SOUND } from './mode-solve.js';
 import { cachedModes, flatSpec, patternNote, solveMs, trackFlatModes } from './mode-client.js';
 import { describePrompt } from './recipes.js';
-import { presentShare, shareUrl } from './share.js';
+import { presentShare, shareTrimmed, shareUrl } from './share.js';
 import { renderPreview, scaleToPeak } from './resonator.js';
 import { mountStudio } from './studio.js';
 import { assessQuality, createRollHistory, defaultLocks, identityKnobs, pushRoll, redoRoll, rollSound, undoRoll } from './randomize.js';
@@ -970,7 +970,7 @@ export function mountGenerator(root, { openInDesigner } = {}) {
       return;
     }
     const snap = snapshotVariation(variation);
-    const url = shareUrl({
+    const profile = {
       name: snap.name,
       description: variation.line || variation.reading || snap.name,
       objectName: snap.objectName,
@@ -984,9 +984,14 @@ export function mountGenerator(root, { openInDesigner } = {}) {
       position: snap.position,
       detune: snap.detune,
       velocity: snap.velocity,
-    }, location.href);
+    };
+    const url = shareUrl(profile, location.href);
     history.replaceState(null, '', url.slice(url.indexOf('#')));
-    await presentShare(url, { status, field: root.querySelector('[data-gen-share-fallback]') });
+    await presentShare(url, {
+      status,
+      field: root.querySelector('[data-gen-share-fallback]'),
+      message: shareTrimmed(profile) ? 'Link copied. It keeps the first 256 partials.' : 'Link copied',
+    });
   });
   for (const button of root.querySelectorAll('.gen-preview [data-view-mode]')) {
     button.addEventListener('click', () => {
