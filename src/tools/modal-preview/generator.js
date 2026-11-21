@@ -8,6 +8,7 @@ import { bodySignature, hitObjectMode, objectCaption, paintObject } from './obje
 import { applyShapeSound, SHAPE_SOUND } from './mode-solve.js';
 import { cachedModes, flatSpec, patternNote, solveMs, trackFlatModes } from './mode-client.js';
 import { describePrompt } from './recipes.js';
+import { presentShare, shareUrl } from './share.js';
 import { renderPreview, scaleToPeak } from './resonator.js';
 import { mountStudio } from './studio.js';
 import { assessQuality, createRollHistory, defaultLocks, identityKnobs, pushRoll, redoRoll, rollSound, undoRoll } from './randomize.js';
@@ -960,6 +961,37 @@ export function mountGenerator(root, { openInDesigner } = {}) {
     const variation = controller?.current();
     if (!variation) return;
     showSnap(variation, { hear: true });
+  });
+  root.querySelector('[data-gen-share]')?.addEventListener('click', async () => {
+    const variation = controller?.current();
+    const status = root.querySelector('[data-gen-share-status]');
+    if (!variation) {
+      if (status) status.textContent = 'Describe a sound first.';
+      return;
+    }
+    const snap = snapshotVariation(variation);
+    const profile = {
+      name: snap.name,
+      description: variation.line || variation.reading || snap.name,
+      objectName: snap.objectName,
+      material: snap.material,
+      shape: snap.shape,
+      size: snap.size,
+      controls: snap.controls,
+      partials: snap.partials,
+      exciter: snap.exciter,
+      hardness: snap.hardness,
+      position: snap.position,
+      detune: snap.detune,
+      velocity: snap.velocity,
+    };
+    const shared = shareUrl(profile, location.href);
+    history.replaceState(null, '', shared.url.slice(shared.url.indexOf('#')));
+    await presentShare(shared.url, {
+      status,
+      field: root.querySelector('[data-gen-share-fallback]'),
+      message: shared.shortened ? 'Link shortened: some quiet partials were dropped' : 'Link copied',
+    });
   });
   for (const button of root.querySelectorAll('.gen-preview [data-view-mode]')) {
     button.addEventListener('click', () => {
