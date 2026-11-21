@@ -45,9 +45,52 @@ function decodeBytes(token) {
   return new TextDecoder().decode(bytes);
 }
 
-export function encodeShare(profile = {}) {
+const MAX_PARTIALS = 256;
+const MAX_TOKEN = 7500;
+
+function quantizePartials(partials) {
+  return (Array.isArray(partials) ? partials : []).slice(0, MAX_PARTIALS).map((partial) => [
+    clamp(partial?.ratio, 0.05, 80, 4, null),
+    clamp(partial?.gainDb, -96, 0, 2, -12),
+    clamp(partial?.decay, 0.05, 30, 3, 1),
+  ]).filter((row) => row[0] != null);
+}
+
+function packPartials(rows) {
+  const bytes = new Uint8Array(rows.length * 8);
+  const view = new DataView(bytes.buffer);
+  rows.forEach((row, index) => {
+    const offset = index * 8;
+    view.setUint32(offset, Math.round(row[0] * 10000), true);
+    view.setInt16(offset + 4, Math.round(row[1] * 100), true);
+    view.setUint16(offset + 6, Math.round(row[2] * 1000), true);
+  });
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return encodeBytes(binary);
+}
+
+function unpackPartials(token) {
+  const binary = decodeBytes(token);
+  const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+  if (bytes.length % 8) return [];
+  const view = new DataView(bytes.buffer);
+  const partials = [];
+  for (let offset = 0; offset + 8 <= bytes.length && partials.length < MAX_PARTIALS; offset += 8) {
+    const ratio = clamp(view.getUint32(offset, true) / 10000, 0.05, 80, 4, null);
+    if (ratio == null) continue;
+    partials.push({
+      ratio,
+      gainDb: clamp(view.getInt16(offset + 4, true) / 100, -96, 0, 2, -12),
+      decay: clamp(view.getUint16(offset + 6, true) / 1000, 0.05, 30, 3, 1),
+    });
+  }
+  return partials;
+}
+
+function packed(profile, rows) {
   const controls = sanitizeControls(profile.controls || {});
-  const packed = {
+  return {
     v: VERSION,
     n: plain(profile.name, 80),
     d: plain(profile.description, 160),
@@ -76,22 +119,36 @@ export function encodeShare(profile = {}) {
       variationDecay: round(controls.variationDecay, 3),
       variationLift: round(controls.variationLift, 3),
     },
-    p: (Array.isArray(profile.partials) ? profile.partials : []).slice(0, 256).map((partial) => [
-      clamp(partial?.ratio, 0.05, 80, 4, null),
-      clamp(partial?.gainDb, -96, 0, 2, -12),
-      clamp(partial?.decay, 0.05, 30, 3, 1),
-    ]).filter((row) => row[0] != null),
+    q: packPartials(rows),
   };
-  return encodeBytes(JSON.stringify(packed));
+}
+
+export function buildShare(profile = {}, { maxToken = MAX_TOKEN } = {}) {
+  const source = Array.isArray(profile.partials) ? profile.partials : [];
+  let rows = quantizePartials(source);
+  let shortened = source.length > rows.length;
+  let token = encodeBytes(JSON.stringify(packed(profile, rows)));
+  while (token.length > maxToken && rows.length > 1) {
+    let quiet = 0;
+    for (let index = 1; index < rows.length; index++) {
+      if (rows[index][1] < rows[quiet][1]) quiet = index;
+    }
+    if (quiet === 0) quiet = rows.length - 1;
+    rows = rows.filter((_, index) => index !== quiet);
+    shortened = true;
+    token = encodeBytes(JSON.stringify(packed(profile, rows)));
+  }
+  return { token, shortened };
+}
+
+export function encodeShare(profile = {}) {
+  return buildShare(profile).token;
 }
 
 export function shareUrl(profile, href = '') {
   const base = String(href || '').split('#')[0];
-  return `${base}#s=${encodeShare(profile)}`;
-}
-
-export function shareTrimmed(profile) {
-  return Array.isArray(profile?.partials) && profile.partials.length > 256;
+  const built = buildShare(profile);
+  return { url: `${base}#s=${built.token}`, shortened: built.shortened };
 }
 
 export async function presentShare(url, { status, field, message = 'Link copied' } = {}) {
@@ -118,16 +175,18 @@ export function decodeShare(hash) {
     const parsed = JSON.parse(decodeBytes(match[1]));
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || parsed.v !== VERSION) return null;
     const controls = sanitizeControls(parsed.c || {});
-    const partials = (Array.isArray(parsed.p) ? parsed.p : []).slice(0, 256).map((row) => {
-      if (!Array.isArray(row)) return null;
-      const ratio = clamp(row[0], 0.05, 80, 4, null);
-      if (ratio == null) return null;
-      return {
-        ratio,
-        gainDb: clamp(row[1], -96, 0, 2, -12),
-        decay: clamp(row[2], 0.05, 30, 3, 1),
-      };
-    }).filter(Boolean);
+    const partials = typeof parsed.q === 'string'
+      ? unpackPartials(parsed.q)
+      : (Array.isArray(parsed.p) ? parsed.p : []).slice(0, MAX_PARTIALS).map((row) => {
+        if (!Array.isArray(row)) return null;
+        const ratio = clamp(row[0], 0.05, 80, 4, null);
+        if (ratio == null) return null;
+        return {
+          ratio,
+          gainDb: clamp(row[1], -96, 0, 2, -12),
+          decay: clamp(row[2], 0.05, 30, 3, 1),
+        };
+      }).filter(Boolean);
     return {
       name: plain(parsed.n, 80) || 'Shared sound',
       description: plain(parsed.d, 160),

@@ -8,7 +8,7 @@ import { cachedModes, flatSpec, patternNote, solveMs, trackFlatModes } from './m
 import { densityForProfile, shapePartials } from './shape.js';
 import { createRollHistory, defaultLocks, pushRoll, redoRoll, rollSound, undoRoll } from './randomize.js';
 import { decodeProfile } from './studio.js';
-import { decodeShare, presentShare, shareTrimmed, shareUrl } from './share.js';
+import { decodeShare, presentShare, shareUrl } from './share.js';
 import { SILENT_MODE_HINT, audioContextClass, beginAudio, installGestureUnlock, playSilentUnlock, prepareAudioSession, resumeInGesture } from './audio-session.js';
 
 export function mount(root) {
@@ -1298,16 +1298,16 @@ export function mount(root) {
 
   root.querySelector('[data-share]')?.addEventListener('click', async () => {
     const profile = profileFromState();
-    const url = shareUrl(profile, location.href);
-    history.replaceState(null, '', url.slice(url.indexOf('#')));
-    if (url.length > 12000) {
+    const shared = shareUrl(profile, location.href);
+    history.replaceState(null, '', shared.url.slice(shared.url.indexOf('#')));
+    if (shared.url.length > 12000) {
       setShareStatus('This sound is too long for a link.');
       return;
     }
-    await presentShare(url, {
+    await presentShare(shared.url, {
       status: root.querySelector('[data-share-status]'),
       field: root.querySelector('[data-share-fallback]'),
-      message: shareTrimmed(profile) ? 'Link copied. It keeps the first 256 partials.' : 'Link copied',
+      message: shared.shortened ? 'Link shortened: some quiet partials were dropped' : 'Link copied',
     });
   });
 

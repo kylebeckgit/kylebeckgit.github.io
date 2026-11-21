@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { decodeShare, encodeShare } from './share.js';
+import { buildShare, decodeShare, encodeShare } from './share.js';
 
 const sample = {
   name: 'Kelp harp',
@@ -96,6 +96,33 @@ test('share values are clamped and text is not markup', () => {
   const kept = decodeShare(`#s=${encodeShare({ ...sample, partials: many })}`);
   assert.equal(kept.partials.length, 64);
   assert.equal(kept.partials[10].gainDb, -90);
+});
+
+test('64 and 256 partials round-trip, including -96 dB', () => {
+  for (const count of [64, 256]) {
+    const partials = Array.from({ length: count }, (_, index) => ({
+      ratio: 1 + index * 0.05,
+      gainDb: index === count - 1 ? -96 : Math.max(-96, -index * 0.25),
+      decay: 0.05 + (index % 10) * 0.5,
+    }));
+    const decoded = decodeShare(`#s=${encodeShare({ ...sample, partials })}`);
+    assert.equal(decoded.partials.length, count);
+    assert.equal(decoded.partials[count - 1].gainDb, -96);
+    assert.equal(decoded.partials[0].ratio, 1);
+  }
+});
+
+test('a link that cannot fit drops quiet partials', () => {
+  const partials = Array.from({ length: 40 }, (_, index) => ({
+    ratio: 1 + index * 0.2,
+    gainDb: index === 0 ? 0 : -index,
+    decay: 1,
+  }));
+  const built = buildShare({ ...sample, partials }, { maxToken: 500 });
+  assert.equal(built.shortened, true);
+  const decoded = decodeShare(`#s=${built.token}`);
+  assert.ok(decoded.partials.length < 40);
+  assert.ok(decoded.partials.some((partial) => partial.gainDb === 0));
 });
 
 test('a bad share hash is ignored', () => {
