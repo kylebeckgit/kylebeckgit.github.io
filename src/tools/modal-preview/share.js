@@ -160,16 +160,23 @@ export function shareUrl(profile, href = '') {
 
 // Pitch for a decoded share. A library fundamental wins over pitchScale,
 // which is clamped and would play a low object such as Slinky too high.
+// Both frequencies stay in the same 20 Hz to 8 kHz span the share link uses.
+function heardHz(value) {
+  const n = Number(value);
+  if (!(n > 0)) return 0;
+  return clamp(n, 20, 8000, 3, 0);
+}
+
 export function sharedPitch(profile, { note = 'A4' } = {}) {
-  const fundamental = Number(profile?.fundamental);
-  const referenceHz = Number(profile?.referenceHz);
+  const fundamental = heardHz(profile?.fundamental);
+  const referenceHz = heardHz(profile?.referenceHz);
   const controls = sanitizeControls(profile?.controls || {});
   const hearFundamental = fundamental > 0
     ? fundamental
     : playedFundamental(controls.pitchScale, noteFrequency(note));
   return {
     hearFundamental,
-    playReferenceHz: referenceHz > 0 ? referenceHz : 0,
+    playReferenceHz: referenceHz,
     note: fundamental > 0 ? noteNameFromHz(fundamental) : note,
   };
 }

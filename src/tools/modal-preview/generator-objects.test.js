@@ -181,7 +181,17 @@ test('a shared slinky opens in the designer at F#2, not the clamped pitch scale'
   assert.ok(Math.abs(opened.playReferenceHz - slinky.refHz) < 0.01);
   assert.ok(opened.hearFundamental < floor - 1);
   assert.equal(opened.note, slinky.refNote);
-  const extreme = sharedPitch({ controls: { pitchScale: 99 }, partials: [{ ratio: 1, gainDb: 0, decay: 1 }] }, { note: 'A4' });
-  assert.equal(extreme.hearFundamental, 1760);
-  assert.equal(extreme.playReferenceHz, 0);
+});
+
+test('a legacy link with an extreme pitch stays inside the playable range', () => {
+  const scaleOnly = sharedPitch({ controls: { pitchScale: 99 } }, { note: 'A4' });
+  assert.equal(scaleOnly.hearFundamental, 1760);
+  assert.equal(scaleOnly.playReferenceHz, 0);
+  const wild = sharedPitch({
+    controls: { pitchScale: 0.01 },
+    fundamental: 100000,
+    referenceHz: 0.001,
+  }, { note: 'A4' });
+  assert.equal(wild.hearFundamental, 8000);
+  assert.equal(wild.playReferenceHz, 20);
 });
