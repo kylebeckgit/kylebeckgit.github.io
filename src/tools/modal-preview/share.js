@@ -163,9 +163,10 @@ export function shareUrl(profile, href = '') {
 export function sharedPitch(profile, { note = 'A4' } = {}) {
   const fundamental = Number(profile?.fundamental);
   const referenceHz = Number(profile?.referenceHz);
+  const controls = sanitizeControls(profile?.controls || {});
   const hearFundamental = fundamental > 0
     ? fundamental
-    : playedFundamental(profile?.controls?.pitchScale, noteFrequency(note));
+    : playedFundamental(controls.pitchScale, noteFrequency(note));
   return {
     hearFundamental,
     playReferenceHz: referenceHz > 0 ? referenceHz : 0,

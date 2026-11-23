@@ -1363,7 +1363,7 @@ export function mount(root) {
     state.playReferenceHz = pitch.playReferenceHz;
     state.hearFundamental = pitch.hearFundamental;
     state.note = pitch.note;
-    if (Number(payload.fundamental) > 0) markPlayedNote(root, pitch.hearFundamental);
+    markPlayedNote(root, pitch.hearFundamental);
     const copy = payload.partials.map((partial) => ({
       ratio: partial.ratio,
       gainDb: partial.gainDb,
@@ -1430,11 +1430,6 @@ export function mount(root) {
   if (/(?:^|#|&)s=/.test(location.hash || '') && !sharedSound) {
     setShareStatus('This link could not be read.');
   } else if (shared?.partials?.length) {
-    const pitch = sharedPitch(shared, { note: state.note });
-    state.hearFundamental = pitch.hearFundamental;
-    state.playReferenceHz = pitch.playReferenceHz;
-    state.note = pitch.note;
-    if (Number(shared.fundamental) > 0 || Number(shared.referenceHz) > 0) markPlayedNote(root, pitch.hearFundamental);
     receiveHandoff(shared);
     setShareStatus('Opened a shared sound.');
   } else if (shared?.controls) {
