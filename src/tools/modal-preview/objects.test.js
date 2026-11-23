@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { OBJECTS, baseProfile, matchObjectText, objectById, searchObjects } from './objects.js';
+import { OBJECTS, baseProfile, exportOptions, matchObjectText, objectById, objectNoteText, playPitch, searchObjects, sourceLine } from './objects.js';
 import { loadObject, mutateProfile, rollObject } from './objects-randomize.js';
 import { mulberry32, rollSound, defaultLocks, identityKnobs, safetyCheck } from './randomize.js';
-import { previewPartials, defaultControls, zebraExport, fromCsv } from './engine.js';
+import { previewPartials, defaultControls, zebraExport, fromCsv, A4_HZ, ZEBRA_PARTIAL_LIMIT_HZ, audiblePartials } from './engine.js';
 import { buildShare, decodeShare } from './share.js';
 
 const BASIS_RATIO = new Set(['measured', 'published tuning', 'physics', 'approximation']);
@@ -172,7 +172,7 @@ test('a non-feral material roll is unchanged by the feral option existing', () =
 test('object profiles export to a Zebra CSV and share without loss of rows', () => {
   for (const object of OBJECTS) {
     const rolled = rollObject({ object, seed: 21, wildness: 0.6 });
-    const exported = zebraExport(rolled.partials, { fundamental: 440, description: rolled.description });
+    const exported = zebraExport(rolled.partials, exportOptions(object, { description: rolled.description }));
     assert.match(exported.csv, /^Ratio;GainDB;Decay\n/);
     const back = fromCsv(exported.csv, { knob: exported.knob });
     assert.ok(back.length >= 1 && back.length <= rolled.partials.length);
@@ -182,4 +182,59 @@ test('object profiles export to a Zebra CSV and share without loss of rows', () 
     assert.equal(decoded.shape, object.shape);
     assert.equal(decoded.partials.length, rolled.partials.length);
   }
+});
+
+test('objects that thin at A4 name a reference pitch and keep at least six rows, or all of them', () => {
+  const needed = OBJECTS.filter((object) => {
+    const atA4 = object.partials.filter((p) => p.ratio * A4_HZ <= ZEBRA_PARTIAL_LIMIT_HZ).length;
+    return atA4 < object.partials.length && atA4 < 6;
+  });
+  assert.deepEqual(needed.map((o) => o.id).sort(), ['daxophone', 'kalimba', 'slinky', 'wine-glass']);
+  for (const object of needed) {
+    assert.ok(object.refHz > 0 && object.refNote && object.refReason, object.id);
+    assert.ok(object.refHz < A4_HZ, object.id);
+    const atA4 = audiblePartials(object.partials, { fundamental: A4_HZ });
+    const atRef = audiblePartials(object.partials, exportOptions(object));
+    assert.ok(atA4.length < 6, `${object.id} at A4`);
+    assert.ok(atRef.length >= Math.min(6, object.partials.length), `${object.id} at ${object.refNote}: ${atRef.length}`);
+    assert.equal(atRef.length, object.partials.filter((p) => p.ratio * object.refHz <= ZEBRA_PARTIAL_LIMIT_HZ).length);
+    const exported = zebraExport(object.partials, exportOptions(object, { description: object.name }));
+    assert.equal(exported.partials.length, atRef.length);
+    assert.match(exported.hint, new RegExp(`Play at ${object.refNote.replace('#', '#')} \\(${Math.round(object.refHz)} Hz\\)`));
+    assert.match(exported.filename, /_at-[a-g]s?\d_decay\d+\.csv$/);
+    assert.ok(objectNoteText(object).includes(`Played at ${object.refNote}`));
+    assert.ok(objectNoteText(object).includes(object.refReason));
+  }
+});
+
+test('objects without a reference pitch, and material rolls, stay at A4', () => {
+  for (const object of OBJECTS.filter((o) => !o.refHz)) {
+    assert.equal(playPitch(object).note, 'A4');
+    assert.equal(exportOptions(object).referenceHz, undefined);
+    assert.equal(exportOptions(object).fundamental, 440);
+    const exported = zebraExport(object.partials, exportOptions(object, { description: object.name }));
+    assert.match(exported.hint, /Rows stop at 6 kHz when the fundamental is A4\./);
+    assert.equal(exported.filename.includes('_at-'), false);
+  }
+  const material = zebraExport(previewPartials(defaultControls()), { description: 'Long bell strike' });
+  assert.match(material.hint, /Rows stop at 6 kHz when the fundamental is A4\./);
+  assert.equal(material.filename.includes('_at-'), false);
+});
+
+test('each object note has a short source line built from its sources', () => {
+  for (const object of OBJECTS) {
+    const line = sourceLine(object);
+    const caption = objectNoteText(object);
+    assert.ok(caption.includes(line), object.id);
+    assert.equal(caption.includes('OBJECTS-SOURCES') || caption.includes('.md'), false, object.id);
+    if (object.basis.ratio === 'approximation') {
+      assert.equal(line, 'Approximation, tuned by ear.');
+    } else {
+      assert.equal(line, `Based on: ${object.credit}.`);
+      assert.ok(object.credit, object.id);
+    }
+  }
+  assert.equal(sourceLine(objectById('church-bell')), 'Based on: Rossing and Perrin, 1987.');
+  assert.equal(sourceLine(objectById('kalimba')), 'Based on: Fletcher and Rossing, The Physics of Musical Instruments.');
+  assert.equal(sourceLine(objectById('waterphone')), 'Approximation, tuned by ear.');
 });

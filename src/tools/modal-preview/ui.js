@@ -7,7 +7,7 @@ import { bodySignature, hitObjectMode, objectCaption, paintObject } from './obje
 import { cachedModes, flatSpec, patternNote, solveMs, trackFlatModes } from './mode-client.js';
 import { densityForProfile, shapePartials } from './shape.js';
 import { createRollHistory, defaultLocks, pushRoll, redoRoll, rollSound, undoRoll } from './randomize.js';
-import { matchObjectText, objectById, searchObjects } from './objects.js';
+import { matchObjectText, objectById, objectNoteText, playPitch, searchObjects } from './objects.js';
 import { loadObject, rollObject } from './objects-randomize.js';
 import { decodeProfile } from './studio.js';
 import { decodeShare, presentShare, shareUrl } from './share.js';
@@ -295,9 +295,11 @@ export function mount(root) {
   }
 
   function heardOptions() {
+    const fundamental = state.hearFundamental || noteFrequency(state.note);
     return {
-      fundamental: state.hearFundamental || noteFrequency(state.note),
+      fundamental,
       sampleRate: state.audio?.sampleRate || 48000,
+      referenceHz: state.playReferenceHz || undefined,
     };
   }
 
@@ -552,7 +554,10 @@ export function mount(root) {
     try { keys.setPointerCapture?.(event.pointerId); } catch { /* no active pointer */ }
     state.note = button.dataset.note;
     state.hearFundamental = playedFundamental(state.controls?.pitchScale, noteFrequency(state.note));
+    state.playReferenceHz = chosenObject()?.refHz > 0 ? state.hearFundamental : 0;
     for (const key of root.querySelectorAll('[data-note]')) key.setAttribute('aria-pressed', String(key === button));
+    const hint = root.querySelector('[data-export-hint]');
+    if (hint) hint.textContent = zebraExport(state.partials, heardOptions()).hint;
     state.userHolding = true;
     cancelAutoHear();
     strike(state, true);
@@ -770,11 +775,12 @@ export function mount(root) {
   const objectLoad = root.querySelector('[data-object-load]');
   const feralBox = root.querySelector('[data-roll-feral]');
   const chosenObject = () => objectById(objectSelect?.value || '');
-  const BASIS_WORDS = {
-    measured: 'measured',
-    'published tuning': 'published tuning',
-    physics: 'computed from physics',
-    approximation: 'approximation, tuned by ear',
+  const setPlayPitch = (object) => {
+    const pitch = playPitch(object);
+    state.note = pitch.note;
+    state.hearFundamental = playedFundamental(state.controls?.pitchScale, pitch.hz);
+    state.playReferenceHz = object?.refHz > 0 ? pitch.hz : 0;
+    markPlayedNote(root, pitch.hz);
   };
   const syncObject = () => {
     const object = chosenObject();
@@ -782,10 +788,9 @@ export function mount(root) {
     if (objectLoad) objectLoad.hidden = !object;
     if (objectNote) {
       objectNote.hidden = !object;
-      objectNote.textContent = object
-        ? `${object.name}: pitch ratios ${BASIS_WORDS[object.basis.ratio]}; levels and most decays are approximations. ${object.sources.length} source${object.sources.length === 1 ? '' : 's'} are listed in the object file.`
-        : '';
+      objectNote.textContent = object ? objectNoteText(object) : '';
     }
+    setPlayPitch(object);
   };
   const closeObjectList = () => {
     if (!objectList) return;
@@ -941,6 +946,7 @@ export function mount(root) {
     const rolled = object
       ? rollObject({ object, ...settings })
       : rollSound({ base: state.profilePartials || state.partials, material: materialSelect?.value || 'any', ...settings });
+    if (object) setPlayPitch(object);
     writeRoll(rolled.knobs, rolled.description, rolled.profile);
   });
   objectLoad?.addEventListener('click', () => {
@@ -948,6 +954,7 @@ export function mount(root) {
     if (!object) return;
     pushRoll(rollHistory, snapshotRoll());
     const loaded = loadObject(object);
+    setPlayPitch(object);
     writeRoll(loaded.knobs, loaded.description, loaded.profile);
   });
   root.querySelector('[data-roll-back]')?.addEventListener('click', () => {

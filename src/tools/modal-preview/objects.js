@@ -112,6 +112,7 @@ export const OBJECTS = [
     mutate: mutate({ tune: [-5, 5], decay: [-0.35, 0.3], disperse: [-0.03, 0.06], ratioJitterCents: 10, pairSplitCents: ONE_PAIR }),
     notes: 'A tuned minor-third church or carillon bell of the Dutch (Hemony) tradition. Ratios and decay times are the values printed for one measured bell; the hum is ratio 1 here, so the prime is an octave up. Hum decay is capped at the page limit of 30 s (printed: 52 s). Levels are approximations, and the top row of the printed table (8.215) is left out.',
     basis: { ratio: 'measured', gain: 'approximation', decay: 'measured as printed' },
+    credit: 'Rossing and Perrin, 1987',
     sources: [
       'Rossing, T. D. and Perrin, R., "Vibrations of bells", Applied Acoustics (1987; volume and pages from memory, unverified), Table 5: ratios 0.500 to 6.796 and decay times for the bell in its Fig. 7. Read from a text extract of the table; the decay-time definition was not confirmed against the original.',
       'Rossing, T. D., "Acoustics of Eastern and Western bells, old and new", J. Acoust. Soc. Jpn (E) 10 (1989) 241, from its J-STAGE address: bell founders tune the lowest five modes to 1 : 2 : 2.4 : 3 : 4 relative to the hum, and the Hemony brothers led this tuning.',
@@ -130,6 +131,7 @@ export const OBJECTS = [
     mutate: mutate({ tune: [-6, 6], decay: [-0.2, 0.45], decayKf: [-0.2, 0.2], absorb: [-0.3, 0.15], normalize: [-0.1, 0.4], ratioJitterCents: 4, pairSplitCents: null, decayScale: [0.7, 1.6] }),
     notes: 'Each mode is two orthogonal modes a fraction of a hertz to ten hertz apart, so every partial beats. Frequencies are the two measured sets for Bowl 1 (mass 934 g, 180 mm). Levels and decays are approximations: the paper reports very low damping but the decay times here are chosen, not measured.',
     basis: { ratio: 'measured', gain: 'approximation', decay: 'approximation' },
+    credit: 'Inácio and Henrique',
     sources: [
       'Inacio, O. and Henrique, L. (Instituto Politecnico do Porto), "The Dynamics of Tibetan Singing Bowls", PDF at projects.itn.pt/BellTune/File3.pdf, Table I: Bowl 1 modal frequencies A and B for (2,0) to (8,0), ratios 1, 2.8, 5.2, 8.1, 11.6, 15.6, 19.9. A journal version with Antunes exists; its volume and pages are not verified here.',
     ],
@@ -146,6 +148,10 @@ export const OBJECTS = [
     mutate: mutate({ tune: [-5, 5], decay: [-0.2, 0.4], decayKf: [-0.3, 0.1], absorb: [-0.35, 0.1], normalize: [0, 0.45], ratioJitterCents: 5, pairSplitCents: [2, 10] }),
     notes: 'Ratios come from the inextensional ring formula f ~ n(n^2-1)/sqrt(n^2+1) for the (n,0) modes, which gives 1, 2.83, 5.42, 8.77, 12.87, matching the measured singing-bowl series (1, 2.8, 5.2, 8.1, 11.6) to a few percent. No wine glass was measured here. Levels and decays are approximations. The pair split used in rolls is an approximation of the slight asymmetry in real glass.',
     basis: { ratio: 'physics', gain: 'approximation', decay: 'approximation' },
+    credit: 'Rayleigh, The Theory of Sound',
+    refNote: 'B3',
+    refHz: 246.941650628062,
+    refReason: 'The (n,0) series would leave five rows under 6 kHz at A4.',
     sources: [
       'Thin ring bending-mode formula (Lord Rayleigh, The Theory of Sound, inextensional vibrations of a ring). Applied here as an idealization of a wine glass.',
       'Cross-check: Inacio and Henrique, singing-bowl Table I (see Tibetan singing bowl).',
@@ -163,6 +169,7 @@ export const OBJECTS = [
     mutate: mutate({ tune: [-7, 7], decay: [-0.3, 0.4], disperse: [-0.08, 0.1], normalize: [-0.1, 0.4], ratioJitterCents: 12, pairSplitCents: [4, 16] }),
     notes: 'The ratios are a generic bonang spectrum of four partials. Real instruments differ from one to the next, so the roll jitter is wide. Slendro and pelog are scale systems, not partial sets: use Tune or transpose in Zebra to place a bonang on a scale step. Levels and decays are approximations.',
     basis: { ratio: 'published tuning', gain: 'approximation', decay: 'approximation' },
+    credit: 'Sethares, 2006',
     sources: [
       'A generic bonang spectrum of 1 : 1.52 : 3.46 : 3.92, attributed to Sethares (Tuning, Timbre, Spectrum, Scale) in the paper "The Effect of Inharmonic and Harmonic Spectra In Javanese Gamelan Tuning (1): A Theory of the Sl\u00e9ndro" (WSEAS conference, 2006). Quoted from a search summary; not checked against either source.',
       'Slendro and pelog step sizes: ranges reported in the same search summary, which also cites "Comparative acoustical and psychoacoustical analyses of gamelan instrument tones" (J. Acoust. Soc. Jpn (E) 14, no. 6) and "Puzzling Origin of Javanese Tuning Systems" (J. Acoust. Soc. Am. 35, 1963 supplement). Not read in full.',
@@ -180,6 +187,7 @@ export const OBJECTS = [
     mutate: mutate({ tune: [-6, 6], decay: [-0.3, 0.3], decayKf: [0, 0.4], absorb: [-0.1, 0.3], normalize: [-0.2, 0.2], ratioJitterCents: 8, pairSplitCents: [3, 12] }),
     notes: 'The first three ratios are the tuning the published work reports for a tenor pan note (some notes tune the third mode to two octaves instead). Partials 4 to 6 and all levels and decays are approximations: measured higher partials of real notes are often not harmonic.',
     basis: { ratio: 'published tuning', gain: 'approximation', decay: 'approximation' },
+    credit: 'Rossing, Hansen and Hampton, 2000',
     sources: [
       'Rossing, T. D., Hansen, U. J. and Hampton, D. S., "Vibrational mode shapes in Caribbean steelpans. I. Tenor and double second", J. Acoust. Soc. Am. 108 (2000) 803-812: tuners tune one mode an octave above the fundamental and, where possible, a third mode a twelfth or two octaves above.',
       'Stockholm Steel Band, "Steel Pan Tuning", tone-generation chapter: strong harmonic partials, with higher partials not always explained by the third mode.',
@@ -197,6 +205,7 @@ export const OBJECTS = [
     mutate: mutate({ tune: [-6, 6], decay: [-0.2, 0.4], decayKf: [0, 0.35], absorb: [-0.1, 0.3], normalize: [-0.25, 0.2], ratioJitterCents: 7, pairSplitCents: [3, 12] }),
     notes: 'The three tuned modes are the published fundamental, octave and compound fifth. The fourth partial is an approximation I added so the profile has four rows, and all levels and decays are approximations.',
     basis: { ratio: 'published tuning', gain: 'approximation', decay: 'approximation' },
+    credit: 'PANart, 2007',
     sources: [
       'PANart, "History, Development and Tuning of the Hang" (2007), hangblog.org/panart/Paper-Hang-2007.pdf (authors not confirmed): the tone field is tuned so (0,1), (1,1)a and (1,1)b sit at 1 : 2 : 3.',
       'Physics Today, "The extraordinary sound of the hang"; Archives of Acoustics, "Modes of vibration and sound radiation from the Hang". Both seen as search excerpts only.',
@@ -214,6 +223,10 @@ export const OBJECTS = [
     mutate: mutate({ tune: [-8, 8], decay: [-0.4, 0.2], decayKf: [-0.3, 0.2], absorb: [-0.1, 0.35], disperse: [-0.12, 0.12], normalize: [-0.1, 0.4], ratioJitterCents: 14, decayScale: [0.6, 1.5], position: [0.04, 0.2] }),
     notes: 'For the relation omega = c k^2 r, the modes of a spring of fixed length sit at k = n pi / L, so frequency goes as n squared. That gives 1, 4, 9, 16, 25. This is an idealization of a published approximate relation. A modal profile cannot reproduce the downward chirp, which is a time-domain effect; it only gives the stretched, bright ladder. Levels and decays are approximations.',
     basis: { ratio: 'physics', gain: 'approximation', decay: 'approximation' },
+    credit: 'Crawford, 1990',
+    refNote: 'F#2',
+    refHz: 92.498605677909,
+    refReason: 'The n-squared series would leave three rows under 6 kHz at A4.',
     sources: [
       'Crawford, F. S., "Slinky-whistler dispersion relation from scaling", Am. J. Phys. 58 (1990) 916-917: approximate dispersion relation omega = c k^2 r.',
       '"The Sound of a Laser Blaster: Acoustic Dispersion in Metal Springs Analyzed with Mobile Devices and Open-Source PC Audio Software", The Physics Teacher 60 (issue 1), p. 28. Describes the high-to-low chirp and quotes Crawford.',
@@ -231,6 +244,7 @@ export const OBJECTS = [
     mutate: mutate({ tune: [-6, 6], decay: [-0.45, 0.25], decayKf: [0.1, 0.5], absorb: [0.05, 0.45], normalize: [-0.1, 0.35], ratioJitterCents: 14, decayScale: [0.6, 1.3] }),
     notes: 'The ratios are the exact free-free uniform-bar series. A real stone bar is thick, so the upper modes sit lower than this, and tuning notches change the series; the roll jitter covers some of that. Levels and decays are approximations, with a short decay chosen for stone.',
     basis: { ratio: 'physics', gain: 'approximation', decay: 'approximation' },
+    credit: 'Fletcher and Rossing, The Physics of Musical Instruments',
     sources: [
       'Euler-Bernoulli free-free bar: roots of cos(bL) cosh(bL) = 1 at bL = 4.730, 7.853, 10.996, 14.137, 17.279 (standard result; see Fletcher and Rossing, The Physics of Musical Instruments, chapter on bars). Computed here; not copied from a table.',
     ],
@@ -247,6 +261,10 @@ export const OBJECTS = [
     mutate: mutate({ tune: [-7, 7], decay: [-0.35, 0.25], decayKf: [0.15, 0.55], absorb: [0, 0.4], disperse: [-0.04, 0.04], normalize: [-0.2, 0.2], ratioJitterCents: 35, gainJitterDb: 4, decayScale: [0.6, 1.4] }),
     notes: 'The ratios are the exact clamped-free (cantilever) series, which is far from harmonic, so the second partial is more than two octaves up. Real kalimba tines are held on a bridge and shaped, so their upper partials differ; the "imperfect" part is a wide ratio and level jitter in the roll range, an approximation and not a measurement. Levels and decays are approximations.',
     basis: { ratio: 'physics', gain: 'approximation', decay: 'approximation' },
+    credit: 'Fletcher and Rossing, The Physics of Musical Instruments',
+    refNote: 'G#2',
+    refHz: 103.826174394986,
+    refReason: 'The cantilever series would leave only two rows under 6 kHz at A4.',
     sources: [
       'Euler-Bernoulli clamped-free bar: roots of cos(bL) cosh(bL) = -1 at bL = 1.875, 4.694, 7.855, 10.996, 14.137 (standard result; see Fletcher and Rossing, The Physics of Musical Instruments). Computed here.',
     ],
@@ -263,6 +281,10 @@ export const OBJECTS = [
     mutate: mutate({ tune: [-9, 9], decay: [-0.2, 0.4], decayKf: [0.1, 0.5], absorb: [0, 0.45], disperse: [-0.06, 0.08], normalize: [-0.1, 0.45], ratioJitterCents: 20, gainJitterDb: 4, decayScale: [0.7, 1.6] }),
     notes: 'The tongue is modeled as a uniform cantilever, so the ratios are the same as the kalimba tine. The real tongue is shaped and held against a fulcrum, and the voice-like quality comes from bowing and from formant-like shaping that a modal list does not capture. Levels and decays are approximations, set longer than the kalimba to suggest a bowed, sustained sound.',
     basis: { ratio: 'physics', gain: 'approximation', decay: 'approximation' },
+    credit: 'Fletcher and Rossing, The Physics of Musical Instruments',
+    refNote: 'G#2',
+    refHz: 103.826174394986,
+    refReason: 'The cantilever series would leave only two rows under 6 kHz at A4.',
     sources: [
       'Euler-Bernoulli clamped-free bar series (see Kalimba). No daxophone measurement was found; this is an idealization.',
     ],
@@ -279,6 +301,7 @@ export const OBJECTS = [
     mutate: mutate({ tune: [-6, 6], decay: [-0.25, 0.4], decayKf: [-0.1, 0.35], absorb: [-0.15, 0.3], disperse: [-0.06, 0.1], normalize: [-0.1, 0.45], ratioJitterCents: 10, pairSplitCents: [2, 12] }),
     notes: 'Ratios were computed for a thin flat free-edge disk with Poisson ratio 0.33: (2,0), (0,1), (3,0), (1,1), (4,0), (5,0), (2,1) and so on. Teeth, the center hole and any clamp are ignored, which shifts real blades. Real disks also split each pair of nodal-diameter modes slightly, which the pair split in rolls imitates. Levels and decays are approximations.',
     basis: { ratio: 'physics', gain: 'approximation', decay: 'approximation' },
+    credit: 'Leissa, 1969',
     sources: [
       'Kirchhoff thin-plate theory, free edge; see Leissa, Vibration of Plates (NASA SP-160, 1969), for the equation. The ratios are computed by the script src/tools/modal-preview/objects-tools/disk_modes.py and agree with the values I recall from Leissa, but I did not check them against the table.',
     ],
@@ -396,6 +419,7 @@ export const OBJECTS = [
     mutate: mutate({ tune: [-5, 5], decay: [-0.4, 0.2], decayKf: [0.15, 0.5], absorb: [0.1, 0.5], disperse: [-0.08, 0.08], normalize: [-0.4, 0.05], ratioJitterCents: 40, gainJitterDb: 3, decayScale: [0.5, 1.3], position: [0.1, 0.4] }),
     notes: 'The first three ratios are the typical body-resonance frequencies the cited sources give (air mode near 100 Hz, top plate near 190 to 200 Hz, back near 240 Hz), taken as 1, 1.9 and 2.4. Individual guitars vary widely, so the jitter is wide. Partials at 3.1 and 4.2, and all levels and decays, are approximations. Played at A4 the base lands as a high wooden knock; Tune it down for the low body tone.',
     basis: { ratio: 'published tuning', gain: 'approximation', decay: 'approximation' },
+    credit: 'Firth, 1977',
     sources: [
       'A Proceedings of Meetings on Acoustics paper on steel-string guitar modes (hosted at goreguitars.com.au; title and authors not confirmed): T(1,1)1 near 100 Hz, T(1,1)2 near 190 Hz, T(1,1)3 near 240 Hz.',
       'Firth, I. M., "Physics of the guitar at the Helmholtz and first top-plate resonances", J. Acoust. Soc. Am. 61 (1977) 588: A0 about 90 Hz, T1 about 180 Hz, one guitar.',
@@ -512,4 +536,48 @@ export function searchObjects(query, limit = 8) {
   }
   hits.sort((a, b) => a.rank - b.rank || a.object.name.localeCompare(b.object.name));
   return hits.slice(0, limit);
+}
+
+const BASIS_WORDS = {
+  measured: 'measured',
+  'published tuning': 'published tuning',
+  physics: 'computed from physics',
+  approximation: 'approximation, tuned by ear',
+};
+
+// Short source line for the object's note. Approximations say so instead of
+// naming a paper. Other lines use the credit taken from sources[].
+export function sourceLine(object) {
+  if (object?.basis?.ratio === 'approximation') return 'Approximation, tuned by ear.';
+  if (object?.credit) return `Based on: ${object.credit}.`;
+  return 'Based on published sources.';
+}
+
+export function playPitch(object) {
+  if (object?.refHz > 0) {
+    return {
+      hz: object.refHz,
+      note: object.refNote || 'A4',
+      reason: object.refReason || '',
+    };
+  }
+  return { hz: 440, note: 'A4', reason: '' };
+}
+
+// Options for zebraExport / audiblePartials. Materials omit referenceHz so
+// the 6 kHz cap stays at A4.
+export function exportOptions(object, extra = {}) {
+  const pitch = playPitch(object);
+  const options = { fundamental: pitch.hz, ...extra };
+  if (object?.refHz > 0) options.referenceHz = pitch.hz;
+  return options;
+}
+
+export function objectNoteText(object) {
+  if (!object) return '';
+  const pitch = playPitch(object);
+  const decays = object.basis.decay === 'measured as printed' ? 'decays as printed' : 'decays are approximations';
+  const ratios = BASIS_WORDS[object.basis.ratio] || object.basis.ratio;
+  const why = pitch.reason ? ` ${pitch.reason}` : '';
+  return `${object.name}: pitch ratios ${ratios}; levels are approximations; ${decays}. Played at ${pitch.note} (${Math.round(pitch.hz)} Hz).${why} ${sourceLine(object)}`;
 }
