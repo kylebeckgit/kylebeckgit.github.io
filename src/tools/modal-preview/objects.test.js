@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { OBJECTS, baseProfile, exportOptions, matchObjectText, objectById, objectNoteText, playPitch, searchObjects, sourceLine } from './objects.js';
+import { OBJECTS, baseProfile, exportOptions, matchObjectText, noteReferenceHz, objectById, objectNoteText, playPitch, profilePitch, searchObjects, sourceLine } from './objects.js';
 import { loadObject, mutateProfile, rollObject } from './objects-randomize.js';
 import { mulberry32, rollSound, defaultLocks, identityKnobs, EXTREME_WILDNESS, exoticAmount } from './randomize.js';
 import { previewPartials, defaultControls, zebraExport, fromCsv, A4_HZ, ZEBRA_PARTIAL_LIMIT_HZ, audiblePartials } from './engine.js';
@@ -319,4 +319,43 @@ test('each object note has a short source line built from its sources', () => {
   assert.equal(sourceLine(objectById('church-bell')), 'Based on: Rossing and Perrin, 1987.');
   assert.equal(sourceLine(objectById('kalimba')), 'Based on: Fletcher and Rossing, The Physics of Musical Instruments.');
   assert.equal(sourceLine(objectById('waterphone')), 'Approximation, tuned by ear.');
+});
+
+test('picking an object does not retarget the export until that profile is loaded', () => {
+  const slinky = objectById('slinky');
+  const current = [{ ratio: 1, gainDb: 0, decay: 1 }, { ratio: 30, gainDb: -12, decay: 0.4 }];
+  const sitting = profilePitch(null);
+  assert.equal(sitting.playReferenceHz, 0);
+  assert.equal(sitting.note, 'A4');
+  const before = zebraExport(current, { fundamental: sitting.hz, description: 'current sound' });
+  assert.equal(before.filename.includes('_at-'), false);
+  const loaded = profilePitch(slinky);
+  assert.equal(loaded.note, slinky.refNote);
+  assert.equal(loaded.playReferenceHz, slinky.refHz);
+  const after = zebraExport(baseProfile(slinky), {
+    fundamental: loaded.hz,
+    referenceHz: loaded.playReferenceHz,
+    description: slinky.name,
+  });
+  assert.match(after.filename, /_at-/);
+  assert.match(after.hint, new RegExp(`Play at ${slinky.refNote.replace('#', '#')}`));
+});
+
+test('a keyboard note keeps the table to the rows the export will keep', () => {
+  const object = objectById('slinky');
+  const profile = baseProfile(object);
+  const lowHz = object.refHz;
+  const low = audiblePartials(profile, { fundamental: lowHz, referenceHz: noteReferenceHz(object, lowHz) });
+  const high = audiblePartials(profile, { fundamental: A4_HZ, referenceHz: noteReferenceHz(object, A4_HZ) });
+  assert.ok(high.length < low.length);
+  const exported = zebraExport(profile, {
+    fundamental: A4_HZ,
+    referenceHz: noteReferenceHz(object, A4_HZ),
+    description: object.name,
+  });
+  assert.equal(exported.partials.length, high.length);
+  assert.equal(noteReferenceHz(null, A4_HZ), 0);
+  const material = zebraExport(profile, { fundamental: A4_HZ, description: 'material roll' });
+  assert.equal(material.partials.length, audiblePartials(profile, { fundamental: A4_HZ }).length);
+  assert.equal(material.filename.includes('_at-'), false);
 });

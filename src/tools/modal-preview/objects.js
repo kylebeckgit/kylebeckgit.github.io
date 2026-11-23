@@ -564,6 +564,23 @@ export function playPitch(object) {
   return { hz: 440, note: 'A4', reason: '' };
 }
 
+// Pitch that belongs to a profile that was actually loaded or rolled.
+// Choosing an object in the menu does not use this.
+export function profilePitch(object) {
+  const pitch = playPitch(object);
+  return {
+    note: pitch.note,
+    hz: pitch.hz,
+    playReferenceHz: object?.refHz > 0 ? pitch.hz : 0,
+  };
+}
+
+// After a loaded object is playing, the 6 kHz cap follows the keyboard note.
+// A material profile keeps the cap at A4, so this stays 0.
+export function noteReferenceHz(object, hearFundamental) {
+  return object?.refHz > 0 && hearFundamental > 0 ? hearFundamental : 0;
+}
+
 // Options for zebraExport / audiblePartials. Materials omit referenceHz so
 // the 6 kHz cap stays at A4.
 export function exportOptions(object, extra = {}) {
