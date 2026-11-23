@@ -12,6 +12,7 @@ import { loadObject, rollObject } from './objects-randomize.js';
 import { decodeProfile } from './studio.js';
 import { decodeShare, presentShare, sharedPitch, shareUrl } from './share.js';
 import { SILENT_MODE_HINT, audioContextClass, beginAudio, installGestureUnlock, playSilentUnlock, prepareAudioSession, resumeInGesture } from './audio-session.js';
+import { downloadExport, exportFromSound } from './export-file.js';
 
 export function mount(root) {
   const flatTrack = trackFlatModes(() => {
@@ -988,14 +989,13 @@ export function mount(root) {
     const description = root.querySelector('[data-ask]')?.value
       || root.querySelector('[data-roll-read]')?.textContent
       || state.profileName;
-    const exported = zebraExport(state.partials, { ...heardOptions(), description });
-    const blob = new Blob([exported.csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = exported.filename;
-    link.click();
-    URL.revokeObjectURL(url);
+    const exported = exportFromSound({
+      partials: state.partials,
+      name: description,
+      fundamental: heardOptions().fundamental,
+      referenceHz: heardOptions().referenceHz,
+    }, { sampleRate: heardOptions().sampleRate });
+    downloadExport(exported);
     const hint = root.querySelector('[data-export-hint]');
     if (hint) hint.textContent = exported.hint;
   });

@@ -24,6 +24,11 @@ export function mountStudio(root, api) {
   const future = [];
   let selected = 0;
   const openButton = root.querySelector('[data-open-designer]');
+  const exportButton = root.querySelector('[data-gen-export]');
+  function setSoundActions(enabled) {
+    if (openButton) openButton.disabled = !enabled;
+    if (exportButton) exportButton.disabled = !enabled;
+  }
 
   const used = () => {
     try { return Number(sessionStorage.getItem(STORAGE_KEY) || '0') || 0; } catch { return 0; }
@@ -61,7 +66,7 @@ export function mountStudio(root, api) {
     if (forwardButton) forwardButton.disabled = future.length === 0;
     const backRoll = root.querySelector('[data-gen-back]');
     if (backRoll) backRoll.disabled = turns.length < 2;
-    if (openButton) openButton.disabled = !turn.variations[selected];
+    setSoundActions(Boolean(turn.variations[selected]));
     if (nameInput) nameInput.value = turn.variations[selected]?.name || nameInput.value;
   }
 
@@ -215,7 +220,7 @@ export function mountStudio(root, api) {
     results.hidden = true;
     api.applyRecipe(recipe, { hear: true });
     if (nameInput) nameInput.value = recipe.name;
-    if (openButton) openButton.disabled = false;
+    setSoundActions(true);
     setStatus(recipe.line);
   });
 

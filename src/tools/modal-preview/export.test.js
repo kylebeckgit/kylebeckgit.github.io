@@ -15,6 +15,12 @@ import {
   zebraExport,
 } from './engine.js';
 import { rollSound } from './randomize.js';
+import { canUseAnchorDownload, downloadExport, exportFromSound } from './export-file.js';
+import { describePrompt } from './recipes.js';
+import { loadObjectVariation } from './objects-chips.js';
+import { objectById } from './objects.js';
+import { snapshotVariation } from './generator.js';
+import { sharedPitch } from './share.js';
 
 function rowsOf(csv) {
   return csv.trim().split('\n').slice(1).map((line) => {
@@ -248,4 +254,92 @@ test('rows above 6 kHz at A4 and above Nyquist stay out of the file', () => {
     assert.ok(row.ratio * 8000 <= 24000);
   }
   assert.equal(exported.filename.startsWith('bright-metal-ring_decay'), true);
+});
+
+
+function designerExportAfterHandoff(payload) {
+  const pitch = sharedPitch(payload, { note: 'A4' });
+  return zebraExport(payload.partials, {
+    fundamental: pitch.hearFundamental,
+    sampleRate: 48000,
+    referenceHz: pitch.playReferenceHz || undefined,
+    description: payload.name || 'From generator',
+  });
+}
+
+test('generator export matches the designer export for the same sound', () => {
+  const cases = [
+    loadObjectVariation(objectById('slinky')),
+    describePrompt('Glass bowl struck softly, slightly detuned, long shimmer')[0],
+  ];
+  for (const variation of cases) {
+    const snap = snapshotVariation(variation);
+    const fromGenerator = exportFromSound(snap);
+    const fromDesigner = designerExportAfterHandoff(snap);
+    assert.equal(fromGenerator.csv, fromDesigner.csv, variation.name);
+    assert.equal(fromGenerator.filename, fromDesigner.filename, variation.name);
+    assert.equal(fromGenerator.hint, fromDesigner.hint, variation.name);
+    assert.ok(fromGenerator.csv.startsWith('Ratio;GainDB;Decay\n'));
+    assert.ok(fromGenerator.csv.length > 'Ratio;GainDB;Decay\n'.length);
+    assert.match(fromGenerator.filename, /_decay\d+\.csv$/);
+  }
+  const slinky = exportFromSound(snapshotVariation(loadObjectVariation(objectById('slinky'))));
+  assert.equal(slinky.filename, 'slinky-or-tension-spring_at-fs2_decay' + slinky.knob + '.csv');
+  assert.match(slinky.hint, /Play at F#2/);
+  const described = exportFromSound(snapshotVariation(describePrompt('Glass bowl struck softly, slightly detuned, long shimmer')[0]));
+  assert.match(described.filename, /_decay\d+\.csv$/);
+  assert.equal(described.filename.includes('zebra3_ai_profile'), false);
+});
+
+test('downloadExport uses a blob and an anchor, and opens the blob when download is missing', () => {
+  const created = [];
+  const clicks = [];
+  const opened = [];
+  const revoked = [];
+  const realCreate = URL.createObjectURL;
+  const realRevoke = URL.revokeObjectURL;
+  URL.createObjectURL = (blob) => {
+    assert.equal(blob.type, 'text/csv');
+    assert.ok(String(blob.size || blob).length >= 0);
+    return 'blob:export-test';
+  };
+  URL.revokeObjectURL = (url) => revoked.push(url);
+  const doc = {
+    body: { appendChild(node) { created.push(['append', node]); }, },
+    createElement(name) {
+      assert.equal(name, 'a');
+      const link = {
+        href: '',
+        download: '',
+        rel: '',
+        click() { clicks.push({ href: this.href, download: this.download }); },
+        remove() { created.push(['remove', this]); },
+      };
+      created.push(['create', link]);
+      return link;
+    },
+  };
+  const exported = { csv: 'Ratio;GainDB;Decay\n1.0000;0.00;1.000000\n', filename: 'slinky-or-tension-spring_at-fs2_decay50.csv' };
+  downloadExport(exported, doc, { open(url) { opened.push(url); return true; } });
+  assert.equal(clicks.length, 1);
+  assert.equal(clicks[0].href, 'blob:export-test');
+  assert.equal(clicks[0].download, exported.filename);
+  assert.deepEqual(opened, []);
+  assert.equal(canUseAnchorDownload({ download: exported.filename }), true);
+  assert.equal(canUseAnchorDownload({}), false);
+  const fallbackDoc = {
+    body: { appendChild() {}, },
+    createElement() {
+      return {
+        href: '',
+        rel: '',
+        click() { clicks.push('fallback-click'); },
+        remove() {},
+      };
+    },
+  };
+  downloadExport(exported, fallbackDoc, { open(url) { opened.push(url); return true; } });
+  assert.deepEqual(opened, ['blob:export-test']);
+  URL.createObjectURL = realCreate;
+  URL.revokeObjectURL = realRevoke;
 });
