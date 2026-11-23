@@ -80,7 +80,7 @@ export function redoRoll(history, current) {
   return history.future.pop();
 }
 
-function mulberry32(seed) {
+export function mulberry32(seed) {
   let a = seed >>> 0;
   return () => {
     a |= 0;
@@ -118,7 +118,7 @@ function nearestDensity(value, allowed = DENSITIES) {
 
 const FAMILIES = ['metal', 'wood', 'glass', 'skin', 'bell'];
 
-const LIMITS = {
+export const LIMITS = {
   tune: [-12, 12],
   detune: [-0.62, 0.62],
   decay: [-0.95, 0.95],
@@ -129,7 +129,7 @@ const LIMITS = {
   normalize: [-0.85, 0.85],
 };
 
-function sampleFromRange(rng, range) {
+export function sampleFromRange(rng, range) {
   return {
     tune: Math.round(sampleRange(rng, range.tune)),
     detune: sampleRange(rng, range.detune),
@@ -148,7 +148,11 @@ function sampleMaterialKnobs(rng, material) {
 }
 
 function expandedRange(material, wildness) {
-  const base = RANGES[material] || RANGES.any;
+  return expandedFrom(RANGES[material] || RANGES.any, wildness);
+}
+
+// Widen any knob-range table toward the hard limits as wildness rises.
+export function expandedFrom(base, wildness) {
   const w = clamp(Number(wildness) || 0, 0, EXTREME_WILDNESS);
   const t = Math.min(1, w);
   const extra = Math.max(0, w - 1) / (EXTREME_WILDNESS - 1);
@@ -221,7 +225,7 @@ export function knobDistance(knobs, material) {
   return sum / (count + 1);
 }
 
-function mixKnobs(current, target, amount, locks) {
+export function mixKnobs(current, target, amount, locks) {
   const mix = clamp(0.08 + 0.92 * clamp(Number(amount) || 0, 0, 1), 0, 1);
   const next = {};
   for (const key of KNOB_KEYS) {
@@ -373,7 +377,7 @@ function profileFor(rng, material, wildness, family) {
   return { family: chosen, partials: normalizePitch(partials) };
 }
 
-function toShape(knobs) {
+export function toShape(knobs) {
   return {
     absorb: knobs.absorb,
     disperse: knobs.disperse,
@@ -620,14 +624,38 @@ export function descriptionAgrees(text, knobs, partials = []) {
   return true;
 }
 
-export function rollSound({ base, current, material = 'any', amount = 1, wildness = 0.3, locks = defaultLocks(), seed = 1 }) {
+// Feral mode skips the playable check above. It keeps only what a profile
+// needs to load and be heard: finite numbers inside the page limits, at least
+// one audible row, and not so hot that rows pile up at 0 dB.
+export function safetyCheck(partials) {
+  const reasons = [];
+  const list = partials || [];
+  if (!list.length || list.length > 256) reasons.push('count');
+  let peak = -Infinity;
+  let slammed = 0;
+  for (const partial of list) {
+    if (![partial.ratio, partial.gainDb, partial.decay].every(Number.isFinite) || partial.ratio <= 0) {
+      reasons.push('unstable');
+      break;
+    }
+    if (partial.ratio > 80 || partial.decay < 0.05 || partial.decay > 30) reasons.push('limits');
+    peak = Math.max(peak, partial.gainDb);
+    if (partial.gainDb > -1) slammed += 1;
+  }
+  if (peak < -40) reasons.push('silent');
+  if (slammed >= 8) reasons.push('clipped');
+  return { ok: reasons.length === 0, reasons, score: reasons.length ? 10 - reasons.length : 10 };
+}
+
+export function rollSound({ base, current, material = 'any', amount = 1, wildness = 0.3, locks = defaultLocks(), seed = 1, feral = false }) {
   const rng = mulberry32(seed);
   const family = MATERIALS.includes(material) ? material : 'any';
   let best = null;
   for (let attempt = 0; attempt < 40; attempt++) {
     const picked = family === 'any' || family === 'wild' ? pick(rng, FAMILIES) : family;
-    const target = sampleTarget(rng, family, wildness, picked);
-    const profile = profileFor(rng, family, wildness, picked);
+    const reach = feral ? Math.min(EXTREME_WILDNESS, Math.max(Number(wildness) || 0, 0.8) + 0.35) : wildness;
+    const target = sampleTarget(rng, family, reach, picked);
+    const profile = profileFor(rng, family, Math.min(1, reach), picked);
     const knobs = capDensity(mixKnobs(current || identityKnobs(), target, amount, locks), profile.partials, locks);
     // Zebra is told to leave Position and Detune at 0. The page uses the
     // same values, so the drawing and the note match the CSV. Detune is not
@@ -635,10 +663,12 @@ export function rollSound({ base, current, material = 'any', amount = 1, wildnes
     if (!locks?.detune) knobs.detune = 0;
     if (!locks?.position) knobs.position = 0.02;
     const partials = shapePartials(profile.partials, toShape(knobs));
-    const quality = assessQuality(partials, knobs);
-    const description = describeKnobs(knobs, profile.family, partials);
-    const candidate = { knobs, partials, profile: profile.partials, quality, description, material: family };
+    const quality = feral ? safetyCheck(partials) : assessQuality(partials, knobs);
+    let description = describeKnobs(knobs, profile.family, partials);
+    if (feral && !descriptionAgrees(description, knobs, partials)) description = 'Feral roll, not filtered';
+    const candidate = { knobs, partials, profile: profile.partials, quality, description, material: family, feral };
     if (!best || quality.score > best.quality.score) best = candidate;
+    if (feral && quality.ok) return candidate;
     if (quality.ok && descriptionAgrees(description, knobs, partials)) return candidate;
   }
   return best;
