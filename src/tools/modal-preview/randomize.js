@@ -80,7 +80,7 @@ export function redoRoll(history, current) {
   return history.future.pop();
 }
 
-function mulberry32(seed) {
+export function mulberry32(seed) {
   let a = seed >>> 0;
   return () => {
     a |= 0;
@@ -118,7 +118,7 @@ function nearestDensity(value, allowed = DENSITIES) {
 
 const FAMILIES = ['metal', 'wood', 'glass', 'skin', 'bell'];
 
-const LIMITS = {
+export const LIMITS = {
   tune: [-12, 12],
   detune: [-0.62, 0.62],
   decay: [-0.95, 0.95],
@@ -129,7 +129,7 @@ const LIMITS = {
   normalize: [-0.85, 0.85],
 };
 
-function sampleFromRange(rng, range) {
+export function sampleFromRange(rng, range) {
   return {
     tune: Math.round(sampleRange(rng, range.tune)),
     detune: sampleRange(rng, range.detune),
@@ -148,7 +148,11 @@ function sampleMaterialKnobs(rng, material) {
 }
 
 function expandedRange(material, wildness) {
-  const base = RANGES[material] || RANGES.any;
+  return expandedFrom(RANGES[material] || RANGES.any, wildness);
+}
+
+// Widen any knob-range table toward the hard limits as wildness rises.
+export function expandedFrom(base, wildness) {
   const w = clamp(Number(wildness) || 0, 0, EXTREME_WILDNESS);
   const t = Math.min(1, w);
   const extra = Math.max(0, w - 1) / (EXTREME_WILDNESS - 1);
@@ -221,7 +225,7 @@ export function knobDistance(knobs, material) {
   return sum / (count + 1);
 }
 
-function mixKnobs(current, target, amount, locks) {
+export function mixKnobs(current, target, amount, locks) {
   const mix = clamp(0.08 + 0.92 * clamp(Number(amount) || 0, 0, 1), 0, 1);
   const next = {};
   for (const key of KNOB_KEYS) {
@@ -373,7 +377,7 @@ function profileFor(rng, material, wildness, family) {
   return { family: chosen, partials: normalizePitch(partials) };
 }
 
-function toShape(knobs) {
+export function toShape(knobs) {
   return {
     absorb: knobs.absorb,
     disperse: knobs.disperse,
@@ -388,6 +392,45 @@ function toShape(knobs) {
 function centsBetween(a, b) {
   if (!(a > 0) || !(b > 0)) return 0;
   return Math.abs(1200 * Math.log2(b / a));
+}
+
+// 0 below or at wildness 0.7, 1 at EXTREME_WILDNESS. Rolls at 0.7 and below
+// must not take this path, so their RNG and output stay the same.
+export function exoticAmount(wildness) {
+  const w = clamp(Number(wildness) || 0, 0, EXTREME_WILDNESS);
+  if (!(w > 0.7)) return 0;
+  return (w - 0.7) / (EXTREME_WILDNESS - 0.7);
+}
+
+// Power-law series bend, level tilt, and highs that outlast the low.
+// Chance and size both follow exotic, which is 0 when wildness is 0.7 or less.
+export function wildenPartials(rng, partials, exotic) {
+  const x = clamp(Number(exotic) || 0, 0, 1);
+  if (!(x > 0) || !partials?.length) return partials;
+  let list = partials.map((partial) => ({ ...partial }));
+  const root = list[0].ratio || 1;
+  if (rng() < 0.7 * x) {
+    const power = lerp(1, lerp(0.82, 1.22, rng()), x);
+    list = list.map((partial) => ({
+      ...partial,
+      ratio: root * (Math.max(partial.ratio, 1e-8) / root) ** power,
+    }));
+  }
+  if (rng() < 0.5 * x) {
+    const tilt = lerp(0, lerp(-3, 4.5, rng()), x);
+    list = list.map((partial) => ({
+      ...partial,
+      gainDb: partial.gainDb + tilt * Math.log2(Math.max(partial.ratio / root, 1e-8)),
+    }));
+  }
+  if (rng() < 0.3 * x) {
+    const rise = 0.35 * x;
+    list = list.map((partial) => ({
+      ...partial,
+      decay: partial.decay * 2 ** (rise * Math.log2(Math.max(partial.ratio / root, 1e-8))),
+    }));
+  }
+  return list;
 }
 
 export function assessQuality(partials, knobs) {
@@ -623,11 +666,14 @@ export function descriptionAgrees(text, knobs, partials = []) {
 export function rollSound({ base, current, material = 'any', amount = 1, wildness = 0.3, locks = defaultLocks(), seed = 1 }) {
   const rng = mulberry32(seed);
   const family = MATERIALS.includes(material) ? material : 'any';
+  const wild = clamp(Number(wildness) || 0, 0, EXTREME_WILDNESS);
+  const exotic = exoticAmount(wild);
   let best = null;
   for (let attempt = 0; attempt < 40; attempt++) {
     const picked = family === 'any' || family === 'wild' ? pick(rng, FAMILIES) : family;
-    const target = sampleTarget(rng, family, wildness, picked);
-    const profile = profileFor(rng, family, wildness, picked);
+    const target = sampleTarget(rng, family, wild, picked);
+    const profile = profileFor(rng, family, Math.min(1, wild), picked);
+    if (exotic > 0) profile.partials = wildenPartials(rng, profile.partials, exotic);
     const knobs = capDensity(mixKnobs(current || identityKnobs(), target, amount, locks), profile.partials, locks);
     // Zebra is told to leave Position and Detune at 0. The page uses the
     // same values, so the drawing and the note match the CSV. Detune is not

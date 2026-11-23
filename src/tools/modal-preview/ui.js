@@ -7,6 +7,8 @@ import { bodySignature, hitObjectMode, objectCaption, paintObject } from './obje
 import { cachedModes, flatSpec, patternNote, solveMs, trackFlatModes } from './mode-client.js';
 import { densityForProfile, shapePartials } from './shape.js';
 import { createRollHistory, defaultLocks, pushRoll, redoRoll, rollSound, undoRoll } from './randomize.js';
+import { matchObjectText, noteReferenceHz, objectById, objectNoteText, profilePitch, searchObjects } from './objects.js';
+import { loadObject, rollObject } from './objects-randomize.js';
 import { decodeProfile } from './studio.js';
 import { decodeShare, presentShare, shareUrl } from './share.js';
 import { SILENT_MODE_HINT, audioContextClass, beginAudio, installGestureUnlock, playSilentUnlock, prepareAudioSession, resumeInGesture } from './audio-session.js';
@@ -293,9 +295,11 @@ export function mount(root) {
   }
 
   function heardOptions() {
+    const fundamental = state.hearFundamental || noteFrequency(state.note);
     return {
-      fundamental: state.hearFundamental || noteFrequency(state.note),
+      fundamental,
       sampleRate: state.audio?.sampleRate || 48000,
+      referenceHz: state.playReferenceHz || undefined,
     };
   }
 
@@ -550,6 +554,10 @@ export function mount(root) {
     try { keys.setPointerCapture?.(event.pointerId); } catch { /* no active pointer */ }
     state.note = button.dataset.note;
     state.hearFundamental = playedFundamental(state.controls?.pitchScale, noteFrequency(state.note));
+    state.playReferenceHz = noteReferenceHz(loadedObject, state.hearFundamental);
+    publishShape(0);
+    render();
+    pushModes();
     for (const key of root.querySelectorAll('[data-note]')) key.setAttribute('aria-pressed', String(key === button));
     state.userHolding = true;
     cancelAutoHear();
@@ -761,6 +769,95 @@ export function mount(root) {
     });
   }
   const materialSelect = root.querySelector('[data-roll-material]');
+  const objectSelect = root.querySelector('[data-roll-object]');
+  const objectQuery = root.querySelector('[data-object-q]');
+  const objectList = root.querySelector('[data-object-list]');
+  const objectNote = root.querySelector('[data-object-note]');
+  const objectLoad = root.querySelector('[data-object-load]');
+  const chosenObject = () => objectById(objectSelect?.value || '');
+  let loadedObject = null;
+  const setPlayPitch = (object) => {
+    loadedObject = object?.refHz > 0 ? object : null;
+    const pitch = profilePitch(object);
+    state.note = pitch.note;
+    state.hearFundamental = playedFundamental(state.controls?.pitchScale, pitch.hz);
+    state.playReferenceHz = pitch.playReferenceHz;
+    markPlayedNote(root, pitch.hz);
+  };
+  const clearObjectPitch = () => {
+    loadedObject = null;
+    state.playReferenceHz = 0;
+  };
+  const syncObject = () => {
+    const object = chosenObject();
+    if (materialSelect) materialSelect.disabled = Boolean(object);
+    if (objectLoad) objectLoad.hidden = !object;
+    if (objectNote) {
+      objectNote.hidden = !object;
+      objectNote.textContent = object ? objectNoteText(object) : '';
+    }
+  };
+  const closeObjectList = () => {
+    if (!objectList) return;
+    objectList.hidden = true;
+    objectList.replaceChildren();
+    objectQuery?.setAttribute('aria-expanded', 'false');
+  };
+  const pickObject = (object) => {
+    if (objectSelect) objectSelect.value = object ? object.id : '';
+    if (objectQuery) objectQuery.value = object ? object.name : '';
+    closeObjectList();
+    syncObject();
+  };
+  const showObjectMatches = () => {
+    if (!objectList || !objectQuery) return;
+    const text = objectQuery.value.trim();
+    const hits = searchObjects(text, 6);
+    objectList.replaceChildren();
+    if (!hits.length) {
+      closeObjectList();
+      return;
+    }
+    for (const hit of hits) {
+      const item = document.createElement('li');
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.setAttribute('role', 'option');
+      button.textContent = hit.object.name;
+      if (hit.phrase && hit.phrase !== hit.object.name.toLowerCase()) {
+        const small = document.createElement('small');
+        small.textContent = hit.phrase;
+        button.append(small);
+      }
+      button.addEventListener('click', () => pickObject(hit.object));
+      item.append(button);
+      objectList.append(item);
+    }
+    objectList.hidden = false;
+    objectQuery.setAttribute('aria-expanded', 'true');
+  };
+  objectQuery?.addEventListener('input', () => {
+    if (!objectQuery.value.trim()) pickObject(null);
+    else showObjectMatches();
+  });
+  objectQuery?.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') closeObjectList();
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    const found = matchObjectText(objectQuery.value) || searchObjects(objectQuery.value, 1)[0]?.object;
+    const object = found?.object || found;
+    if (object) pickObject(object);
+  });
+  objectSelect?.addEventListener('change', () => {
+    const object = chosenObject();
+    if (objectQuery) objectQuery.value = object ? object.name : '';
+    closeObjectList();
+    syncObject();
+  });
+  syncObject();
+  state.hearFundamental = playedFundamental(state.controls?.pitchScale, noteFrequency(state.note));
+  state.playReferenceHz = 0;
+  markPlayedNote(root, state.hearFundamental);
   const amountSlider = root.querySelector('[data-roll-amount]');
   amountSlider?.addEventListener('input', () => {
     const out = root.querySelector('[data-roll-amount-out]');
@@ -805,6 +902,7 @@ export function mount(root) {
     if (positionOut) positionOut.textContent = knobs.position.toFixed(2);
     const density = root.querySelector('[data-density]');
     if (density) {
+      ensureDensityCount(Number(knobs.density));
       density.value = String(knobs.density);
       densityChoice = Number(knobs.density);
     }
@@ -844,16 +942,28 @@ export function mount(root) {
     const current = snapshotRoll();
     pushRoll(rollHistory, current);
     rollSeed = (rollSeed + 1) >>> 0;
-    const rolled = rollSound({
-      base: state.profilePartials || state.partials,
+    const object = chosenObject();
+    const settings = {
       current: current.knobs,
-      material: materialSelect?.value || 'any',
       amount: Number(amountSlider?.value || 1),
       wildness: Number(wildnessSlider?.value ?? 0.3),
       locks: rollLocks,
       seed: (Date.now() ^ rollSeed) >>> 0,
-    });
+    };
+    const rolled = object
+      ? rollObject({ object, ...settings })
+      : rollSound({ base: state.profilePartials || state.partials, material: materialSelect?.value || 'any', ...settings });
+    if (object) setPlayPitch(object);
+    else clearObjectPitch();
     writeRoll(rolled.knobs, rolled.description, rolled.profile);
+  });
+  objectLoad?.addEventListener('click', () => {
+    const object = chosenObject();
+    if (!object) return;
+    pushRoll(rollHistory, snapshotRoll());
+    const loaded = loadObject(object);
+    setPlayPitch(object);
+    writeRoll(loaded.knobs, loaded.description, loaded.profile);
   });
   root.querySelector('[data-roll-back]')?.addEventListener('click', () => {
     const restored = undoRoll(rollHistory, snapshotRoll());

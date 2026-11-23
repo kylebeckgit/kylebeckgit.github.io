@@ -707,15 +707,18 @@ export function zebraDecaySeconds(unit, knob) {
   return column * 2 ** ((step - 50) / 10);
 }
 
-export function audiblePartials(partials, { fundamental = A4_HZ, sampleRate = 48000 } = {}) {
+export function audiblePartials(partials, { fundamental = A4_HZ, sampleRate = 48000, referenceHz } = {}) {
   const nyquist = (sampleRate > 0 ? sampleRate : 48000) / 2;
   const note = fundamental > 0 ? fundamental : A4_HZ;
+  // Materials keep the 6 kHz cap at A4, so existing rolls and files do not change.
+  // An object may name a lower reference pitch so more of its series stays in range.
+  const capAt = referenceHz > 0 ? referenceHz : A4_HZ;
   const kept = [];
   for (const partial of partials || []) {
     if (!(partial.ratio > 0) || !(partial.decay > 0)) continue;
-    const atA4 = partial.ratio * A4_HZ;
+    const atCap = partial.ratio * capAt;
     const atNote = partial.ratio * note;
-    if (atA4 > ZEBRA_PARTIAL_LIMIT_HZ || atNote > nyquist) continue;
+    if (atCap > ZEBRA_PARTIAL_LIMIT_HZ || atNote > nyquist) continue;
     if (!(partial.decay >= 0.005)) continue;
     kept.push({ ...partial, decay: Math.min(partial.decay, ZEBRA_DECAY_MAX) });
   }
@@ -723,7 +726,7 @@ export function audiblePartials(partials, { fundamental = A4_HZ, sampleRate = 48
   if (kept.length) return kept;
   const lowest = [...(partials || [])].filter((partial) => partial.ratio > 0).sort((a, b) => a.ratio - b.ratio)[0];
   if (!lowest) return [];
-  const ratio = Math.min(lowest.ratio, ZEBRA_PARTIAL_LIMIT_HZ / A4_HZ);
+  const ratio = Math.min(lowest.ratio, ZEBRA_PARTIAL_LIMIT_HZ / capAt);
   return [{ ...lowest, ratio, decay: Math.min(Math.max(lowest.decay, 0.001), ZEBRA_DECAY_MAX) }];
 }
 
@@ -736,10 +739,13 @@ export function decayKnobFromName(name) {
   return knob >= 0 && knob <= 100 ? knob : null;
 }
 
-export function exportFileName(description, knob) {
+export function exportFileName(description, knob, referenceHz) {
   let slug = String(description || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
   if (slug.length > 48) slug = slug.slice(0, 48).replace(/-[^-]*$/, '');
-  return `${slug || 'modal-profile'}_decay${knob}.csv`;
+  const pitch = referenceHz > 0 && Math.abs(Math.log2(referenceHz / A4_HZ)) >= 0.04
+    ? `_at-${noteNameFromHz(referenceHz).toLowerCase().replace('#', 's').replace(/[^a-z0-9]+/g, '')}`
+    : '';
+  return `${slug || 'modal-profile'}${pitch}_decay${knob}.csv`;
 }
 
 // Zebra 3 measurement with the fundamental at A4 (440 Hz). Rows above
@@ -775,8 +781,9 @@ export function zebraHighRowBias(hz) {
   return { db: last.db, t60: last.t60 };
 }
 
-function compensateForZebra(partial) {
-  const bias = zebraHighRowBias(partial.ratio * A4_HZ);
+function compensateForZebra(partial, referenceHz) {
+  const at = referenceHz > 0 ? referenceHz : A4_HZ;
+  const bias = zebraHighRowBias(partial.ratio * at);
   return {
     ...partial,
     gainDb: partial.gainDb - bias.db,
@@ -784,8 +791,12 @@ function compensateForZebra(partial) {
   };
 }
 
-export function zebraHint(knob, fundamental = A4_HZ) {
+export function zebraHint(knob, fundamental = A4_HZ, referenceHz) {
   const base = `In Zebra, set Decay to ${knob}, Position 0, other modal knobs at 0. Rows stop at 6 kHz when the fundamental is A4.`;
+  if (referenceHz > 0 && Math.abs(Math.log2(referenceHz / A4_HZ)) >= 0.04) {
+    const note = noteNameFromHz(referenceHz);
+    return `In Zebra, set Decay to ${knob}, Position 0, other modal knobs at 0. Play at ${note} (${Math.round(referenceHz)} Hz). Rows stay under 6 kHz at that note.`;
+  }
   if (!(fundamental > 0) || Math.abs(Math.log2(fundamental / A4_HZ)) < 0.04) return base;
   return `${base} Play the note near ${Math.round(fundamental)} Hz.`;
 }
@@ -799,7 +810,8 @@ function decayCell(unit, longest) {
 }
 
 export function zebraExport(partials, options = {}) {
-  const audible = audiblePartials(partials, options).map(compensateForZebra);
+  const referenceHz = options.referenceHz;
+  const audible = audiblePartials(partials, options).map((partial) => compensateForZebra(partial, referenceHz));
   const tmax = audible.reduce((max, partial) => Math.max(max, partial.decay), 0);
   const knob = zebraDecayKnob(tmax);
   let longest = 0;
@@ -814,8 +826,8 @@ export function zebraExport(partials, options = {}) {
   return {
     csv: lines.join('\n') + '\n',
     knob,
-    hint: zebraHint(knob, options.fundamental),
-    filename: exportFileName(options.description, knob),
+    hint: zebraHint(knob, options.fundamental, referenceHz),
+    filename: exportFileName(options.description, knob, referenceHz),
     partials: audible,
     tmax,
   };
@@ -879,4 +891,11 @@ export function noteFrequency(name) {
   const semis = { C: -9, D: -7, E: -5, F: -4, G: -2, A: 0, B: 2 };
   const offset = semis[match[1]] + (match[2] ? 1 : 0) + (Number(match[3]) - 4) * 12;
   return 440 * 2 ** (offset / 12);
+}
+
+export function noteNameFromHz(hz) {
+  if (!(hz > 0)) return 'A4';
+  const midi = Math.round(12 * Math.log2(hz / A4_HZ) + 69);
+  const names = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+  return `${names[((midi % 12) + 12) % 12]}${Math.floor(midi / 12) - 1}`;
 }
