@@ -1,4 +1,4 @@
-import { A4_HZ, PRESETS, NOTE_BUTTONS, ZEBRA_PARTIAL_LIMIT_HZ, buildPartials, previewPartials, zebraExport, audiblePartials, fromCsv, noteFrequency, playedFundamental, heardSeconds, defaultControls, sanitizeControls, alignReference, carryControls, controlsFromKnobs } from './engine.js';
+import { A4_HZ, PRESETS, NOTE_BUTTONS, ZEBRA_PARTIAL_LIMIT_HZ, buildPartials, previewPartials, zebraExport, audiblePartials, fromCsv, noteFrequency, noteNameFromHz, playedFundamental, heardSeconds, defaultControls, sanitizeControls, alignReference, carryControls, controlsFromKnobs } from './engine.js';
 import { applyShapeSound, SHAPE_SOUND } from './mode-solve.js';
 import { analyzeSamples, decodeRecording, resampleMono, parseRoot, frequencyToNote } from './analyze.js';
 import { renderPreview, scaleToPeak, strikeWeight } from './resonator.js';
@@ -1359,7 +1359,16 @@ export function mount(root) {
     state.velocity = payload.velocity ?? state.velocity;
     ensureDensityCount(payload.partials.length);
     readPlayControls();
-    state.hearFundamental = playedFundamental(controls.pitchScale, noteFrequency(state.note));
+    const libraryHz = Number(payload.fundamental);
+    const referenceHz = Number(payload.referenceHz);
+    state.playReferenceHz = referenceHz > 0 ? referenceHz : 0;
+    if (libraryHz > 0) {
+      state.hearFundamental = libraryHz;
+      state.note = noteNameFromHz(libraryHz);
+      markPlayedNote(root, libraryHz);
+    } else {
+      state.hearFundamental = playedFundamental(controls.pitchScale, noteFrequency(state.note));
+    }
     const copy = payload.partials.map((partial) => ({
       ratio: partial.ratio,
       gainDb: partial.gainDb,

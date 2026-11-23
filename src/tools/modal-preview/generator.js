@@ -11,9 +11,9 @@ import { describePrompt } from './recipes.js';
 import { presentShare, shareUrl } from './share.js';
 import { renderPreview, scaleToPeak } from './resonator.js';
 import { mountStudio } from './studio.js';
-import { matchObjectText, objectById, searchObjects, sourceLine } from './objects.js';
+import { objectById, searchObjects, sourceLine } from './objects.js';
 import { loadObject, rollObject } from './objects-randomize.js';
-import { resolveObject, variationFromLoaded } from './objects-chips.js';
+import { chosenObjectState, objectFromSearchEnter, resolveObject, variationFromLoaded } from './objects-chips.js';
 import { assessQuality, createRollHistory, defaultLocks, identityKnobs, pushRoll, redoRoll, rollSound, undoRoll } from './randomize.js';
 
 const EVERYDAY = [
@@ -432,6 +432,10 @@ export function snapshotVariation(variation) {
     voice: controls.voice || '',
     preset: controls.preset,
     objectName: variation?.objectName || variation?.name || '',
+    objectId: variation?.objectId || '',
+    referenceHz: Number(variation?.referenceHz || variation?.refHz) > 0
+      ? Number(variation.referenceHz || variation.refHz)
+      : 0,
   };
 }
 
@@ -703,6 +707,9 @@ export function handoffPayload(session) {
     position: snap.position,
     detune: snap.detune || 0,
     velocity: snap.velocity,
+    fundamental: snap.fundamental,
+    referenceHz: snap.referenceHz || 0,
+    objectId: snap.objectId || '',
   };
 }
 
@@ -959,6 +966,7 @@ export function mountGenerator(root, { openInDesigner } = {}) {
   controller = mountStudio(root, {
     applyRecipe(variation, { hear = false } = {}) {
       showSnap(variation, { hear });
+      adoptShownObject(variation);
     },
     setName() {},
     profileFromState() { return null; },
@@ -1008,6 +1016,8 @@ export function mountGenerator(root, { openInDesigner } = {}) {
       position: snap.position,
       detune: snap.detune,
       velocity: snap.velocity,
+      fundamental: snap.fundamental,
+      referenceHz: snap.referenceHz,
     };
     const shared = shareUrl(profile, location.href);
     history.replaceState(null, '', shared.url.slice(shared.url.indexOf('#')));
@@ -1076,6 +1086,23 @@ export function mountGenerator(root, { openInDesigner } = {}) {
     paintCurrent(audioState.strike ? (performance.now() - audioState.strike) / 1000 : null);
   });
   const session = createGeneratorSession();
+
+  function adoptShownObject(variation) {
+    const chosen = chosenObjectState(variation);
+    session.objectId = chosen.objectId;
+    session.objectKnobs = chosen.knobs;
+    session.objectPitch = chosen.fundamental;
+    session.objectRefHz = chosen.refHz;
+    const object = chosen.objectId ? objectById(chosen.objectId) : null;
+    if (object) {
+      const featured = root.querySelector(`[data-gen-object-id="${object.id}"]`)?.closest('[data-gen-object-rest]');
+      if (featured) showMoreObjects(true);
+    }
+    markObjectChip(chosen.objectId || '');
+    writeSource(object);
+    const query = root.querySelector('[data-gen-object-q]');
+    if (query) query.value = object ? object.name : '';
+  }
 
   function writeSource(object) {
     const note = root.querySelector('[data-gen-source]');
@@ -1198,8 +1225,7 @@ export function mountGenerator(root, { openInDesigner } = {}) {
     }
     if (event.key !== 'Enter') return;
     event.preventDefault();
-    const found = matchObjectText(objectQuery.value) || searchObjects(objectQuery.value, 1)[0]?.object;
-    const object = found?.object || found;
+    const object = objectFromSearchEnter(objectQuery.value);
     if (object) applyChosenObject(object);
   });
 
@@ -1248,5 +1274,7 @@ export function applyHandoff(designer, payload) {
   designer.detune = payload.detune || 0;
   if (designer.knobs) designer.knobs.detune = payload.detune || 0;
   designer.velocity = payload.velocity;
+  if (Number(payload.fundamental) > 0) designer.fundamental = Number(payload.fundamental);
+  if (Number(payload.referenceHz) > 0) designer.referenceHz = Number(payload.referenceHz);
   return designer;
 }

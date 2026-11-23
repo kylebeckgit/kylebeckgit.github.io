@@ -2,7 +2,7 @@
 // loaded or rolled library object into a generator variation. No network.
 
 import { A4_HZ, sanitizeControls } from './engine.js';
-import { objectById, OBJECTS, playPitch, sourceLine } from './objects.js';
+import { objectById, OBJECTS, playPitch, sourceLine, matchObjectText, searchObjects } from './objects.js';
 import { loadObject } from './objects-randomize.js';
 
 // The six chips that stay visible. Unusual bodies first, as chosen for the
@@ -84,6 +84,7 @@ export function variationFromLoaded(object, loaded) {
     partials,
     knobs: { ...knobs },
     fundamental: pitch.hz,
+    refHz: obj.refHz > 0 ? obj.refHz : 0,
     controls: sanitizeControls({
       preset: PRESET_FOR_SHAPE[obj.shape] || 'bar',
       pitchScale: pitch.hz / A4_HZ,
@@ -100,4 +101,28 @@ export function loadObjectVariation(object) {
   const obj = resolveObject(object);
   if (!obj) return null;
   return variationFromLoaded(obj, loadObject(obj));
+}
+
+// The object that belongs to the variation now on screen. A described sound
+// has none, so Back to it clears the chip and the next Randomize.
+export function chosenObjectState(variation) {
+  const object = variation?.objectId ? objectById(variation.objectId) : null;
+  if (!object) return { objectId: null, fundamental: 0, refHz: 0, knobs: null };
+  const fundamental = Number(variation.fundamental) > 0 ? Number(variation.fundamental) : playPitch(object).hz;
+  const refHz = Number(variation.refHz) > 0 ? Number(variation.refHz) : (object.refHz > 0 ? object.refHz : 0);
+  return {
+    objectId: object.id,
+    fundamental,
+    refHz,
+    knobs: variation.knobs ? { ...variation.knobs } : null,
+  };
+}
+
+// Enter in the search box. An empty query is not a search: searchObjects('')
+// would otherwise return the first library entry.
+export function objectFromSearchEnter(text) {
+  const query = String(text ?? '').trim();
+  if (!query) return null;
+  const found = matchObjectText(query) || searchObjects(query, 1)[0]?.object;
+  return found?.object || found || null;
 }

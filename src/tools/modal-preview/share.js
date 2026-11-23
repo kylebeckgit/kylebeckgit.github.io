@@ -97,6 +97,8 @@ function metadata(profile) {
     vel: clamp(profile.velocity, 0, 1, 2, 0.8),
     pos: clamp(profile.position, 0.02, 0.98, 2, 0.18),
     det: clamp(profile.detune, -1, 1, 3, 0),
+    ...(Number(profile.fundamental) > 0 ? { hz: clamp(profile.fundamental, 20, 8000, 3, 0) } : {}),
+    ...(Number(profile.referenceHz) > 0 ? { rh: clamp(profile.referenceHz, 20, 8000, 3, 0) } : {}),
     c: {
       preset: controls.preset,
       stiffness: round(controls.stiffness, 3),
@@ -205,6 +207,8 @@ export function decodeShare(hash) {
       velocity: clamp(parsed.vel, 0, 1, 2, 0.8),
       position: clamp(parsed.pos, 0.02, 0.98, 2, 0.18),
       detune: clamp(parsed.det, -1, 1, 3, 0),
+      ...(Number(parsed.hz) > 0 ? { fundamental: clamp(parsed.hz, 20, 8000, 3, 0) } : {}),
+      ...(Number(parsed.rh) > 0 ? { referenceHz: clamp(parsed.rh, 20, 8000, 3, 0) } : {}),
       controls,
       partials,
     };

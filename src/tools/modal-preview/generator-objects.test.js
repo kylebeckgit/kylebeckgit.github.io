@@ -4,13 +4,16 @@ import { OBJECTS, objectById, playPitch, searchObjects, sourceLine } from './obj
 import { loadObject, rollObject } from './objects-randomize.js';
 import {
   FEATURED_OBJECT_IDS,
+  chosenObjectState,
   featuredObjects,
   loadObjectVariation,
   moreObjects,
   objectChipLabel,
+  objectFromSearchEnter,
   variationFromLoaded,
 } from './objects-chips.js';
-import { createGeneratorSession, rollGenerator, snapshotVariation } from './generator.js';
+import { createGeneratorSession, handoffPayload, rollGenerator, snapshotVariation } from './generator.js';
+import { encodeShare, decodeShare } from './share.js';
 
 test('the generator features six unusual objects, with the rest behind more', () => {
   assert.deepEqual(FEATURED_OBJECT_IDS, [
@@ -100,4 +103,57 @@ test('typing an object name still finds it for the generator search box', () => 
   assert.equal(searchObjects('dax', 6)[0].object.id, 'daxophone');
   assert.equal(searchObjects('glass', 8).some((hit) => hit.object.id === 'wine-glass'), true);
   assert.equal(searchObjects('slinky', 1)[0].object.id, 'slinky');
+});
+
+test('enter on an empty object search does not load the first library entry', () => {
+  assert.equal(searchObjects('', 1)[0].object.id, 'church-bell');
+  assert.equal(objectFromSearchEnter(''), null);
+  assert.equal(objectFromSearchEnter('   '), null);
+  assert.equal(objectFromSearchEnter('slinky').id, 'slinky');
+  assert.equal(objectFromSearchEnter('a rusty hubcap').id, 'hubcap');
+});
+
+test('back restores the sound on screen, and open or share keeps the library pitch', () => {
+  const slinky = objectById('slinky');
+  const described = { name: 'Glass bowl', line: 'A glass bowl.', controls: { preset: 'bell' } };
+  const loaded = loadObjectVariation(slinky);
+  assert.equal(chosenObjectState(described).objectId, null);
+  assert.equal(chosenObjectState(described).refHz, 0);
+  const shown = chosenObjectState(loaded);
+  assert.equal(shown.objectId, 'slinky');
+  assert.equal(shown.fundamental, playPitch(slinky).hz);
+  assert.equal(shown.refHz, slinky.refHz);
+  assert.ok(shown.knobs);
+
+  const session = createGeneratorSession();
+  session.turn = { prompt: 'glass bowl', variations: [described], selected: 0 };
+  session.past.push(session.turn);
+  session.turn = { prompt: slinky.name, variations: [loaded], selected: 0, objectId: slinky.id, fundamental: loaded.fundamental, refHz: slinky.refHz };
+  const back = session.past[session.past.length - 1];
+  assert.equal(chosenObjectState(back.variations[back.selected]).objectId, null);
+  const forward = session.turn;
+  assert.equal(chosenObjectState(forward.variations[0]).objectId, 'slinky');
+  assert.equal(forward.fundamental, playPitch(slinky).hz);
+  assert.equal(forward.refHz, slinky.refHz);
+
+  const snap = snapshotVariation(loaded);
+  assert.equal(snap.fundamental, playPitch(slinky).hz);
+  assert.equal(snap.referenceHz, slinky.refHz);
+  assert.ok(snap.fundamental < 440 * 0.25);
+  const payload = handoffPayload({ turn: { variations: [loaded], selected: 0 } });
+  assert.equal(payload.fundamental, snap.fundamental);
+  assert.equal(payload.referenceHz, snap.referenceHz);
+  const shared = decodeShare(`#s=${encodeShare({
+    name: snap.name,
+    description: loaded.line,
+    objectName: snap.objectName,
+    material: snap.material,
+    shape: snap.shape,
+    controls: snap.controls,
+    partials: snap.partials,
+    fundamental: snap.fundamental,
+    referenceHz: snap.referenceHz,
+  })}`);
+  assert.ok(Math.abs(shared.fundamental - snap.fundamental) < 0.01);
+  assert.ok(Math.abs(shared.referenceHz - snap.referenceHz) < 0.01);
 });
