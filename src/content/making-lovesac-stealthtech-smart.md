@@ -203,5 +203,9 @@ If Home Assistant stops responding to the couch, the most likely reason is that 
 
 Also, a dark light on the ATOM Lite doesn't mean it's bricked. It lights up when you first plug it in, but once you flash the firmware this setup needs, the light stays off.
 
+## Get the config
+
+The automations, the Couch dashboard, the TV Mute switch and the setup steps are packaged as a download. Pay what you want; free is fine. [Download the config pack](https://buy.polar.sh/polar_cl_aOxq0ZoevPXZ4lXQlPNabsZTdSof7WjEyXntH0WEKku).
+
 #grok bot/home#
 
