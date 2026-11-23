@@ -773,7 +773,6 @@ export function mount(root) {
   const objectList = root.querySelector('[data-object-list]');
   const objectNote = root.querySelector('[data-object-note]');
   const objectLoad = root.querySelector('[data-object-load]');
-  const feralBox = root.querySelector('[data-roll-feral]');
   const chosenObject = () => objectById(objectSelect?.value || '');
   const setPlayPitch = (object) => {
     const pitch = playPitch(object);
@@ -941,7 +940,6 @@ export function mount(root) {
       wildness: Number(wildnessSlider?.value ?? 0.3),
       locks: rollLocks,
       seed: (Date.now() ^ rollSeed) >>> 0,
-      feral: Boolean(feralBox?.checked),
     };
     const rolled = object
       ? rollObject({ object, ...settings })

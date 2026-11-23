@@ -1,7 +1,7 @@
 // Rolls inside one object from objects.js. The object supplies the series
 // (its base profile); a roll moves the knobs inside the object's own musical
 // ranges and nudges the profile a little, the way two examples of the same
-// object differ. Wildness widens both. Feral skips the playable check.
+// object differ. Wildness widens both, and past 0.7 it also bends the series.
 // No network.
 
 import { shapePartials } from './shape.js';
@@ -13,7 +13,8 @@ import {
   identityKnobs,
   mixKnobs,
   mulberry32,
-  safetyCheck,
+  exoticAmount,
+  wildenPartials,
   sampleFromRange,
   toShape,
 } from './randomize.js';
@@ -53,27 +54,28 @@ function tidy(partials) {
 }
 
 // A different example of the same object. Strength 0 returns the base.
-export function mutateProfile(rng, object, strength, feral = false) {
+export function mutateProfile(rng, object, strength, exotic = 0) {
   const m = object.mutate;
   const s = clamp(strength, 0, EXTREME_WILDNESS);
+  const x = clamp(Number(exotic) || 0, 0, 1);
   let list = baseProfile(object);
-  if (s <= 0) return list;
-  const mult = feral ? 2.5 : 1;
-  const jitter = m.ratioJitterCents * (0.25 + 0.75 * s) * mult;
-  const gainJitter = m.gainJitterDb * (0.3 + 0.7 * s) * (feral ? 2 : 1);
+  if (s <= 0 && !(x > 0)) return list;
+  if (s <= 0) return tidy(wildenPartials(rng, list, x));
+  const jitter = m.ratioJitterCents * (0.25 + 0.75 * s) * (1 + 1.5 * x);
+  const gainJitter = m.gainJitterDb * (0.3 + 0.7 * s) * (1 + x);
   const scale = Math.exp(lerp(Math.log(1), Math.log(between(rng, m.decayScale[0], m.decayScale[1])), Math.min(1, s)));
   list = list.map((p, i) => ({
     ratio: i === 0 ? p.ratio : cents(p.ratio, between(rng, -jitter, jitter)),
     gainDb: p.gainDb + between(rng, -gainJitter, gainJitter),
     decay: p.decay * scale * between(rng, 0.88, 1.12),
   }));
-  if (m.pairSplitCents && (s > 0.15 || feral)) {
+  if (m.pairSplitCents && s > 0.15) {
     const chance = clamp(0.3 + 0.4 * s, 0, 0.9);
     const twins = [];
     for (let i = 0; i < list.length; i++) {
       const near = list.some((q, j) => j !== i && Math.abs(1200 * Math.log2(q.ratio / list[i].ratio)) < 20);
       if (near || rng() > chance || list.length + twins.length >= MAX_PARTIALS) continue;
-      const split = between(rng, m.pairSplitCents[0], m.pairSplitCents[1]) * (feral ? 1.6 : 1);
+      const split = between(rng, m.pairSplitCents[0], m.pairSplitCents[1]) * (1 + 0.6 * x);
       twins.push({
         ratio: cents(list[i].ratio, rng() < 0.5 ? split : -split),
         gainDb: list[i].gainDb - between(rng, 0.5, 3),
@@ -82,23 +84,7 @@ export function mutateProfile(rng, object, strength, feral = false) {
     }
     list = list.concat(twins);
   }
-  if (feral) {
-    // Past the object: bend the series, tilt the levels, or let the highs outlast the low.
-    if (rng() < 0.7) {
-      const power = between(rng, 0.82, 1.22);
-      const root = list[0].ratio;
-      list = list.map((p) => ({ ...p, ratio: root * (p.ratio / root) ** power }));
-    }
-    if (rng() < 0.5) {
-      const tilt = between(rng, -3, 4.5);
-      const root = list[0].ratio;
-      list = list.map((p) => ({ ...p, gainDb: p.gainDb + tilt * Math.log2(p.ratio / root) }));
-    }
-    if (rng() < 0.3) {
-      const root = list[0].ratio;
-      list = list.map((p) => ({ ...p, decay: p.decay * 2 ** (0.35 * Math.log2(p.ratio / root)) }));
-    }
-  }
+  if (x > 0) list = wildenPartials(rng, list, x);
   return tidy(list);
 }
 
@@ -124,13 +110,13 @@ export function assessObject(partials, knobs) {
   return { ok: reasons.length === 0, reasons, score: reasons.length ? 10 - reasons.length : 10 };
 }
 
-function snapDensity(rng, knobs, count, locks, current, wild, feral) {
+function snapDensity(rng, knobs, count, locks, current, wild) {
   if (locks?.density) {
     knobs.density = Math.min(count, Math.max(1, Math.round(current?.density || count)));
     return;
   }
   knobs.density = count;
-  const cut = feral ? 0.35 : wild > 0.8 ? 0.2 : 0;
+  const cut = Math.max(wild > 0.8 ? 0.2 : 0, 0.35 * exoticAmount(wild));
   if (cut && rng() < cut) {
     const options = STEPS.filter((step) => step < count && step >= 4);
     if (options.length) knobs.density = options[Math.floor(rng() * options.length)];
@@ -166,37 +152,35 @@ export function loadObject(object) {
     description: `${object.name}, base profile`,
     material: 'object',
     object: object.id,
-    feral: false,
   };
 }
 
-export function rollObject({ object, current, amount = 1, wildness = 0.3, locks = defaultLocks(), seed = 1, feral = false }) {
+export function rollObject({ object, current, amount = 1, wildness = 0.3, locks = defaultLocks(), seed = 1 }) {
   const obj = typeof object === 'string' ? objectById(object) : object;
   if (!obj) throw new Error('Unknown object');
   const rng = mulberry32(seed);
   const wild = clamp(Number(wildness) || 0, 0, EXTREME_WILDNESS);
-  const reach = feral ? Math.min(EXTREME_WILDNESS, Math.max(wild, 0.8) + 0.35) : wild;
-  const strength = reach * (0.2 + 0.8 * clamp(Number(amount) || 0, 0, 1));
+  const exotic = exoticAmount(wild);
+  const strength = wild * (0.2 + 0.8 * clamp(Number(amount) || 0, 0, 1));
   let best = null;
   for (let attempt = 0; attempt < 40; attempt++) {
-    const profile = mutateProfile(rng, obj, strength, feral);
-    const range = expandedFrom({ ...obj.mutate, detune: [-0.1, 0.1], density: [8] }, reach);
+    const profile = mutateProfile(rng, obj, strength, exotic);
+    const range = expandedFrom({ ...obj.mutate, detune: [-0.1, 0.1], density: [8] }, wild);
     const target = sampleFromRange(rng, range);
     const knobs = mixKnobs(current || identityKnobs(), target, amount, locks);
-    snapDensity(rng, knobs, profile.length, locks, current, reach, feral);
+    snapDensity(rng, knobs, profile.length, locks, current, wild);
     if (!locks?.detune) knobs.detune = 0;
     if (!locks?.position) knobs.position = 0.02;
     const partials = fitRange(profile, knobs, locks);
-    const quality = feral ? safetyCheck(partials) : assessObject(partials, knobs);
+    const quality = assessObject(partials, knobs);
     const candidate = {
       knobs,
       partials,
       profile,
       quality,
-      description: describeObjectRoll(obj, knobs, partials) + (feral ? ', feral' : ''),
+      description: describeObjectRoll(obj, knobs, partials),
       material: 'object',
       object: obj.id,
-      feral,
     };
     if (!best || quality.score > best.quality.score) best = candidate;
     if (quality.ok) return candidate;

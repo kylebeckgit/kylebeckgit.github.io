@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { OBJECTS, baseProfile, exportOptions, matchObjectText, objectById, objectNoteText, playPitch, searchObjects, sourceLine } from './objects.js';
 import { loadObject, mutateProfile, rollObject } from './objects-randomize.js';
-import { mulberry32, rollSound, defaultLocks, identityKnobs, safetyCheck } from './randomize.js';
+import { mulberry32, rollSound, defaultLocks, identityKnobs, EXTREME_WILDNESS, exoticAmount } from './randomize.js';
 import { previewPartials, defaultControls, zebraExport, fromCsv, A4_HZ, ZEBRA_PARTIAL_LIMIT_HZ, audiblePartials } from './engine.js';
 import { buildShare, decodeShare } from './share.js';
 
@@ -140,33 +140,115 @@ test('loading an object gives its own series at native density', () => {
   }
 });
 
-test('feral rolls skip the playable check but stay loadable', () => {
-  let differs = 0;
-  for (const object of OBJECTS) {
-    for (let i = 0; i < 40; i++) {
-      const feral = rollObject({ object, seed: 500 + i, wildness: 1, feral: true });
-      assert.equal(feral.feral, true);
-      assert.equal(safetyCheck(feral.partials).ok, true, `${object.id} ${i}`);
-      assert.match(feral.description, /feral/);
-      const tame = rollObject({ object, seed: 500 + i, wildness: 1 });
-      if (JSON.stringify(feral.partials) !== JSON.stringify(tame.partials)) differs += 1;
+test('rolls at wildness 0.7 and below match the locked hashes', async () => {
+  const { createHash } = await import('node:crypto');
+  const { readFileSync } = await import('node:fs');
+  const lock = JSON.parse(readFileSync(new URL('./wildness-lock.json', import.meta.url), 'utf8'));
+  const fingerprint = (rolled) => createHash('sha256').update(JSON.stringify({
+    knobs: rolled.knobs,
+    partials: rolled.partials,
+    profile: rolled.profile,
+    description: rolled.description,
+  })).digest('hex');
+  assert.equal(exoticAmount(0.7), 0);
+  assert.equal(exoticAmount(0.3), 0);
+  assert.ok(exoticAmount(EXTREME_WILDNESS) === 1);
+  for (const [material, byWild] of Object.entries(lock.materials)) {
+    for (const [wildness, bySeed] of Object.entries(byWild)) {
+      for (const [seed, hash] of Object.entries(bySeed)) {
+        const rolled = rollSound({
+          current: identityKnobs(),
+          material,
+          amount: 1,
+          wildness: Number(wildness),
+          locks: defaultLocks(),
+          seed: Number(seed),
+        });
+        assert.equal(fingerprint(rolled), hash, `${material} wildness ${wildness} seed ${seed}`);
+      }
     }
   }
-  assert.ok(differs > 600);
-  for (const material of ['metal', 'wood', 'glass', 'skin', 'bell', 'any', 'wild']) {
-    for (let i = 0; i < 40; i++) {
-      const rolled = rollSound({ base: previewPartials(defaultControls()), current: identityKnobs(), material, wildness: 1, seed: 900 + i, locks: defaultLocks(), feral: true });
-      assert.equal(safetyCheck(rolled.partials).ok, true, `${material} ${i}`);
+  for (const [id, byWild] of Object.entries(lock.objects)) {
+    const object = objectById(id);
+    for (const [wildness, bySeed] of Object.entries(byWild)) {
+      for (const [seed, hash] of Object.entries(bySeed)) {
+        const rolled = rollObject({
+          object,
+          current: identityKnobs(),
+          amount: 1,
+          wildness: Number(wildness),
+          locks: defaultLocks(),
+          seed: Number(seed),
+        });
+        assert.equal(fingerprint(rolled), hash, `${id} wildness ${wildness} seed ${seed}`);
+      }
     }
+    assert.equal(
+      fingerprint({
+        knobs: {},
+        partials: mutateProfile(mulberry32(7), object, 0.3),
+        profile: mutateProfile(mulberry32(11), object, 0.7),
+        description: '',
+      }),
+      lock.mutate[id],
+      `${id} mutate`,
+    );
   }
 });
 
-test('a non-feral material roll is unchanged by the feral option existing', () => {
-  const base = previewPartials(defaultControls());
-  const a = rollSound({ base, current: identityKnobs(), material: 'bell', seed: 12, locks: defaultLocks() });
-  const b = rollSound({ base, current: identityKnobs(), material: 'bell', seed: 12, locks: defaultLocks(), feral: false });
-  assert.deepEqual(a.partials, b.partials);
-  assert.equal(a.quality.ok, true);
+function stdev(values) {
+  const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
+  return Math.sqrt(values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / values.length);
+}
+
+function knobSpread(rolls) {
+  return ['decay', 'decayKf', 'absorb', 'disperse', 'normalize']
+    .reduce((sum, key) => sum + stdev(rolls.map((rolled) => rolled.knobs[key])), 0);
+}
+
+function spanVariance(rolls) {
+  const spans = rolls.map((rolled) => {
+    const list = rolled.partials;
+    return Math.log(list[list.length - 1].ratio / list[0].ratio);
+  });
+  return stdev(spans) ** 2;
+}
+
+test('high Wild rolls are more varied than mid Wild and all pass the quality check', () => {
+  const seeds = Array.from({ length: 40 }, (_, i) => 2000 + i);
+  const midWild = 0.5;
+  const highWild = EXTREME_WILDNESS;
+  const knobRatios = [];
+  const spanRatios = [];
+  const check = (label, midRolls, highRolls) => {
+    for (const rolled of [...midRolls, ...highRolls]) {
+      assert.equal(rolled.quality.ok, true, `${label} ${rolled.quality.reasons.join(',')}`);
+      assert.equal(/feral/i.test(rolled.description), false, rolled.description);
+    }
+    knobRatios.push(knobSpread(highRolls) / knobSpread(midRolls));
+    spanRatios.push(spanVariance(highRolls) / Math.max(spanVariance(midRolls), 1e-9));
+  };
+  for (const material of ['metal', 'wood', 'glass', 'skin', 'bell', 'any', 'wild']) {
+    const mid = [];
+    const high = [];
+    for (const seed of seeds) {
+      mid.push(rollSound({ current: identityKnobs(), material, amount: 1, wildness: midWild, locks: defaultLocks(), seed }));
+      high.push(rollSound({ current: identityKnobs(), material, amount: 1, wildness: highWild, locks: defaultLocks(), seed }));
+    }
+    check(material, mid, high);
+  }
+  for (const object of OBJECTS) {
+    const mid = [];
+    const high = [];
+    for (const seed of seeds) {
+      mid.push(rollObject({ object, current: identityKnobs(), amount: 1, wildness: midWild, locks: defaultLocks(), seed }));
+      high.push(rollObject({ object, current: identityKnobs(), amount: 1, wildness: highWild, locks: defaultLocks(), seed }));
+    }
+    check(object.id, mid, high);
+  }
+  const mean = (values) => values.reduce((sum, value) => sum + value, 0) / values.length;
+  assert.ok(mean(knobRatios) > 1.5 && Math.min(...knobRatios) > 1.4, `knob spread ${mean(knobRatios).toFixed(3)} min ${Math.min(...knobRatios).toFixed(3)}`);
+  assert.ok(mean(spanRatios) > 2 && Math.min(...spanRatios) > 1.2, `span variance ${mean(spanRatios).toFixed(3)} min ${Math.min(...spanRatios).toFixed(3)}`);
 });
 
 test('object profiles export to a Zebra CSV and share without loss of rows', () => {

@@ -22,8 +22,9 @@ f.addEventListener('load',async()=>{
  log('after load: read="'+d.querySelector('[data-roll-read]').textContent+'" density='+d.querySelector('[data-density]').value+' rows='+rows());
  d.querySelector('[data-roll]').click(); await wait(300);
  log('after roll: read="'+d.querySelector('[data-roll-read]').textContent+'" density='+d.querySelector('[data-density]').value+' rows='+rows());
- d.querySelector('[data-roll-feral]').click(); d.querySelector('[data-roll]').click(); await wait(300);
- log('feral roll: read="'+d.querySelector('[data-roll-read]').textContent+'" rows='+rows());
+ const wild=d.querySelector('[data-roll-wildness]'); if(wild){ wild.value='1.35'; wild.dispatchEvent(new w.Event('input',{bubbles:true})); }
+ d.querySelector('[data-roll]').click(); await wait(300);
+ log('high wild roll: read="'+d.querySelector('[data-roll-read]').textContent+'" rows='+rows());
  await type('hang drum'); q.dispatchEvent(new w.KeyboardEvent('keydown',{key:'Enter',bubbles:true})); await wait(50);
  log('enter on "hang drum" picked '+sel.value);
  d.querySelector('[data-roll-back]').click(); await wait(200); log('back works, read="'+d.querySelector('[data-roll-read]').textContent+'"');

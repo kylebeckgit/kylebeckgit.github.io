@@ -394,6 +394,45 @@ function centsBetween(a, b) {
   return Math.abs(1200 * Math.log2(b / a));
 }
 
+// 0 below or at wildness 0.7, 1 at EXTREME_WILDNESS. Rolls at 0.7 and below
+// must not take this path, so their RNG and output stay the same.
+export function exoticAmount(wildness) {
+  const w = clamp(Number(wildness) || 0, 0, EXTREME_WILDNESS);
+  if (!(w > 0.7)) return 0;
+  return (w - 0.7) / (EXTREME_WILDNESS - 0.7);
+}
+
+// Power-law series bend, level tilt, and highs that outlast the low.
+// Chance and size both follow exotic, which is 0 when wildness is 0.7 or less.
+export function wildenPartials(rng, partials, exotic) {
+  const x = clamp(Number(exotic) || 0, 0, 1);
+  if (!(x > 0) || !partials?.length) return partials;
+  let list = partials.map((partial) => ({ ...partial }));
+  const root = list[0].ratio || 1;
+  if (rng() < 0.7 * x) {
+    const power = lerp(1, lerp(0.82, 1.22, rng()), x);
+    list = list.map((partial) => ({
+      ...partial,
+      ratio: root * (Math.max(partial.ratio, 1e-8) / root) ** power,
+    }));
+  }
+  if (rng() < 0.5 * x) {
+    const tilt = lerp(0, lerp(-3, 4.5, rng()), x);
+    list = list.map((partial) => ({
+      ...partial,
+      gainDb: partial.gainDb + tilt * Math.log2(Math.max(partial.ratio / root, 1e-8)),
+    }));
+  }
+  if (rng() < 0.3 * x) {
+    const rise = 0.35 * x;
+    list = list.map((partial) => ({
+      ...partial,
+      decay: partial.decay * 2 ** (rise * Math.log2(Math.max(partial.ratio / root, 1e-8))),
+    }));
+  }
+  return list;
+}
+
 export function assessQuality(partials, knobs) {
   const reasons = [];
   if (!partials?.length || partials.length < 4) reasons.push('thin');
@@ -624,38 +663,17 @@ export function descriptionAgrees(text, knobs, partials = []) {
   return true;
 }
 
-// Feral mode skips the playable check above. It keeps only what a profile
-// needs to load and be heard: finite numbers inside the page limits, at least
-// one audible row, and not so hot that rows pile up at 0 dB.
-export function safetyCheck(partials) {
-  const reasons = [];
-  const list = partials || [];
-  if (!list.length || list.length > 256) reasons.push('count');
-  let peak = -Infinity;
-  let slammed = 0;
-  for (const partial of list) {
-    if (![partial.ratio, partial.gainDb, partial.decay].every(Number.isFinite) || partial.ratio <= 0) {
-      reasons.push('unstable');
-      break;
-    }
-    if (partial.ratio > 80 || partial.decay < 0.05 || partial.decay > 30) reasons.push('limits');
-    peak = Math.max(peak, partial.gainDb);
-    if (partial.gainDb > -1) slammed += 1;
-  }
-  if (peak < -40) reasons.push('silent');
-  if (slammed >= 8) reasons.push('clipped');
-  return { ok: reasons.length === 0, reasons, score: reasons.length ? 10 - reasons.length : 10 };
-}
-
-export function rollSound({ base, current, material = 'any', amount = 1, wildness = 0.3, locks = defaultLocks(), seed = 1, feral = false }) {
+export function rollSound({ base, current, material = 'any', amount = 1, wildness = 0.3, locks = defaultLocks(), seed = 1 }) {
   const rng = mulberry32(seed);
   const family = MATERIALS.includes(material) ? material : 'any';
+  const wild = clamp(Number(wildness) || 0, 0, EXTREME_WILDNESS);
+  const exotic = exoticAmount(wild);
   let best = null;
   for (let attempt = 0; attempt < 40; attempt++) {
     const picked = family === 'any' || family === 'wild' ? pick(rng, FAMILIES) : family;
-    const reach = feral ? Math.min(EXTREME_WILDNESS, Math.max(Number(wildness) || 0, 0.8) + 0.35) : wildness;
-    const target = sampleTarget(rng, family, reach, picked);
-    const profile = profileFor(rng, family, Math.min(1, reach), picked);
+    const target = sampleTarget(rng, family, wild, picked);
+    const profile = profileFor(rng, family, Math.min(1, wild), picked);
+    if (exotic > 0) profile.partials = wildenPartials(rng, profile.partials, exotic);
     const knobs = capDensity(mixKnobs(current || identityKnobs(), target, amount, locks), profile.partials, locks);
     // Zebra is told to leave Position and Detune at 0. The page uses the
     // same values, so the drawing and the note match the CSV. Detune is not
@@ -663,12 +681,10 @@ export function rollSound({ base, current, material = 'any', amount = 1, wildnes
     if (!locks?.detune) knobs.detune = 0;
     if (!locks?.position) knobs.position = 0.02;
     const partials = shapePartials(profile.partials, toShape(knobs));
-    const quality = feral ? safetyCheck(partials) : assessQuality(partials, knobs);
-    let description = describeKnobs(knobs, profile.family, partials);
-    if (feral && !descriptionAgrees(description, knobs, partials)) description = 'Feral roll, not filtered';
-    const candidate = { knobs, partials, profile: profile.partials, quality, description, material: family, feral };
+    const quality = assessQuality(partials, knobs);
+    const description = describeKnobs(knobs, profile.family, partials);
+    const candidate = { knobs, partials, profile: profile.partials, quality, description, material: family };
     if (!best || quality.score > best.quality.score) best = candidate;
-    if (feral && quality.ok) return candidate;
     if (quality.ok && descriptionAgrees(description, knobs, partials)) return candidate;
   }
   return best;

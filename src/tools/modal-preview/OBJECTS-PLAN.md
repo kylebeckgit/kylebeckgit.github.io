@@ -5,7 +5,7 @@ Scope: `src/pages/z3-describe-preview.astro` and `src/tools/modal-preview/` only
 
 ## What it does
 
-The Wild roll used to bend five generic materials. Now a roll can start from a named real object (19 so far), keep that object's pitch series, and move the knobs inside ranges that suit it. A Feral switch skips the "playable" check for rolls that are meant to be strange.
+The Wild roll used to bend five generic materials. Now a roll can start from a named real object (19 so far), keep that object's pitch series, and move the knobs inside ranges that suit it. Past wildness 0.7, rolls also bend the series, tilt the levels, and can let the highs outlast the low. Every roll still has to pass the playable check.
 
 ## Architecture
 
@@ -13,8 +13,8 @@ The Wild roll used to bend five generic materials. Now a roll can start from a n
 | --- | --- |
 | `objects.js` | The data. Array of objects `{id, name, aliases[], family, material, shape, tuning, partials[], mutate{}, notes, basis{}, sources[]}`. Also `baseProfile`, `objectById`, `matchObjectText` (free text to nearest object) and `searchObjects` (typeahead). No imports, so it is cheap to load and easy to test. |
 | `objects-randomize.js` | `loadObject` (the base, untouched), `rollObject` (one roll inside an object), `mutateProfile` (a different example of the same object), `assessObject`. |
-| `randomize.js` | Small diff: a few helpers are now exported, `expandedRange` is split so any knob table can be widened by wildness, and `rollSound` takes `feral` plus a shared `safetyCheck`. A non-feral roll is unchanged (test covers this). |
-| `ui.js`, `z3-describe-preview.astro` | An Object box next to Material: a text box with a typeahead over names and aliases (also takes a description such as "a rusty hubcap"), a plain Object select as the fallback, a Feral checkbox, and a Load object button. Choosing an object disables Material. |
+| `randomize.js` | Small diff: a few helpers are now exported, `expandedRange` is split so any knob table can be widened by wildness, and high Wild applies series bends. Rolls at wildness 0.7 and below are unchanged. |
+| `ui.js`, `z3-describe-preview.astro` | An Object box next to Material: a text box with a typeahead over names and aliases (also takes a description such as "a rusty hubcap"), a plain Object select as the fallback, and a Load object button. Choosing an object disables Material. |
 | `objects.test.js` | 12 tests, added to `npm test`. |
 | `objects-tools/` | `disk_modes.py` (computes the free-disk mode ratios) and `ui-smoke.html` (headless browser check). |
 
@@ -24,9 +24,9 @@ Profile shape is unchanged: `{ratio, gainDb, decay}`, at most 256 rows, gain flo
 
 1. `mutateProfile` copies the base and applies a small ratio jitter (per-object cents), level jitter, a decay scale from the object's range, and, for objects that have it, a beating twin next to some partials (the pair split). Strength scales with wildness and Amount.
 2. Knobs are sampled from the object's own `mutate` ranges, widened toward the hard limits as wildness rises, then blended with the current knobs by Amount. Locks work as before.
-3. Density stays at the object's native row count, so the series is never resampled into invented rows. Wild and Feral may drop to a lower step.
-4. Non-feral rolls must pass `assessQuality`, except the clump and merged-bar reasons, which do not apply to objects built from near-twin pairs.
-5. Feral rolls widen jitter and reach, may bend the series (power law on the ratios), tilt the levels, or let the highs outlast the low, and then only need to load and be audible. Their description ends in "feral".
+3. Density stays at the object's native row count, so the series is never resampled into invented rows. High Wild may drop to a lower step.
+4. Every roll must pass `assessQuality`, except the clump and merged-bar reasons, which do not apply to objects built from near-twin pairs.
+5. From wildness 0.7 up to the extreme end of the slider, rolls widen jitter and pair splits, and may bend the series (power law on the ratios), tilt the levels, or let the highs outlast the low. Failed rolls are rerolled.
 
 ### Honesty about the data
 
@@ -76,10 +76,10 @@ Levels are approximations for all 19. Only the church bell has decay times from 
 - Each approximation (cymbal, bowed cymbal, hubcap, brake drum, cowbell, waterphone, slit log): is it recognizable, or should it be dropped until it is measured?
 - Wine glass and saw blade: does the physics series sound like the object?
 - Kalimba and daxophone: they are the same ratios, so is the difference in levels and decay enough?
-- Feral: are the rolls interesting rather than only broken?
+- High Wild: are the more exotic rolls still useful?
 - Slinky: is the ladder useful without the chirp?
 
-Renders for these are in `/workspace/modal-profiles/objects-2026-11-22/` (base, one Wild and one Feral per object, A4, 4 s, 48 kHz).
+Renders for these are in `/workspace/modal-profiles/objects-2026-11-22/` (base, one Wild, and a high-Wild extreme of a few objects, A4, 4 s, 48 kHz).
 
 ## Open questions
 
