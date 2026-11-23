@@ -1,6 +1,6 @@
 // A shared sound is a compact JSON blob in the page hash. Nothing is sent.
 
-import { sanitizeControls } from './engine.js';
+import { noteFrequency, noteNameFromHz, playedFundamental, sanitizeControls } from './engine.js';
 
 const VERSION = 1;
 const MATERIALS = new Set(['metal', 'wood', 'glass', 'skin', 'stone', 'ceramic', 'plastic', 'cardboard', 'air', 'water', 'void', 'rubber', 'ice', 'string']);
@@ -97,6 +97,8 @@ function metadata(profile) {
     vel: clamp(profile.velocity, 0, 1, 2, 0.8),
     pos: clamp(profile.position, 0.02, 0.98, 2, 0.18),
     det: clamp(profile.detune, -1, 1, 3, 0),
+    ...(Number(profile.fundamental) > 0 ? { hz: clamp(profile.fundamental, 20, 8000, 3, 0) } : {}),
+    ...(Number(profile.referenceHz) > 0 ? { rh: clamp(profile.referenceHz, 20, 8000, 3, 0) } : {}),
     c: {
       preset: controls.preset,
       stiffness: round(controls.stiffness, 3),
@@ -156,6 +158,29 @@ export function shareUrl(profile, href = '') {
   return { url: `${base}#s=${built.token}`, shortened: built.shortened };
 }
 
+// Pitch for a decoded share. A library fundamental wins over pitchScale,
+// which is clamped and would play a low object such as Slinky too high.
+// Both frequencies stay in the same 20 Hz to 8 kHz span the share link uses.
+function heardHz(value) {
+  const n = Number(value);
+  if (!(n > 0)) return 0;
+  return clamp(n, 20, 8000, 3, 0);
+}
+
+export function sharedPitch(profile, { note = 'A4' } = {}) {
+  const fundamental = heardHz(profile?.fundamental);
+  const referenceHz = heardHz(profile?.referenceHz);
+  const controls = sanitizeControls(profile?.controls || {});
+  const hearFundamental = fundamental > 0
+    ? fundamental
+    : playedFundamental(controls.pitchScale, noteFrequency(note));
+  return {
+    hearFundamental,
+    playReferenceHz: referenceHz,
+    note: fundamental > 0 ? noteNameFromHz(fundamental) : note,
+  };
+}
+
 export async function presentShare(url, { status, field, message = 'Link copied' } = {}) {
   try {
     if (!navigator.clipboard?.writeText) throw new Error('no clipboard');
@@ -205,6 +230,8 @@ export function decodeShare(hash) {
       velocity: clamp(parsed.vel, 0, 1, 2, 0.8),
       position: clamp(parsed.pos, 0.02, 0.98, 2, 0.18),
       detune: clamp(parsed.det, -1, 1, 3, 0),
+      ...(Number(parsed.hz) > 0 ? { fundamental: clamp(parsed.hz, 20, 8000, 3, 0) } : {}),
+      ...(Number(parsed.rh) > 0 ? { referenceHz: clamp(parsed.rh, 20, 8000, 3, 0) } : {}),
       controls,
       partials,
     };

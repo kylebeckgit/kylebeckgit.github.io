@@ -1,6 +1,10 @@
 ---
 import Base from '../layouts/Base.astro';
 import { OBJECTS } from '../tools/modal-preview/objects.js';
+import { featuredObjects, moreObjects, objectChipLabel } from '../tools/modal-preview/objects-chips.js';
+
+const featured = featuredObjects();
+const more = moreObjects();
 ---
 <Base title="Modal preview" path="/z3-describe-preview.html" description="Unlisted preview. Design a modal body by hand, or generate variations from a sentence." robots="noindex, nofollow">
   <p class="eyebrow"><a href="/tools/">Tools</a></p>
@@ -286,6 +290,25 @@ import { OBJECTS } from '../tools/modal-preview/objects.js';
           <button type="button" data-example="wooden marimba bar">Marimba bar</button>
           <button type="button" data-example="cymbal">Cymbal</button>
         </div>
+        <div class="gen-objects">
+          <div class="examples object-chips" data-gen-objects role="group" aria-label="Objects">
+            {featured.map((object) => (
+              <button type="button" data-gen-object-id={object.id} aria-pressed="false">{objectChipLabel(object)}</button>
+            ))}
+            <button type="button" data-gen-object-more aria-expanded="false">More objects</button>
+            <span class="object-more-wrap" data-gen-object-rest hidden>
+              {more.map((object) => (
+                <button type="button" data-gen-object-id={object.id} aria-pressed="false">{objectChipLabel(object)}</button>
+              ))}
+            </span>
+            <label class="object-search">
+              <span class="visually-hidden">Search objects</span>
+              <input id="gen-object-q" data-gen-object-q type="text" role="combobox" aria-expanded="false" aria-controls="gen-object-list" aria-autocomplete="list" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="Search objects">
+            </label>
+            <ul id="gen-object-list" class="object-list" role="listbox" data-gen-object-list hidden></ul>
+          </div>
+          <p class="object-note" data-gen-source hidden></p>
+        </div>
         <p class="status" data-studio-status role="status"></p>
       </section>
       <div class="gen-preview" data-visualizer>
@@ -386,6 +409,7 @@ import { OBJECTS } from '../tools/modal-preview/objects.js';
     .describe textarea { min-height: 4.25rem; }
     .describe .ask-bar { margin-top: .4rem; gap: .5rem; }
     .describe .examples { margin-top: .4rem; }
+    .describe .gen-objects { margin-top: .4rem; }
     .describe .quiet { margin-top: .3rem; }
   }
   .gen-preview {
@@ -465,9 +489,39 @@ import { OBJECTS } from '../tools/modal-preview/objects.js';
     cursor: pointer;
   }
   .examples button:hover,
-  .examples button:focus-visible {
+  .examples button:focus-visible,
+  .examples button[aria-pressed="true"] {
     border-color: var(--accent);
     color: var(--accent);
+  }
+  .describe .gen-objects { margin-top: .45rem; }
+  .describe .gen-objects .examples { margin-top: 0; }
+  .object-chips { align-items: center; }
+  .object-more-wrap { display: contents; }
+  .object-more-wrap[hidden] { display: none; }
+  .object-search {
+    flex: 1 1 10rem;
+    min-width: 9rem;
+    max-width: 16rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+  .object-search input {
+    width: 100%;
+    min-height: 2.4rem;
+    padding: .35rem .75rem;
+    font: inherit;
+    color: inherit;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+  }
+  .object-search input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .object-chips .object-list { flex: 1 1 100%; width: 100%; }
+  .gen-objects .object-note { margin-top: .35rem; }
+  @media (max-width: 480px) {
+    .object-search { flex-basis: 100%; max-width: none; min-width: 0; }
   }
   .thread { margin: .35rem 0 1rem; padding-left: 1.2rem; color: var(--muted); }
   .thread li { margin: .15rem 0; }

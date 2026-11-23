@@ -10,7 +10,7 @@ import { createRollHistory, defaultLocks, pushRoll, redoRoll, rollSound, undoRol
 import { matchObjectText, noteReferenceHz, objectById, objectNoteText, profilePitch, searchObjects } from './objects.js';
 import { loadObject, rollObject } from './objects-randomize.js';
 import { decodeProfile } from './studio.js';
-import { decodeShare, presentShare, shareUrl } from './share.js';
+import { decodeShare, presentShare, sharedPitch, shareUrl } from './share.js';
 import { SILENT_MODE_HINT, audioContextClass, beginAudio, installGestureUnlock, playSilentUnlock, prepareAudioSession, resumeInGesture } from './audio-session.js';
 
 export function mount(root) {
@@ -1359,7 +1359,11 @@ export function mount(root) {
     state.velocity = payload.velocity ?? state.velocity;
     ensureDensityCount(payload.partials.length);
     readPlayControls();
-    state.hearFundamental = playedFundamental(controls.pitchScale, noteFrequency(state.note));
+    const pitch = sharedPitch(payload, { note: state.note });
+    state.playReferenceHz = pitch.playReferenceHz;
+    state.hearFundamental = pitch.hearFundamental;
+    state.note = pitch.note;
+    markPlayedNote(root, pitch.hearFundamental);
     const copy = payload.partials.map((partial) => ({
       ratio: partial.ratio,
       gainDb: partial.gainDb,

@@ -11,6 +11,9 @@ import { describePrompt } from './recipes.js';
 import { presentShare, shareUrl } from './share.js';
 import { renderPreview, scaleToPeak } from './resonator.js';
 import { mountStudio } from './studio.js';
+import { objectById, searchObjects, sourceLine } from './objects.js';
+import { loadObject, rollObject } from './objects-randomize.js';
+import { chosenObjectState, objectFromSearchEnter, resolveObject, variationFromLoaded } from './objects-chips.js';
 import { assessQuality, createRollHistory, defaultLocks, identityKnobs, pushRoll, redoRoll, rollSound, undoRoll } from './randomize.js';
 
 const EVERYDAY = [
@@ -403,7 +406,8 @@ export function dressVariations(variations, seed, wildness, source = null, famil
 
 export function snapshotVariation(variation) {
   const controls = sanitizeControls(variation?.controls || variation || {});
-  const fundamental = playedFundamental(controls.pitchScale);
+  const explicit = Number(variation?.fundamental);
+  const fundamental = explicit > 0 ? explicit : playedFundamental(controls.pitchScale);
   const built = variation?.partials?.length
     ? variation.partials
     : audiblePartials(previewPartials(controls), { fundamental, sampleRate: 48000 });
@@ -428,6 +432,10 @@ export function snapshotVariation(variation) {
     voice: controls.voice || '',
     preset: controls.preset,
     objectName: variation?.objectName || variation?.name || '',
+    objectId: variation?.objectId || '',
+    referenceHz: Number(variation?.referenceHz || variation?.refHz) > 0
+      ? Number(variation.referenceHz || variation.refHz)
+      : 0,
   };
 }
 
@@ -547,8 +555,28 @@ export function makeWildCard(session, seed) {
   return stampWild([wildenVariation(base, seed, 1, family)], body)[0];
 }
 
-export function rollGenerator(session, { wildness = 0.3, seed } = {}) {
+export function rollGenerator(session, { wildness = 0.3, seed, object } = {}) {
   const nextSeed = Number.isFinite(seed) ? seed : (session.seed = (session.seed + 1) >>> 0);
+  const chosen = resolveObject(object);
+  if (chosen) {
+    const rolled = rollObject({
+      object: chosen,
+      current: session.objectKnobs,
+      amount: 1,
+      wildness,
+      seed: nextSeed,
+    });
+    session.objectId = chosen.id;
+    session.objectKnobs = rolled.knobs;
+    const variation = variationFromLoaded(chosen, rolled);
+    if (session.turn) {
+      session.past.push(session.turn);
+      if (session.past.length > 12) session.past.shift();
+    }
+    session.future = [];
+    session.turn = { prompt: chosen.name, variations: [variation], selected: 0 };
+    return { prompt: chosen.name, turn: session.turn };
+  }
   const amount = Math.min(1, Math.max(0, Number(wildness) || 0));
   if (amount >= HIGH_WILDNESS) {
     const body = nextWildBody(session, nextSeed);
@@ -679,6 +707,9 @@ export function handoffPayload(session) {
     position: snap.position,
     detune: snap.detune || 0,
     velocity: snap.velocity,
+    fundamental: snap.fundamental,
+    referenceHz: snap.referenceHz || 0,
+    objectId: snap.objectId || '',
   };
 }
 
@@ -935,6 +966,7 @@ export function mountGenerator(root, { openInDesigner } = {}) {
   controller = mountStudio(root, {
     applyRecipe(variation, { hear = false } = {}) {
       showSnap(variation, { hear });
+      adoptShownObject(variation);
     },
     setName() {},
     profileFromState() { return null; },
@@ -984,6 +1016,8 @@ export function mountGenerator(root, { openInDesigner } = {}) {
       position: snap.position,
       detune: snap.detune,
       velocity: snap.velocity,
+      fundamental: snap.fundamental,
+      referenceHz: snap.referenceHz,
     };
     const shared = shareUrl(profile, location.href);
     history.replaceState(null, '', shared.url.slice(shared.url.indexOf('#')));
@@ -1052,10 +1086,163 @@ export function mountGenerator(root, { openInDesigner } = {}) {
     paintCurrent(audioState.strike ? (performance.now() - audioState.strike) / 1000 : null);
   });
   const session = createGeneratorSession();
+
+  function adoptShownObject(variation) {
+    const chosen = chosenObjectState(variation);
+    session.objectId = chosen.objectId;
+    session.objectKnobs = chosen.knobs;
+    session.objectPitch = chosen.fundamental;
+    session.objectRefHz = chosen.refHz;
+    const object = chosen.objectId ? objectById(chosen.objectId) : null;
+    if (object) {
+      const featured = root.querySelector(`[data-gen-object-id="${object.id}"]`)?.closest('[data-gen-object-rest]');
+      if (featured) showMoreObjects(true);
+    }
+    markObjectChip(chosen.objectId || '');
+    writeSource(object);
+    const query = root.querySelector('[data-gen-object-q]');
+    if (query) query.value = object ? object.name : '';
+  }
+
+  function writeSource(object) {
+    const note = root.querySelector('[data-gen-source]');
+    if (!note) return;
+    note.hidden = !object;
+    note.textContent = object ? sourceLine(object) : '';
+  }
+
+  function markObjectChip(id) {
+    for (const button of root.querySelectorAll('[data-gen-object-id]')) {
+      button.setAttribute('aria-pressed', String(button.dataset.genObjectId === id));
+    }
+  }
+
+  function showMoreObjects(open) {
+    const rest = root.querySelector('[data-gen-object-rest]');
+    const toggle = root.querySelector('[data-gen-object-more]');
+    if (rest) rest.hidden = !open;
+    if (toggle) toggle.setAttribute('aria-expanded', String(Boolean(open)));
+  }
+
+  function closeObjectSearch() {
+    const list = root.querySelector('[data-gen-object-list]');
+    const query = root.querySelector('[data-gen-object-q]');
+    if (!list) return;
+    list.hidden = true;
+    list.replaceChildren();
+    query?.setAttribute('aria-expanded', 'false');
+  }
+
+  function clearChosenObject() {
+    session.objectId = null;
+    session.objectKnobs = null;
+    markObjectChip('');
+    writeSource(null);
+    const query = root.querySelector('[data-gen-object-q]');
+    if (query) query.value = '';
+    closeObjectSearch();
+  }
+
+  function applyChosenObject(object, { hear = true } = {}) {
+    if (!object) return;
+    const loaded = loadObject(object);
+    const variation = variationFromLoaded(object, loaded);
+    if (!variation) return;
+    session.objectId = object.id;
+    session.objectKnobs = loaded.knobs;
+    const featured = root.querySelector(`[data-gen-object-id="${object.id}"]`)?.closest('[data-gen-object-rest]');
+    if (featured) showMoreObjects(true);
+    markObjectChip(object.id);
+    writeSource(object);
+    const query = root.querySelector('[data-gen-object-q]');
+    if (query) query.value = object.name;
+    closeObjectSearch();
+    controller?.showTurn(object.name, [variation], hear);
+  }
+
+  function showObjectMatches() {
+    const list = root.querySelector('[data-gen-object-list]');
+    const query = root.querySelector('[data-gen-object-q]');
+    if (!list || !query) return;
+    const text = query.value.trim();
+    const hits = searchObjects(text, 6);
+    list.replaceChildren();
+    if (!text || !hits.length) {
+      closeObjectSearch();
+      return;
+    }
+    for (const hit of hits) {
+      const item = document.createElement('li');
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.setAttribute('role', 'option');
+      button.textContent = hit.object.name;
+      if (hit.phrase && hit.phrase !== hit.object.name.toLowerCase()) {
+        const small = document.createElement('small');
+        small.textContent = hit.phrase;
+        button.append(small);
+      }
+      button.addEventListener('click', () => applyChosenObject(hit.object));
+      item.append(button);
+      list.append(item);
+    }
+    list.hidden = false;
+    query.setAttribute('aria-expanded', 'true');
+  }
+
+  root.querySelector('[data-gen-objects]')?.addEventListener('click', (event) => {
+    const more = event.target.closest('[data-gen-object-more]');
+    if (more) {
+      const rest = root.querySelector('[data-gen-object-rest]');
+      showMoreObjects(Boolean(rest?.hidden));
+      return;
+    }
+    const chip = event.target.closest('[data-gen-object-id]');
+    if (!chip) return;
+    const object = objectById(chip.dataset.genObjectId);
+    if (!object) return;
+    if (session.objectId === object.id) {
+      const query = root.querySelector('[data-gen-object-q]');
+      if (query) query.value = '';
+      clearChosenObject();
+      return;
+    }
+    applyChosenObject(object);
+  });
+
+  const objectQuery = root.querySelector('[data-gen-object-q]');
+  objectQuery?.addEventListener('input', () => {
+    if (!objectQuery.value.trim()) {
+      closeObjectSearch();
+      return;
+    }
+    showObjectMatches();
+  });
+  objectQuery?.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      closeObjectSearch();
+      return;
+    }
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    const object = objectFromSearchEnter(objectQuery.value);
+    if (object) applyChosenObject(object);
+  });
+
+  root.querySelector('[data-examples]')?.addEventListener('click', (event) => {
+    if (event.target.closest('[data-example]')) clearChosenObject();
+  });
+  root.querySelector('[data-ask-btn]')?.addEventListener('click', () => clearChosenObject());
+  root.querySelector('[data-starters]')?.addEventListener('click', (event) => {
+    if (event.target.closest('[data-starter]')) clearChosenObject();
+  });
+
   root.querySelector('[data-gen-roll]')?.addEventListener('click', () => {
     seed = (seed + 1) >>> 0;
     const wildness = Number(wild?.value || 0);
-    const rolled = rollGenerator(session, { wildness, seed: (Date.now() ^ seed) >>> 0 });
+    const object = session.objectId ? objectById(session.objectId) : null;
+    const rolled = rollGenerator(session, { wildness, seed: (Date.now() ^ seed) >>> 0, object });
+    writeSource(object);
     controller?.showTurn(rolled.prompt, rolled.turn.variations, true);
   });
   installGestureUnlock(root, () => {
@@ -1087,5 +1274,7 @@ export function applyHandoff(designer, payload) {
   designer.detune = payload.detune || 0;
   if (designer.knobs) designer.knobs.detune = payload.detune || 0;
   designer.velocity = payload.velocity;
+  if (Number(payload.fundamental) > 0) designer.fundamental = Number(payload.fundamental);
+  if (Number(payload.referenceHz) > 0) designer.referenceHz = Number(payload.referenceHz);
   return designer;
 }
