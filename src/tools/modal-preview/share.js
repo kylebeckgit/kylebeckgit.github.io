@@ -1,6 +1,6 @@
 // A shared sound is a compact JSON blob in the page hash. Nothing is sent.
 
-import { sanitizeControls } from './engine.js';
+import { noteFrequency, noteNameFromHz, playedFundamental, sanitizeControls } from './engine.js';
 
 const VERSION = 1;
 const MATERIALS = new Set(['metal', 'wood', 'glass', 'skin', 'stone', 'ceramic', 'plastic', 'cardboard', 'air', 'water', 'void', 'rubber', 'ice', 'string']);
@@ -156,6 +156,21 @@ export function shareUrl(profile, href = '') {
   const base = String(href || '').split('#')[0];
   const built = buildShare(profile);
   return { url: `${base}#s=${built.token}`, shortened: built.shortened };
+}
+
+// Pitch for a decoded share. A library fundamental wins over pitchScale,
+// which is clamped and would play a low object such as Slinky too high.
+export function sharedPitch(profile, { note = 'A4' } = {}) {
+  const fundamental = Number(profile?.fundamental);
+  const referenceHz = Number(profile?.referenceHz);
+  const hearFundamental = fundamental > 0
+    ? fundamental
+    : playedFundamental(profile?.controls?.pitchScale, noteFrequency(note));
+  return {
+    hearFundamental,
+    playReferenceHz: referenceHz > 0 ? referenceHz : 0,
+    note: fundamental > 0 ? noteNameFromHz(fundamental) : note,
+  };
 }
 
 export async function presentShare(url, { status, field, message = 'Link copied' } = {}) {

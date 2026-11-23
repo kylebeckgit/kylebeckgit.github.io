@@ -1,4 +1,4 @@
-import { A4_HZ, PRESETS, NOTE_BUTTONS, ZEBRA_PARTIAL_LIMIT_HZ, buildPartials, previewPartials, zebraExport, audiblePartials, fromCsv, noteFrequency, noteNameFromHz, playedFundamental, heardSeconds, defaultControls, sanitizeControls, alignReference, carryControls, controlsFromKnobs } from './engine.js';
+import { A4_HZ, PRESETS, NOTE_BUTTONS, ZEBRA_PARTIAL_LIMIT_HZ, buildPartials, previewPartials, zebraExport, audiblePartials, fromCsv, noteFrequency, playedFundamental, heardSeconds, defaultControls, sanitizeControls, alignReference, carryControls, controlsFromKnobs } from './engine.js';
 import { applyShapeSound, SHAPE_SOUND } from './mode-solve.js';
 import { analyzeSamples, decodeRecording, resampleMono, parseRoot, frequencyToNote } from './analyze.js';
 import { renderPreview, scaleToPeak, strikeWeight } from './resonator.js';
@@ -10,7 +10,7 @@ import { createRollHistory, defaultLocks, pushRoll, redoRoll, rollSound, undoRol
 import { matchObjectText, noteReferenceHz, objectById, objectNoteText, profilePitch, searchObjects } from './objects.js';
 import { loadObject, rollObject } from './objects-randomize.js';
 import { decodeProfile } from './studio.js';
-import { decodeShare, presentShare, shareUrl } from './share.js';
+import { decodeShare, presentShare, sharedPitch, shareUrl } from './share.js';
 import { SILENT_MODE_HINT, audioContextClass, beginAudio, installGestureUnlock, playSilentUnlock, prepareAudioSession, resumeInGesture } from './audio-session.js';
 
 export function mount(root) {
@@ -1359,16 +1359,11 @@ export function mount(root) {
     state.velocity = payload.velocity ?? state.velocity;
     ensureDensityCount(payload.partials.length);
     readPlayControls();
-    const libraryHz = Number(payload.fundamental);
-    const referenceHz = Number(payload.referenceHz);
-    state.playReferenceHz = referenceHz > 0 ? referenceHz : 0;
-    if (libraryHz > 0) {
-      state.hearFundamental = libraryHz;
-      state.note = noteNameFromHz(libraryHz);
-      markPlayedNote(root, libraryHz);
-    } else {
-      state.hearFundamental = playedFundamental(controls.pitchScale, noteFrequency(state.note));
-    }
+    const pitch = sharedPitch(payload, { note: state.note });
+    state.playReferenceHz = pitch.playReferenceHz;
+    state.hearFundamental = pitch.hearFundamental;
+    state.note = pitch.note;
+    if (Number(payload.fundamental) > 0) markPlayedNote(root, pitch.hearFundamental);
     const copy = payload.partials.map((partial) => ({
       ratio: partial.ratio,
       gainDb: partial.gainDb,
@@ -1435,6 +1430,11 @@ export function mount(root) {
   if (/(?:^|#|&)s=/.test(location.hash || '') && !sharedSound) {
     setShareStatus('This link could not be read.');
   } else if (shared?.partials?.length) {
+    const pitch = sharedPitch(shared, { note: state.note });
+    state.hearFundamental = pitch.hearFundamental;
+    state.playReferenceHz = pitch.playReferenceHz;
+    state.note = pitch.note;
+    if (Number(shared.fundamental) > 0 || Number(shared.referenceHz) > 0) markPlayedNote(root, pitch.hearFundamental);
     receiveHandoff(shared);
     setShareStatus('Opened a shared sound.');
   } else if (shared?.controls) {

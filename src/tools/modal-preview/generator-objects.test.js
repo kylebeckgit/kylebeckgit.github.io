@@ -13,7 +13,8 @@ import {
   variationFromLoaded,
 } from './objects-chips.js';
 import { createGeneratorSession, handoffPayload, rollGenerator, snapshotVariation } from './generator.js';
-import { encodeShare, decodeShare } from './share.js';
+import { encodeShare, decodeShare, sharedPitch } from './share.js';
+import { playedFundamental } from './engine.js';
 
 test('the generator features six unusual objects, with the rest behind more', () => {
   assert.deepEqual(FEATURED_OBJECT_IDS, [
@@ -156,4 +157,28 @@ test('back restores the sound on screen, and open or share keeps the library pit
   })}`);
   assert.ok(Math.abs(shared.fundamental - snap.fundamental) < 0.01);
   assert.ok(Math.abs(shared.referenceHz - snap.referenceHz) < 0.01);
+});
+
+test('a shared slinky opens in the designer at F#2, not the clamped pitch scale', () => {
+  const slinky = objectById('slinky');
+  const loaded = loadObjectVariation(slinky);
+  const snap = snapshotVariation(loaded);
+  const decoded = decodeShare(`#s=${encodeShare({
+    name: snap.name,
+    description: loaded.line,
+    objectName: snap.objectName,
+    material: snap.material,
+    shape: snap.shape,
+    controls: snap.controls,
+    partials: snap.partials,
+    fundamental: snap.fundamental,
+    referenceHz: snap.referenceHz,
+  })}`);
+  const opened = sharedPitch(decoded, { note: 'A4' });
+  const floor = playedFundamental(decoded.controls.pitchScale, 440);
+  assert.ok(floor >= 109);
+  assert.ok(Math.abs(opened.hearFundamental - slinky.refHz) < 0.01);
+  assert.ok(Math.abs(opened.playReferenceHz - slinky.refHz) < 0.01);
+  assert.ok(opened.hearFundamental < floor - 1);
+  assert.equal(opened.note, slinky.refNote);
 });
