@@ -15,6 +15,7 @@ import { objectById, searchObjects, sourceLine } from './objects.js';
 import { loadObject, rollObject } from './objects-randomize.js';
 import { chosenObjectState, objectFromSearchEnter, resolveObject, variationFromLoaded } from './objects-chips.js';
 import { assessQuality, createRollHistory, defaultLocks, identityKnobs, pushRoll, redoRoll, rollSound, undoRoll } from './randomize.js';
+import { downloadExport, exportFromSound } from './export-file.js';
 
 const EVERYDAY = [
   'wood block', 'glass bowl', 'gong', 'marimba', 'ceramic bowl', 'prayer bell', 'cowbell',
@@ -993,6 +994,17 @@ export function mountGenerator(root, { openInDesigner } = {}) {
     const variation = controller?.current();
     if (!variation) return;
     showSnap(variation, { hear: true });
+  });
+  root.querySelector('[data-gen-export]')?.addEventListener('click', () => {
+    const variation = controller?.current();
+    if (!variation) return;
+    const exported = exportFromSound(snapshotVariation(variation));
+    downloadExport(exported);
+    const hint = root.querySelector('[data-gen-export-hint]');
+    if (hint) {
+      hint.textContent = exported.hint;
+      hint.hidden = false;
+    }
   });
   root.querySelector('[data-gen-share]')?.addEventListener('click', async () => {
     const variation = controller?.current();

@@ -325,9 +325,11 @@ const more = moreObjects();
         <div class="gen-actions">
           <button type="button" class="btn" data-gen-hear>Hear</button>
           <button type="button" class="btn" data-gen-share>Share this sound</button>
+          <button type="button" class="btn" data-gen-export disabled>Export profile</button>
           <button type="button" class="btn solid" data-open-designer disabled>Open in designer</button>
           <p class="status" data-gen-share-status role="status"></p>
           <input class="share-fallback" data-gen-share-fallback hidden readonly aria-label="Shared link">
+          <p class="quiet export-hint" data-gen-export-hint hidden>In Zebra, set Decay to 50, Position 0, other modal knobs at 0.</p>
           <p class="status" data-gen-audio role="status"></p>
         </div>
       </div>
@@ -432,6 +434,7 @@ const more = moreObjects();
   .object-caption[hidden] { display: none; }
   .gen-actions { display: flex; flex-wrap: wrap; gap: .6rem; }
   .gen-actions .btn { min-height: 2.75rem; }
+  .gen-actions .export-hint { flex: 1 1 100%; margin: 0; }
   .gen-roll { margin-top: 1.25rem; }
   .gen-roll > .quiet { grid-column: 1 / -1; margin-top: 0; }
   #modal-app :global(button),
