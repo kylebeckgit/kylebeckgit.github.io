@@ -1,0 +1,17 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "jam-room",
+  "main": "src/index.js",
+  "compatibility_date": "2026-05-03",
+  "vars": {
+    "TEST_SHORT_PHRASE": "false"
+  },
+  "durable_objects": {
+    "bindings": [
+      { "name": "JAM_ROOM", "class_name": "JamRoom" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["JamRoom"] }
+  ]
+}
