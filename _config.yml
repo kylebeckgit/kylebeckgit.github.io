@@ -19,6 +19,10 @@ defaults:
       path: "jam-room-preview.html"
     values:
       sitemap: false
+  - scope:
+      path: "jam-room-admin.html"
+    values:
+      sitemap: false
 
 exclude:
   - art

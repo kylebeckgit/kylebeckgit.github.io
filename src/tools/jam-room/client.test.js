@@ -205,3 +205,24 @@ describe('jam client solo clock', () => {
     assert.deepEqual(states, [1]);
   });
 });
+
+describe('jam client upload errors', () => {
+  it('returns an error status when postUpload fetch throws', async () => {
+    const holder = {};
+    const client = createJamClient({
+      url: 'wss://jam-room.example',
+      WebSocket: fakeSocketClass(holder),
+      fetch: async () => { throw new Error('Failed to fetch'); },
+    });
+    client.connect();
+    holder.socket.open();
+    const welcome = welcomeMessage();
+    welcome.uploadToken = 'tok-1';
+    holder.socket.receive(welcome);
+    assert.equal(client.mode, 'room');
+    const result = await client.postUpload(new Uint8Array([1, 2, 3]), { consent: true });
+    assert.equal(result.ok, false);
+    assert.equal(result.reason, 'The upload could not be sent.');
+    client.disconnect();
+  });
+});

@@ -27,7 +27,7 @@ jobs:
       - name: Launch checks
         run: |
           set -euo pipefail
-          if grep -R -l -n "noindex" dist --include='*.html' | grep -v -e '/z3-describe-preview.html$' -e '/making-lovesac-stealthtech-smart/index.html$' -e '/modal-stream-preview.html$' -e '/jam-room-preview.html$'; then
+          if grep -R -l -n "noindex" dist --include='*.html' | grep -v -e '/z3-describe-preview.html$' -e '/making-lovesac-stealthtech-smart/index.html$' -e '/modal-stream-preview.html$' -e '/jam-room-preview.html$' -e '/jam-room-admin.html$'; then
             echo "noindex is on a public page"
             exit 1
           fi
@@ -35,6 +35,7 @@ jobs:
           grep -q 'name="robots" content="noindex, nofollow"' dist/making-lovesac-stealthtech-smart/index.html
           grep -q 'name="robots" content="noindex, nofollow"' dist/modal-stream-preview.html
           grep -q 'name="robots" content="noindex, nofollow"' dist/jam-room-preview.html
+          grep -q 'name="robots" content="noindex, nofollow"' dist/jam-room-admin.html
           if grep -R -n 'z3-describe-preview' dist --include='*.html' | grep -v 'z3-describe-preview.html:'; then
             echo "the describe preview is linked from another page"
             exit 1
@@ -45,6 +46,10 @@ jobs:
           fi
           if grep -R -n 'jam-room-preview' dist --include='*.html' | grep -v 'jam-room-preview.html:'; then
             echo "the jam room preview is linked from another page"
+            exit 1
+          fi
+          if grep -R -n 'jam-room-admin' dist --include='*.html' | grep -v 'jam-room-admin.html:'; then
+            echo "the jam room admin page is linked from another page"
             exit 1
           fi
           if grep -R -n 'making-lovesac-stealthtech-smart' dist --include='*.html' | grep -v 'making-lovesac-stealthtech-smart/index.html:'; then

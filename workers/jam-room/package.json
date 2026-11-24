@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test src/logic.test.js src/tally.test.js test/multi-client.test.mjs",
+    "test": "node --test --test-concurrency=1 src/logic.test.js src/tally.test.js src/validate.test.js src/moderation.test.js src/origins.test.js src/clip-view.test.js src/reporters.test.js src/store.test.js test/multi-client.test.mjs test/upload-flow.test.mjs",
     "dev": "wrangler dev --port 8787"
   },
   "devDependencies": {

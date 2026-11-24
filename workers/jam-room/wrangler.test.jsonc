@@ -3,7 +3,10 @@
   "main": "src/index.js",
   "compatibility_date": "2026-05-03",
   "vars": {
-    "TEST_SHORT_PHRASE": "true"
+    "TEST_SHORT_PHRASE": "true",
+    "TEST_MOCK_AI": "true",
+    "TEST_PENDING_CAP": "3",
+    "ADMIN_TOKEN": "test-admin-token"
   },
   "durable_objects": {
     "bindings": [

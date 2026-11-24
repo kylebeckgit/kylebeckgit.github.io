@@ -50,6 +50,7 @@ describe('parseCommand', () => {
     assert.deepEqual(parseCommand('  !MOOD Dark '), { family: 'mood', value: 'dark' });
     assert.deepEqual(parseCommand('!material crowd glass'), { family: 'material', value: 'crowd:glass' });
     assert.deepEqual(parseCommand('!material wood'), { family: 'material', value: 'wood' });
+    assert.deepEqual(parseCommand('!material upload'), { family: 'material', value: 'crowd:upload' });
     assert.deepEqual(parseCommand('!drop'), { family: 'drop', value: true });
     assert.equal(parseCommand('hello'), null);
     assert.equal(parseCommand('!mood spicy'), null);
@@ -313,5 +314,19 @@ describe('strike limits', () => {
     assert.equal(strikeBeatInRange(state, 4 - 16.01, 4000), false);
     assert.equal(strikeBeatInRange(state, Infinity, 4000), false);
     assert.equal(strikeBeatInRange(state, NaN, 4000), false);
+  });
+});
+
+
+
+describe('upload material', () => {
+  it('keeps !material upload through clone and apply', () => {
+    const room = createRoom(1_000);
+    const vote = parseCommand('!material upload');
+    assert.equal(vote.value, 'crowd:upload');
+    assert.equal(applyVote(room, 'a', vote.family, vote.value, 1_000).ok, true);
+    const closed = closePhrase(room, 1);
+    assert.equal(closed.state.materials.crowd, 'upload');
+    assert.equal(cloneState(closed.state).materials.crowd, 'upload');
   });
 });

@@ -1,0 +1,73 @@
+---
+import Base from '../layouts/Base.astro';
+---
+<Base title="Jam room admin" path="/jam-room-admin.html" description="Unlisted admin tools for the jam room." robots="noindex, nofollow">
+  <p class="eyebrow">Preview</p>
+  <h1>Jam room admin</h1>
+  <p class="lede">Remove a clip, or clear the room. This page is unlisted.</p>
+
+  <div id="jam-admin" class="panel" data-api-url="https://jam-room.kbsound.workers.dev">
+    <label>
+      <span>Admin token</span>
+      <input type="password" data-admin-token autocomplete="off" spellcheck="false">
+    </label>
+    <div class="play-tools">
+      <button type="button" class="btn solid" data-admin-load>Load clips</button>
+      <button type="button" class="btn" data-admin-kill>Clear the room</button>
+    </div>
+    <p class="status" data-admin-status role="status"></p>
+    <div data-admin-list></div>
+  </div>
+</Base>
+
+<style>
+  .panel {
+    margin-top: 1.75rem;
+    border: 1px solid var(--line);
+    background: var(--card);
+    border-radius: 4px;
+    padding: 1.1rem 1.1rem 1.25rem;
+    max-width: 44rem;
+  }
+  #jam-admin :global(button), #jam-admin :global(input) {
+    font-family: var(--body);
+    font-stretch: var(--body-stretch);
+    font-weight: 550;
+    font-size: .95rem;
+  }
+  label span { display: block; color: var(--muted); font-size: .85rem; margin-bottom: .25rem; }
+  input[type="password"] {
+    width: 100%;
+    box-sizing: border-box;
+    min-height: 2.75rem;
+    padding: .4rem .6rem;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    background: var(--bg);
+    color: var(--fg);
+  }
+  .play-tools {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .75rem;
+    margin-top: .85rem;
+  }
+  .play-tools .btn { min-height: 2.75rem; }
+  .status { color: var(--fg); margin: .75rem 0 0; }
+  .status:empty { display: none; }
+  .hint { color: var(--muted); font-size: .95rem; }
+  .clip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem;
+    align-items: center;
+    justify-content: space-between;
+    padding: .55rem 0;
+    border-top: 1px solid var(--line);
+  }
+</style>
+
+<script>
+  import { mountJamAdmin } from '../tools/jam-room/admin.js';
+  mountJamAdmin(document.getElementById('jam-admin'));
+</script>

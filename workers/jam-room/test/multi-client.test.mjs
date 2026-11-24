@@ -72,7 +72,7 @@ describe('multi-client jam room', () => {
   before(async () => {
     persistDir = mkdtempSync(path.join(tmpdir(), 'jam-room-'));
     const wrangler = path.join(dir, 'node_modules/wrangler/bin/wrangler.js');
-    child = spawn(process.execPath, [wrangler, 'dev', '-c', 'wrangler.test.jsonc', '--port', String(PORT), '--ip', '127.0.0.1', '--persist-to', persistDir], {
+    child = spawn(process.execPath, [wrangler, 'dev', '-c', 'wrangler.test.jsonc', '--local', '--port', String(PORT), '--ip', '127.0.0.1', '--persist-to', persistDir], {
       cwd: dir,
       stdio: ['ignore', 'pipe', 'pipe'],
       env: { ...process.env, CI: '1' },
