@@ -1,7 +1,7 @@
 # GitHub Pages publishes this branch with Jekyll (there is no .nojekyll file).
 # The built site at the root is served. Source, screenshots, and art stay in git
 # and are left out of the published site.
-# The unlisted describe preview and the unlisted Lovesac article stay out of the sitemap.
+# Unlisted pages stay out of the sitemap.
 defaults:
   - scope:
       path: "z3-describe-preview.html"
@@ -9,6 +9,10 @@ defaults:
       sitemap: false
   - scope:
       path: "making-lovesac-stealthtech-smart/index.html"
+    values:
+      sitemap: false
+  - scope:
+      path: "modal-stream-preview.html"
     values:
       sitemap: false
 
