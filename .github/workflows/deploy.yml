@@ -27,19 +27,24 @@ jobs:
       - name: Launch checks
         run: |
           set -euo pipefail
-          if grep -R -l -n "noindex" dist --include='*.html' | grep -v -e '/z3-describe-preview.html$' -e '/making-lovesac-stealthtech-smart/index.html$' -e '/modal-stream-preview.html$'; then
+          if grep -R -l -n "noindex" dist --include='*.html' | grep -v -e '/z3-describe-preview.html$' -e '/making-lovesac-stealthtech-smart/index.html$' -e '/modal-stream-preview.html$' -e '/jam-room-preview.html$'; then
             echo "noindex is on a public page"
             exit 1
           fi
           grep -q 'name="robots" content="noindex, nofollow"' dist/z3-describe-preview.html
           grep -q 'name="robots" content="noindex, nofollow"' dist/making-lovesac-stealthtech-smart/index.html
           grep -q 'name="robots" content="noindex, nofollow"' dist/modal-stream-preview.html
+          grep -q 'name="robots" content="noindex, nofollow"' dist/jam-room-preview.html
           if grep -R -n 'z3-describe-preview' dist --include='*.html' | grep -v 'z3-describe-preview.html:'; then
             echo "the describe preview is linked from another page"
             exit 1
           fi
           if grep -R -n 'modal-stream-preview' dist --include='*.html' | grep -v 'modal-stream-preview.html:'; then
             echo "the modal stream preview is linked from another page"
+            exit 1
+          fi
+          if grep -R -n 'jam-room-preview' dist --include='*.html' | grep -v 'jam-room-preview.html:'; then
+            echo "the jam room preview is linked from another page"
             exit 1
           fi
           if grep -R -n 'making-lovesac-stealthtech-smart' dist --include='*.html' | grep -v 'making-lovesac-stealthtech-smart/index.html:'; then
@@ -104,5 +109,10 @@ jobs:
             echo "the modal stream preview is in the sitemap"
             exit 1
           fi
+          if test -f _site/sitemap.xml && grep -q jam-room-preview _site/sitemap.xml; then
+            echo "the jam room preview is in the sitemap"
+            exit 1
+          fi
           test -f _site/modal-stream-preview.html
+          test -f _site/jam-room-preview.html
           node scripts/check-html.mjs _site

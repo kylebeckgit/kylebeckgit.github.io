@@ -1,0 +1,16 @@
+{
+  "name": "jam-room",
+  "main": "src/index.js",
+  "compatibility_date": "2026-05-03",
+  "vars": {
+    "TEST_SHORT_PHRASE": "true"
+  },
+  "durable_objects": {
+    "bindings": [
+      { "name": "JAM_ROOM", "class_name": "JamRoom" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["JamRoom"] }
+  ]
+}

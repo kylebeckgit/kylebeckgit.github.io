@@ -15,6 +15,10 @@ defaults:
       path: "modal-stream-preview.html"
     values:
       sitemap: false
+  - scope:
+      path: "jam-room-preview.html"
+    values:
+      sitemap: false
 
 exclude:
   - art

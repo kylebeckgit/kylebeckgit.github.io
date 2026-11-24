@@ -1,0 +1,127 @@
+---
+import Base from '../layouts/Base.astro';
+---
+<Base title="Jam room" path="/jam-room-preview.html" description="Unlisted preview. A shared generative jam rendered in the browser." robots="noindex, nofollow">
+  <p class="eyebrow">Preview</p>
+  <h1>Jam room</h1>
+  <p class="lede">A shared jam generated in real time on this page. Commands steer the room at the next phrase. If the room is offline, the page plays as a solo jam.</p>
+
+  <div id="jam-app" data-ws-url="wss://jam-room.kbsound.workers.dev">
+    <section class="panel" aria-labelledby="jam-heading">
+      <h2 id="jam-heading">Jam</h2>
+      <p class="room" data-room></p>
+      <canvas data-view width="640" height="360" aria-label="Tap to strike a note. Partials of the current sound."></canvas>
+      <p class="hint">Tap the canvas or use the A S D F G H J K L keys to play a note in the current scale.</p>
+      <p class="now" aria-live="polite"><span class="now-label">Now playing</span> <span data-now></span></p>
+      <pre class="tally" data-tally aria-live="polite"></pre>
+      <p class="status" data-play-error role="status"></p>
+      <form class="command" data-command-form>
+        <label>
+          <span>Command</span>
+          <input type="text" data-command autocomplete="off" spellcheck="false" maxlength="48" placeholder="!mood dark">
+        </label>
+        <button type="submit" class="btn">Send</button>
+      </form>
+      <p class="commands">!tempo up or down, !mood calm / bright / drift / dark / tense, !material glass / wood / metal / skin / string, !material crowd glass, !density more or less, !space dry or wet, !drop, !key up or down, !hold.</p>
+      <div class="play-tools">
+        <button type="button" class="btn solid" data-start>Start</button>
+        <button type="button" class="btn" data-stop>Stop</button>
+        <button type="button" class="btn" data-keep>Keep this jam</button>
+      </div>
+    </section>
+    <p class="credit">The glass and bowed materials are browser sketches of the Modal profile ideas in Tau Ceti for Zebra 3, not the presets themselves.</p>
+    <p class="credit"><a href="/packs/">Sounds designed by Kyle Beck</a></p>
+  </div>
+</Base>
+
+<style>
+  #jam-app { margin-top: 1.75rem; }
+  #jam-app :global(button), #jam-app :global(input) {
+    font-family: var(--body);
+    font-stretch: var(--body-stretch);
+    font-weight: 550;
+    font-size: .95rem;
+  }
+  .panel {
+    margin-top: 0;
+    border: 1px solid var(--line);
+    background: var(--card);
+    border-radius: 4px;
+    padding: 1.1rem 1.1rem 1.25rem;
+    max-width: 44rem;
+  }
+  .panel h2 { margin-bottom: .75rem; }
+  .room { color: var(--muted); margin: 0 0 .75rem; }
+  canvas[data-view] {
+    width: min(100%, 40rem);
+    height: auto;
+    aspect-ratio: 16 / 9;
+    display: block;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    touch-action: none;
+    cursor: pointer;
+  }
+  .hint, .commands, .credit {
+    color: var(--muted);
+    font-size: .95rem;
+    margin: .65rem 0 0;
+  }
+  .credit { max-width: 44rem; }
+  .now {
+    margin: .85rem 0 0;
+    min-height: 1.5em;
+    color: var(--fg);
+  }
+  .now-label { color: var(--muted); font-weight: 550; margin-right: .4rem; }
+  .now-label::after { content: ":"; }
+  .tally {
+    margin: .75rem 0 0;
+    padding: .7rem .8rem;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    font: 0.88rem/1.45 var(--mono, var(--body));
+    white-space: pre-wrap;
+    color: var(--fg);
+  }
+  .status { color: var(--fg); margin: .5rem 0 0; }
+  .status:empty { display: none; }
+  .command {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .6rem;
+    align-items: end;
+    margin-top: .9rem;
+  }
+  .command label { flex: 1 1 12rem; }
+  .command span { display: block; color: var(--muted); font-size: .85rem; margin-bottom: .25rem; }
+  .command input {
+    width: 100%;
+    box-sizing: border-box;
+    min-height: 2.75rem;
+    padding: .4rem .6rem;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    background: var(--bg);
+    color: var(--fg);
+  }
+  .play-tools {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .75rem;
+    margin-top: .85rem;
+  }
+  .play-tools .btn, .command .btn { min-height: 2.75rem; }
+  .btn:disabled { opacity: .4; }
+  @media (max-width: 700px) {
+    #jam-app { margin-top: .6rem; }
+    .panel { padding: .9rem .8rem 1rem; }
+  }
+</style>
+
+<script>
+  import { mountJamRoom } from '../tools/jam-room/ui.js';
+  mountJamRoom(document.getElementById('jam-app'));
+</script>
