@@ -17,6 +17,10 @@ import {
 
 export const DEFAULT_WS_URL = 'wss://jam-room.kbsound.workers.dev';
 
+export function resolveHttpUrl(root, loc = globalThis.location) {
+  return resolveWsUrl(root, loc).replace(/^ws/i, 'http');
+}
+
 export function resolveWsUrl(root, loc = globalThis.location) {
   const query = loc ? new URLSearchParams(loc.search).get('ws') : null;
   if (query) return query;
@@ -48,6 +52,10 @@ export function createJamClient(options = {}) {
     closed: false,
     lastError: '',
     room: null,
+    uploads: [],
+    muted: new Set(),
+    uploadToken: '',
+    apiUrl: options.apiUrl || url.replace(/^ws/i, 'http'),
   };
 
   function nowMs() {
@@ -61,13 +69,30 @@ export function createJamClient(options = {}) {
   function handleMessage(msg, receivedMs) {
     if (msg.type === 'welcome' || msg.type === 'state') {
       if (msg.userId) client.userId = msg.userId;
+      if (msg.uploadToken) client.uploadToken = msg.uploadToken;
       client.state = cloneState(msg.state || msg);
       client.mode = 'room';
       client.lastError = '';
       if (msg.tally) client.tally = msg.tally;
+      if (msg.uploads) client.uploads = msg.uploads;
       clearConnectTimeout();
       startPingLoop();
       emit(msg.type === 'welcome' ? 'welcome' : 'state', msg);
+      return;
+    }
+    if (msg.type === 'uploads') {
+      client.uploads = msg.uploads || [];
+      emit('uploads', msg);
+      return;
+    }
+    if (msg.type === 'upload-removed') {
+      client.uploads = (client.uploads || []).filter((item) => item.id !== msg.uploadId);
+      emit('upload-removed', msg);
+      return;
+    }
+    if (msg.type === 'uploads-cleared') {
+      client.uploads = [];
+      emit('uploads-cleared', msg);
       return;
     }
     if (msg.type === 'pong') {
@@ -218,8 +243,47 @@ export function createJamClient(options = {}) {
     return client.vote(parsed.family, parsed.value);
   };
   client.strike = (payload) => send({ type: 'strike', ...payload });
+  client.report = (uploadId) => send({ type: 'report', uploadId });
+  client.toggleMute = (uploadId) => {
+    if (client.muted.has(uploadId)) client.muted.delete(uploadId);
+    else client.muted.add(uploadId);
+    emit('mute', { uploadId, muted: client.muted.has(uploadId) });
+    return client.muted.has(uploadId);
+  };
+  client.postUpload = async (wavBytes, meta) => {
+    if (!client.uploadToken || client.mode !== 'room') return { ok: false, reason: 'Join the room before uploading.' };
+    const post = options.fetch || globalThis.fetch;
+    try {
+      const res = await post(`${client.apiUrl.replace(/\/$/, '')}/uploads`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Jam-Upload': client.uploadToken,
+        },
+        body: JSON.stringify({
+          meta,
+          audio: bytesToB64(wavBytes),
+        }),
+      });
+      try {
+        return await res.json();
+      } catch {
+        return { ok: false, reason: 'The upload could not be sent.' };
+      }
+    } catch {
+      return { ok: false, reason: 'The upload could not be sent.' };
+    }
+  };
   client.nowMs = nowMs;
   client.beatTime = () => quantizeNextSixteenth(client.state, clockNow(), client.offsetMs);
   client.beats = () => beatsSinceEpoch(client.state, clockNow(), client.offsetMs);
   return client;
+}
+
+
+function bytesToB64(bytes) {
+  const data = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  let out = '';
+  for (let i = 0; i < data.length; i++) out += String.fromCharCode(data[i]);
+  return btoa(out);
 }

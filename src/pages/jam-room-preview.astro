@@ -22,12 +22,28 @@ import Base from '../layouts/Base.astro';
         </label>
         <button type="submit" class="btn">Send</button>
       </form>
-      <p class="commands">!tempo up or down, !mood calm / bright / drift / dark / tense, !material glass / wood / metal / skin / string, !material crowd glass, !density more or less, !space dry or wet, !drop, !key up or down, !hold.</p>
+      <p class="commands">!tempo up or down, !mood calm / bright / drift / dark / tense, !material glass / wood / metal / skin / string, !material crowd glass, !material upload, !density more or less, !space dry or wet, !drop, !key up or down, !hold.</p>
       <div class="play-tools">
         <button type="button" class="btn solid" data-start>Start</button>
         <button type="button" class="btn" data-stop>Stop</button>
         <button type="button" class="btn" data-keep>Keep this jam</button>
       </div>
+    </section>
+    <section class="panel" data-upload-panel aria-labelledby="upload-heading">
+      <h2 id="upload-heading">Share a sound</h2>
+      <p class="hint">Record up to 8 seconds; the best 4 seconds go into the room. Or choose a short file. Sounds that pass review play in the room on their own. Voice always plays through the resonator.</p>
+      <label class="check"><input type="checkbox" data-upload-consent> I have the right to share this sound, and I understand it may be used in the public jam.</label>
+      <label class="check"><input type="checkbox" data-upload-keep> Include this sound if someone keeps the jam.</label>
+      <div class="play-tools">
+        <button type="button" class="btn" data-upload-record>Record</button>
+        <button type="button" class="btn" data-upload-stop disabled>Stop</button>
+        <label class="btn file-btn">Choose a file
+          <input type="file" data-upload-file accept="audio/wav,audio/*">
+        </label>
+      </div>
+      <p class="status" data-upload-status role="status"></p>
+      <h3 class="clips-heading">In the room</h3>
+      <div data-upload-list></div>
     </section>
     <p class="credit">The glass and bowed materials are browser sketches of the Modal profile ideas in Tau Ceti for Zebra 3, not the presets themselves.</p>
     <p class="credit"><a href="/packs/">Sounds designed by Kyle Beck</a></p>
@@ -115,6 +131,27 @@ import Base from '../layouts/Base.astro';
   }
   .play-tools .btn, .command .btn { min-height: 2.75rem; }
   .btn:disabled { opacity: .4; }
+  #jam-app .panel + .panel { margin-top: 1rem; }
+  .check {
+    display: flex;
+    gap: .55rem;
+    align-items: flex-start;
+    margin-top: .75rem;
+    color: var(--fg);
+    font-size: .95rem;
+  }
+  .check input { margin-top: .2rem; }
+  .file-btn { display: inline-flex; align-items: center; cursor: pointer; }
+  .file-btn input { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .clips-heading { margin: 1.1rem 0 .5rem; font-size: 1.05rem; }
+  .clip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem;
+    align-items: center;
+    padding: .45rem 0;
+    border-top: 1px solid var(--line);
+  }
   @media (max-width: 700px) {
     #jam-app { margin-top: .6rem; }
     .panel { padding: .9rem .8rem 1rem; }

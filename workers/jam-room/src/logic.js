@@ -237,6 +237,7 @@ export function clamp(value, min, max, fallback = min) {
 }
 
 function pickMaterial(layer, value, fallback) {
+  if (layer === 'crowd' && value === 'upload') return 'upload';
   const allowed = LAYER_MATERIALS[layer] || [];
   return allowed.includes(value) ? value : fallback;
 }
@@ -302,6 +303,8 @@ export function parseCommand(text) {
   if (cmd === 'drop') return { family: 'drop', value: true };
   if (cmd === 'hold') return { family: 'hold', value: true };
   if (cmd === 'material') {
+    if (a === 'upload') return { family: 'material', value: 'crowd:upload' };
+    if (a === 'crowd' && b === 'upload') return { family: 'material', value: 'crowd:upload' };
     if (a === 'crowd' && LAYER_MATERIALS.crowd.includes(b)) return { family: 'material', value: `crowd:${b}` };
     if (LAYER_MATERIALS.crowd.includes(a) || LAYER_MATERIALS.melody.includes(a)) {
       return { family: 'material', value: a };
@@ -342,9 +345,10 @@ function normalizeVote(family, value) {
   if (family === 'drop') return { family, value: true };
   if (family === 'hold') return { family, value: true };
   if (family === 'material') {
+    if (value === 'upload' || value === 'crowd:upload') return { family, value: 'crowd:upload' };
     if (typeof value === 'string' && value.startsWith('crowd:')) {
       const mat = value.slice(6);
-      if (LAYER_MATERIALS.crowd.includes(mat)) return { family, value: `crowd:${mat}` };
+      if (mat === 'upload' || LAYER_MATERIALS.crowd.includes(mat)) return { family, value: `crowd:${mat}` };
     }
     if (LAYER_MATERIALS.crowd.includes(value) || LAYER_MATERIALS.melody.includes(value)) {
       return { family, value };
@@ -416,9 +420,13 @@ function cooldownReady(room, name) {
 }
 
 function applyMaterialValue(state, value) {
+  if (value === 'upload' || value === 'crowd:upload') {
+    state.materials.crowd = 'upload';
+    return;
+  }
   if (value.startsWith('crowd:')) {
     const mat = value.slice(6);
-    if (LAYER_MATERIALS.crowd.includes(mat)) state.materials.crowd = mat;
+    if (mat === 'upload' || LAYER_MATERIALS.crowd.includes(mat)) state.materials.crowd = mat;
     return;
   }
   if (LAYER_MATERIALS.melody.includes(value)) {

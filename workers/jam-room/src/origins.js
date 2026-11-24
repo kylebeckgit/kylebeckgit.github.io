@@ -17,8 +17,12 @@ export function corsHeaders(origin) {
   if (!allowedOrigin(origin)) return {};
   return {
     'Access-Control-Allow-Origin': origin,
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Admin-Reset',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Admin-Reset, X-Admin-Token, X-Jam-User, X-Jam-Upload, X-Test-AI, X-Test-IP',
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     'Vary': 'Origin',
   };
+}
+
+export function notFound(origin) {
+  return new Response('Not found', { status: 404, headers: corsHeaders(origin) });
 }
