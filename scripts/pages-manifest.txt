@@ -11,10 +11,12 @@ assets/images/icon-512.png
 assets/images/mark-on-dark.svg
 assets/images/og.png
 astro/about.ok-P9InA.css
+astro/modal-stream-preview.astro_astro_type_script_index_0_lang.CbdSGC3A.js
 astro/mode-solve-worker-B-VFC4jz.js
+astro/randomize.CdB2K85L.js
 astro/ui.BeTtwVek.js
 astro/z3-describe-preview.PV4u4IDL.css
-astro/z3-describe-preview.astro_astro_type_script_index_0_lang.DHbqTSJh.js
+astro/z3-describe-preview.astro_astro_type_script_index_0_lang.Bp9O2Vi4.js
 astro/z3-webgpu.astro_astro_type_script_index_0_lang.Dmw-K1mO.js
 astro/z3-webgpu.kj1TRWLu.css
 contact/index.html
@@ -45,6 +47,7 @@ library/tonverk-presets/index.html
 making-lovesac-stealthtech-smart/index.html
 modal-preview-resonator.worklet.js
 modal-resonator.worklet.js
+modal-stream-preview.html
 packs/chordspeak-tonverk/cover.webp
 packs/chordspeak-tonverk/index.html
 packs/index.html

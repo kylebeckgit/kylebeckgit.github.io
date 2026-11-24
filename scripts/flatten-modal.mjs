@@ -2,7 +2,7 @@
 import { cp, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
 
-const pages = ['z3-webgpu', 'z3-describe-preview'];
+const pages = ['z3-webgpu', 'z3-describe-preview', 'modal-stream-preview'];
 
 for (const name of pages) {
   const dir = path.resolve(`dist/${name}`);

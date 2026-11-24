@@ -1,0 +1,79 @@
+---
+import Base from '../layouts/Base.astro';
+---
+<Base title="Modal stream" path="/modal-stream-preview.html" description="Unlisted preview. A modal synth piece generated in the browser as it plays." robots="noindex, nofollow">
+  <p class="eyebrow">Preview</p>
+  <h1>Modal stream</h1>
+  <p class="lede">The stream is generated in real time on this page; there is no live server.</p>
+
+  <div id="stream-app">
+    <section class="panel" aria-labelledby="stream-heading">
+      <h2 id="stream-heading">Stream</h2>
+      <canvas data-view width="640" height="360" aria-label="Partials of the current strike."></canvas>
+      <p class="now" aria-live="polite"><span class="now-label">Now playing</span> <span data-now></span></p>
+      <p class="status" data-play-error role="status"></p>
+      <div class="play-tools">
+        <button type="button" class="btn solid" data-start>Start</button>
+        <button type="button" class="btn" data-stop>Stop</button>
+      </div>
+    </section>
+  </div>
+</Base>
+
+<style>
+  #stream-app { margin-top: 1.75rem; }
+  #stream-app :global(button) {
+    font-family: var(--body);
+    font-stretch: var(--body-stretch);
+    font-weight: 550;
+    font-size: .95rem;
+  }
+  .panel {
+    margin-top: 0;
+    border: 1px solid var(--line);
+    background: var(--card);
+    border-radius: 4px;
+    padding: 1.1rem 1.1rem 1.25rem;
+    max-width: 44rem;
+  }
+  .panel h2 { margin-bottom: .75rem; }
+  canvas[data-view] {
+    width: min(100%, 40rem);
+    height: auto;
+    aspect-ratio: 16 / 9;
+    display: block;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+  }
+  .now {
+    margin: .85rem 0 0;
+    min-height: 1.5em;
+    color: var(--fg);
+  }
+  .now-label {
+    color: var(--muted);
+    font-weight: 550;
+    margin-right: .4rem;
+  }
+  .now-label::after { content: ":"; }
+  .status { color: var(--fg); margin: .5rem 0 0; }
+  .status:empty { display: none; }
+  .play-tools {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .75rem;
+    margin-top: .85rem;
+  }
+  .play-tools .btn { min-height: 2.75rem; }
+  .btn:disabled { opacity: .4; }
+  @media (max-width: 700px) {
+    #stream-app { margin-top: .6rem; }
+    .panel { padding: .9rem .8rem 1rem; }
+  }
+</style>
+
+<script>
+  import { mountStream } from '../tools/modal-preview/stream-ui.js';
+  mountStream(document.getElementById('stream-app'));
+</script>
