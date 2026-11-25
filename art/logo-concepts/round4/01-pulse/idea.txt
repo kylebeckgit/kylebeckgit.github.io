@@ -1,0 +1,1 @@
+One period of a square wave, which is also a note gate: up, hold, down.
